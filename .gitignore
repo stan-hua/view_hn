@@ -1,0 +1,4 @@
+src/data/*
+*.pyc
+.vscode
+.pytest_cache
