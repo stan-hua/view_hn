@@ -87,42 +87,36 @@ def plot_umap(embeds, labels, line=False, legend=True, title="",
                     dpi=400)
 
 
-def main_umap(model):
+def plot_umap_all_patients(model, patients, df_embeds_only, color="patient"):
     """
-    Retrieves embeddings from specified pretrained model. Then plot UMAPs.
+    Plots UMAP for all patients, coloring by patient ID.
 
     Parameters
     ----------
     model : str
-        Pretraining dataset for model. Either "imagenet" or "cytoimagenet"
+        Name of model, or pretraining dataset used to pretrain model
+    patients : pd.Series
+        Contains all patient IDs
+    df_embeds_only : pd.DataFrame
+        Extracted deep embeddings. Does not have file paths in any column.
+    color : str
+        Color points by "patient" or by "hospital"
     """
-    # Load view labels
-    df_labels = pd.read_csv(METADATA_FILE).rename(
-        columns={"IMG_FILE": "filename", "revised_labels": "label"})
-
-    # Load embeddings
-    df_embeds = get_embeds(model)
-
-    # Separate file paths from embeddings
-    df_embeds["filename"] = df_embeds["files"].map(lambda x: os.path.basename(x))
-    filenames = df_embeds["filename"]
-    patients = filenames.map(lambda x: x.split("_")[0])
-    us_nums = filenames.map(lambda x: int(x.split("_")[-1].split(".jpg")[0]))
+    assert color in ("patient", "hospital")
 
     # Get hospital labels
-    hospital = patients.map(lambda x: "Stanford" if x.startswith("SU2") else "SickKids")
+    hospitals = patients.map(
+        lambda x: "Stanford" if x.startswith("SU2") else "SickKids")
+    
+    # Choose label based on flag
+    label = patients if color == "patient" else hospitals
 
-    # Get UMAP embeddings (all patients)
-    df_embeds_only = df_embeds.drop(columns=["files", "filename"])
+    # Get UMAP embeddings
     umap_embeds_all = get_umap_embeddings(df_embeds_only)
 
     # Plot by patient
-    plot_umap(umap_embeds_all, patients, title="UMAP (colored by patients)",
-              save=True, filename=f"{model}_umap(patient)")
-
-    plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only)
-
-    plot_umap_by_view(model, df_labels, filenames, df_embeds_only)
+    plot_umap(umap_embeds_all, label, title=f"UMAP (colored by {color})",
+              save=True, filename=f"{model}_umap({color})")
 
 
 def plot_umap_by_view(model, df_labels, filenames, df_embeds_only):
@@ -138,7 +132,7 @@ def plot_umap_by_view(model, df_labels, filenames, df_embeds_only):
     filenames : pd.Series
         Contains file name of image whose features were extracted
     df_embeds_only : pd.DataFrame
-        Extracted embeddings. Does not have file paths in any column.
+        Extracted deep embeddings. Does not have file paths in any column.
     """
     # Filter for image files with view labels
     filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))
@@ -165,7 +159,7 @@ def plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only):
     us_nums : pd.Series
         Contains number in ultrasound sequence capture
     df_embeds_only : pd.DataFrame
-        Extracted embeddings. Does not have file paths in any column.
+        Extracted deep embeddings. Does not have file paths in any column.
     """
     # Plot sequentially by US nums for 1 patient
     patient_selected = patients.unique()[11]
@@ -182,6 +176,37 @@ def plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only):
               save=True, filename=f"{model}_umap(us_num)")
 
 
+def main(model):
+    """
+    Retrieves embeddings from specified pretrained model. Then plot UMAPs.
+
+    Parameters
+    ----------
+    model : str
+        Pretraining dataset for model. Either "imagenet" or "cytoimagenet"
+    """
+    # Load view labels
+    df_labels = pd.read_csv(METADATA_FILE).rename(
+        columns={"IMG_FILE": "filename", "revised_labels": "label"})
+
+    # Load embeddings
+    df_embeds = get_embeds(model)
+    df_embeds = df_embeds.rename(columns={"paths": "files"})
+
+    # Separate file paths from embeddings
+    df_embeds["filename"] = df_embeds["files"].map(lambda x: os.path.basename(x))
+    filenames = df_embeds["filename"]
+    patients = filenames.map(lambda x: x.split("_")[0])
+    us_nums = filenames.map(lambda x: int(x.split("_")[-1].split(".jpg")[0]))
+
+    # Isolate UMAP embeddings (all patients)
+    df_embeds_only = df_embeds.drop(columns=["files", "filename"])
+
+    plot_umap_all_patients(model, patients, df_embeds_only, color="hospital")
+    plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only)
+    plot_umap_by_view(model, df_labels, filenames, df_embeds_only)
+
+
 if __name__ == '__main__':
-    for model in ("both", "imagenet", "cytoimagenet", ):
-        main_umap(model)
+    for model in ("hn", ):      # "both", "imagenet", "cytoimagenet", 
+        main(model)
