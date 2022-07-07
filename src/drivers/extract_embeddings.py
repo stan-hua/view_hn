@@ -26,7 +26,7 @@ def extract_all_embeds():
     """
     Extract embeddings using both ImageNet and CytoImageNet-trained models.
     """
-    for model in ("imagenet", "cytoimagenet"):
+    for model in ("hn", "imagenet", "cytoimagenet"):
         embedders.main(model, DIR_EMBEDS + f"/{model}{EMBED_SUFFIX}",
                        img_dir=DIR_IMAGES)
 
@@ -67,7 +67,7 @@ def get_embeds(model):
         return df
 
 
-    MODELS = ("imagenet", "cytoimagenet")
+    MODELS = ("imagenet", "cytoimagenet", "hn")
 
     assert model in MODELS or model == "both"
 

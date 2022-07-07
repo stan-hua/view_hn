@@ -5,19 +5,29 @@ Description: Used to create deep embeddings for images.
 """
 # Standard libraries
 import argparse
-import cv2
-import glob
-from math import ceil
+import logging
 import os
 
 # Non-standard libraries
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+import torch
 from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
+# Custom libraries
 from src.data.constants import CYTO_WEIGHTS_PATH
+from src.data_prep.dataloaders import UltrasoundDataModule
+from src.models.siamnet import load_siamnet
 
+
+logging.basicConfig(level=logging.DEBUG)
+
+################################################################################
+#                                  Constants                                   #
+################################################################################
+VERBOSE = True
+LOGGER = logging.getLogger(__name__)
 
 ################################################################################
 #                                   Classes                                    #
@@ -37,28 +47,38 @@ class ImageEmbedder:
         """
         self.model = model
 
-    def predict(self, img_path):
+    def predict_torch(self, img):
         """
-        Extract embeddings for image at path.
+        Extract embeddings for image, using a PyTorch model.
 
         Parameters
         ----------
-        img_path : str
-            Path to image
+        img : torch.Tensor
+            Image tensor
 
         Returns
         -------
         np.array
             1280-dimensional embedding
         """
-        img = cv2.imread(img_path)
-        features = self.model.predict(img)
+        assert isinstance(self.model, torch.nn.Module)
+
+        # Check if custom embed function present. If not, use forward pass
+        if hasattr(self.model, "forward_embed"):
+            features = self.model.forward_embed(img)
+        else:
+            features = self.model(img)
+        
+        # If more than 1 image, attempt to flatten extra 3rd dimension
+        if features.shape[0] > 1:
+            features = features.squeeze()
 
         return features
 
-    def predict_dir(self, dir, save_path):
+    def predict_dir_tf(self, dir, save_path):
         """
-        Extract embeddings for all images in the directory.
+        Extract embeddings for all images in the directory, using Tensorflow
+        data loading libraries.
 
         Parameters
         ----------
@@ -73,31 +93,6 @@ class ImageEmbedder:
             Contains a column for the path to the image file. Other columns are
             embedding columns
         """
-        assert os.path.isdir(dir), "Path provided does not lead to a directory!"
-
-        all_embeds = []
-        file_paths = []
-
-        # Get embeddings for each image
-        for img_path in glob.glob(os.path.join(dir, "*")):
-            try:
-                embeds = self.predict(img_path)
-                all_embeds.append(embeds)
-                file_paths.append(img_path)
-            except Exception as error_msg:
-                print(error_msg)
-                print(f"{img_path} skipped!")
-                pass
-
-        # Save features. Each row is a 1280-dim feature vector corresponding to
-        # an image.
-        df_features = pd.DataFrame(np.array(all_embeds)).T
-        df_features['paths'] = file_paths
-        df_features.to_hdf(save_path)
-        
-        return df_features
-
-    def predict_dir_tf(self, dir, save_path):
         def process_path(file_path):
             """
             Loads image from file path
@@ -135,6 +130,56 @@ class ImageEmbedder:
         df_features["files"] = df_features["files"].str.decode("utf-8")
         df_features.to_hdf(save_path, "embeds")
 
+    def predict_dir_torch(self, dir, save_path):
+        """
+        Extract embeddings for all images in the directory, using PyTorch
+        libraries.
+
+        Parameters
+        ----------
+        dir : str
+            Path to directory containing images
+        save_path : str
+            File path to save embeddings at. Saved as h5 file.
+
+        Returns
+        -------
+        pd.DataFrame
+            Contains a column for the path to the image file. Other columns are
+            embedding columns
+        """
+        assert os.path.isdir(dir), "Path provided does not lead to a directory!"
+        assert self.model not in ("cytoimagenet", "imagenet"), \
+            "Do not use this function if not extracting Cyto/ImageNet features!"
+
+        # Load data
+        data_module = UltrasoundDataModule(dir=dir)
+        data_module.setup()
+        train_set = data_module.train_dataloader()
+
+        all_embeds = []
+        file_paths = []
+
+        for batch_idx, (img, metadata) in enumerate(train_set):
+            # Extract embeddings
+            embeds = self.predict_torch(img)
+
+            all_embeds.append(embeds)
+            file_paths.extend(metadata["filename"])
+            
+            # Print progress
+            if VERBOSE:
+                LOGGER.info(f"Num Done: {batch_idx} / {len(train_set)}")
+                LOGGER.info(
+                    f"Progress: {100*batch_idx/len(train_set):.2f}%")
+
+        # Save features. Each row is a feature vector
+        df_features = pd.DataFrame(np.concatenate(all_embeds))
+        df_features['files'] = file_paths
+        df_features.to_hdf(save_path, "embeds")
+        
+        return df_features
+
 
 ################################################################################
 #                                  Functions                                   #
@@ -160,7 +205,7 @@ def get_arguments():
     return parser.parse_args()
 
 
-def instantiate_embedder(model_name, cyto_weights_path=CYTO_WEIGHTS_PATH):
+def instantiate_embedder(model_name, weights):
     """
     Instantiates embedder.
 
@@ -168,23 +213,25 @@ def instantiate_embedder(model_name, cyto_weights_path=CYTO_WEIGHTS_PATH):
     ----------
     model_name : str
         Either 'cytoimagenet' or 'imagenet'.
-    cyto_weights_path : str, optional
-        Path to cytoimagenet weights, by default CYTO_WEIGHTS_PATH
+    weights : str, optional
+        Path to model's weights
     
     Returns
     -------
     ImageEmbedder
     """
     if model_name == "cytoimagenet":
-        feature_extractor = EfficientNetB0(weights=cyto_weights_path,
+        feature_extractor = EfficientNetB0(weights=weights,
                                            include_top=False,
                                            input_shape=(None, None, 3),
                                            pooling="avg")
-    else:
+    elif model_name == "imagenet":
         feature_extractor = EfficientNetB0(weights='imagenet',
                                            include_top=False,
                                            input_shape=(None, None, 3),
                                            pooling="avg")
+    elif model_name == "hn":
+        feature_extractor = load_siamnet()
 
     embedder = ImageEmbedder(feature_extractor)
 
@@ -217,13 +264,22 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
     assert img_file or img_dir, \
         "At least one of img_file or img_dir must be given!"
 
-    embedder = instantiate_embedder(model_name, cyto_weights_path)
+    weights = None
+    if model_name == "cytoimagenet":
+        weights = cyto_weights_path
+
+    # Get feature extractor
+    embedder = instantiate_embedder(model_name, weights=weights)
     
     if img_file:
-        embeds = embedder.predict(img_file)
+        embeds = embedder.predict_torch(img_file)
         df_embed = pd.DataFrame(embeds).T
         df_embed['filename'] = img_file
         df_embed.to_hdf(save_embed_path)
+        return
+
+    if model_name == "hn":
+        embedder.predict_dir_torch(img_dir, save_embed_path)
     else:
         embedder.predict_dir_tf(img_dir, save_embed_path)
 
