@@ -4,6 +4,7 @@ dataloaders.py
 Description: Contains functions/classes to load dataset in PyTorch.
 """
 # Standard libraries
+from abc import abstractmethod
 import glob
 import os
 
