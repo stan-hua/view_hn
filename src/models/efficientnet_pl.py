@@ -7,14 +7,17 @@ Description: PyTorch Lightning wrapper over efficientnet-pytorch library.
 # Non-standard libraries
 import pytorch_lightning as pl
 import torch
-from efficientnet_pytorch import EfficientNet
+import torchmetrics
+from efficientnet_pytorch import EfficientNet, get_model_params
 
 
-class EfficientNetPL(pl.LightningModule):
+class EfficientNetPL(EfficientNet, pl.LightningModule):
     """
     PyTorch Lightning wrapper module over EfficientNet.
     """
-    def __init__(self, num_classes=5, img_size=(256, 256), *args, **kwargs):
+    def __init__(self, num_classes=5, img_size=(256, 256),
+                 adam=True, lr=0.001, momentum=0.9, weight_decay=0.0005,
+                 *args, **kwargs):
         """
         Initialize EfficientNetPL object.
 
@@ -23,12 +26,27 @@ class EfficientNetPL(pl.LightningModule):
         num_classes : int, optional
             Number of classes to predict, by default 5
         img_size : tuple, optional
-            Expected image's (height, width)
+            Expected image's (height, width), by default (256, 256)
+        adam : bool, optional
+            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
+            Descent (SGD), by default True.
+        lr : float, optional
+            Optimizer learning rate, by default 0.001
+        momentum : float, optional
+            If SGD optimizer, value to use for momentum during SGD, by
+            default 0.9
+        weight_decay : float, optional
+            Weight decay value to slow gradient updates when performance
+            worsens, by default 0.0005
         """
         # Instantiate EfficientNetB0
-        self.model = EfficientNet.from_name("efficientnet-b0",
-                                            num_classes=num_classes,
-                                            image_size=img_size)
+        blocks_args, global_params = get_model_params(
+            "efficientnet-b0", {"num_classes": num_classes,
+                                "image_size": img_size})
+        super().__init__(blocks_args=blocks_args, global_params=global_params)
+
+        # Save hyperparameters to self.hparams
+        self.save_hyperparameters()
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
@@ -37,30 +55,32 @@ class EfficientNetPL(pl.LightningModule):
         dsets = ['train', 'val', 'test']
         for dset in dsets:
             exec(f"self.{dset}_acc = torchmetrics.Accuracy()")
-            exec(f"self.{dset}_auroc = torchmetrics.AUROC("
-                 "num_classes={num_classes}, average='micro')")
-            exec(f"self.{dset}_auprc= torchmetrics.AveragePrecision("
-                 "num_classes={num_classes})")
+            # TODO: Uncomment AUROC/AUPRC for binary classification task
+            # exec(f"self.{dset}_auroc = torchmetrics.AUROC("
+            #      "num_classes={num_classes}, average='micro')")
+            # exec(f"self.{dset}_auprc= torchmetrics.AveragePrecision("
+            #      "num_classes={num_classes})")
 
 
-    def forward(self, data):
+    def configure_optimizers(self):
         """
-        Forward pass through network
+        Initialize and return optimizer (Adam or SGD).
 
-        Parameters
-        ----------
-        data : tuple
-            Contains (img tensor, metadata dict)
-        
         Returns
         -------
-        torch.Tensor
-            Output of forward pass (logits). Of size (_, num_classes)
+        torch.optim.Optimizer
+            Initialized optimizer.
         """
-        img, _ = data
-
-        return super(EfficientNet)(img)
-
+        if self.hparams.adam:
+            optimizer = torch.optim.Adam(self.parameters(),
+                                         lr=self.hparams.lr,
+                                         weight_decay=self.hparams.weight_decay)
+        else:
+            optimizer = torch.optim.SGD(self.parameters(),
+                                        lr=self.hparams.lr,
+                                        momentum=self.hparams.momentum,
+                                        weight_decay=self.hparams.weight_decay)
+        return optimizer
 
     ############################################################################
     #                          Per-Batch Metrics                               #
@@ -95,8 +115,8 @@ class EfficientNetPL(pl.LightningModule):
 
         # Log training metrics
         self.train_acc.update(y_pred, y_true)
-        self.train_auroc.update(out[:, 1], y_true)
-        self.train_auprc.update(out[:, 1], y_true)
+        # self.train_auroc.update(out[:, 1], y_true)
+        # self.train_auprc.update(out[:, 1], y_true)
 
         return loss
 
@@ -131,8 +151,8 @@ class EfficientNetPL(pl.LightningModule):
 
         # Log validation metrics
         self.val_acc.update(y_pred, y_true)
-        self.val_auroc.update(out[:, 1], y_true)
-        self.val_auprc.update(out[:, 1], y_true)
+        # self.val_auroc.update(out[:, 1], y_true)
+        # self.val_auprc.update(out[:, 1], y_true)
 
         return loss
 
@@ -167,8 +187,8 @@ class EfficientNetPL(pl.LightningModule):
 
         # Log test metrics
         self.test_acc.update(y_pred, y_true)
-        self.test_auroc.update(out[:, 1], y_true)
-        self.test_auprc.update(out[:, 1], y_true)
+        # self.test_auroc.update(out[:, 1], y_true)
+        # self.test_auprc.update(out[:, 1], y_true)
 
         return loss
 
@@ -187,17 +207,17 @@ class EfficientNetPL(pl.LightningModule):
         """
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         acc = self.train_acc.compute()
-        auroc = self.train_auroc.compute()
-        auprc = self.train_auprc.compute()
+        # auroc = self.train_auroc.compute()
+        # auprc = self.train_auprc.compute()
 
         self.log('train_loss', loss)
         self.log('train_acc', acc)
-        self.log('train_auroc', auroc)
-        self.log('train_auprc', auprc, prog_bar=True)
+        # self.log('train_auroc', auroc)
+        # self.log('train_auprc', auprc, prog_bar=True)
 
         self.train_acc.reset()
-        self.train_auroc.reset()
-        self.train_auprc.reset()
+        # self.train_auroc.reset()
+        # self.train_auprc.reset()
 
 
     def validation_epoch_end(self, validation_step_outputs):
@@ -211,17 +231,17 @@ class EfficientNetPL(pl.LightningModule):
         """
         loss = torch.tensor(validation_step_outputs).mean()
         acc = self.val_acc.compute()
-        auroc = self.val_auroc.compute()
-        auprc = self.val_auprc.compute()
+        # auroc = self.val_auroc.compute()
+        # auprc = self.val_auprc.compute()
 
         self.log('val_loss', loss)
         self.log('val_acc', acc)
-        self.log('val_auroc', auroc)
-        self.log('val_auprc', auprc, prog_bar=True)
+        # self.log('val_auroc', auroc)
+        # self.log('val_auprc', auprc, prog_bar=True)
 
         self.val_acc.reset()
-        self.val_auroc.reset()
-        self.val_auprc.reset()
+        # self.val_auroc.reset()
+        # self.val_auprc.reset()
 
 
     def test_epoch_end(self, test_step_outputs):
@@ -237,16 +257,16 @@ class EfficientNetPL(pl.LightningModule):
 
         loss = torch.tensor(test_step_outputs).mean()
         acc = eval(f'self.{dset}_acc.compute()')
-        auroc = eval(f'self.{dset}_auroc.compute()')
-        auprc = eval(f'self.{dset}_auprc.compute()')
+        # auroc = eval(f'self.{dset}_auroc.compute()')
+        # auprc = eval(f'self.{dset}_auprc.compute()')
 
-        print(acc, auroc, auprc)
+        # print(acc, auroc, auprc)
 
         self.log(f'{dset}_loss', loss)
         self.log(f'{dset}_acc', acc)
-        self.log(f'{dset}_auroc', auroc)
-        self.log(f'{dset}_auprc', auprc, prog_bar=True)
+        # self.log(f'{dset}_auroc', auroc)
+        # self.log(f'{dset}_auprc', auprc, prog_bar=True)
 
         exec(f'self.{dset}_acc.reset()')
-        exec(f'self.{dset}_auroc.reset()')
-        exec(f'self.{dset}_auprc.reset()')
+        # exec(f'self.{dset}_auroc.reset()')
+        # exec(f'self.{dset}_auprc.reset()')

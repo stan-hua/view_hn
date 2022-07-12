@@ -19,13 +19,15 @@ from sklearn.utils import shuffle
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 
+# Custom libraries
+from src.data import constants
 
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
 LOGGER = logging.getLogger(__name__)
 
-SEED = 42
+# Torchvision Grayscale/RGB constants
 IMAGE_MODES = {1: ImageReadMode.GRAY, 3: ImageReadMode.RGB}
 
 
@@ -86,7 +88,7 @@ def get_patient_ids(paths):
     return np.array(patient_ids)
 
 
-def split_by_ids(patient_ids, train_split=0.8, seed=SEED):
+def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
     """
     Splits list of patient IDs into training and val/test set.
 
@@ -102,7 +104,7 @@ def split_by_ids(patient_ids, train_split=0.8, seed=SEED):
     train_split : float, optional
         Proportion of total data to leave for training, by default 0.8
     seed : int, optional
-        If provided, sets random seed to value, by default SEED
+        If provided, sets random seed to value, by default constants.SEED
 
     Returns
     -------
@@ -217,8 +219,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
     Top-level object used to access all data preparation and loading
     functionalities.
     """
-    def __init__(self, dataloader_params=None, df=None, dir=None, debug=True,
-                 **kwargs):
+    def __init__(self, dataloader_params=None, df=None, dir=None, **kwargs):
         """
         Initialize UltrasoundDataModule object.
 
@@ -237,11 +238,12 @@ class UltrasoundDataModule(pl.LightningDataModule):
             None
         dir : str, optional
             Path to directory containing ultrasound images, by default None
-        debug : bool, optional
-            If True, saves data to object for viewing, by default True
         **kwargs : dict
             Optional keyword arguments:
-                train_test_split : float, optional
+                img_size : int or tuple of ints, optional
+                    If int provided, resizes found images to
+                    (img_size x img_size), by default None.
+                train_test_split : float
                     Percentage of data to leave for training. The rest will be
                     used for testing
                 train_val_split : float
@@ -253,8 +255,6 @@ class UltrasoundDataModule(pl.LightningDataModule):
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
 
-        self.debug = debug
-
         # Used to instantiate UltrasoundDataset
         self.df = df
         self.dir = dir
@@ -265,11 +265,11 @@ class UltrasoundDataModule(pl.LightningDataModule):
             if dir:
                 df["filename"] = df["filename"].map(
                     lambda x: os.path.join(dir, x))
-            self.img_paths = df["filename"].tolist()
-            self.labels = df["label"].tolist()
+            self.img_paths = df["filename"].to_numpy()
+            self.labels = df["label"].to_numpy()
             self.patient_ids = get_patient_ids(self.img_paths)
         else:
-            self.img_paths = glob.glob(os.path.join(dir, "*"))
+            self.img_paths = np.array(glob.glob(os.path.join(dir, "*")))
             self.labels = np.array([None] * len(self.img_paths))
             self.patient_ids = get_patient_ids(self.img_paths)
 
@@ -306,13 +306,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
             self.train_test_split = kwargs.get("train_test_split")
 
         # (2) To further split training set into train-val or cross-val sets
-        assert not ("train_val_split" and "cross_val_folds" in kwargs), \
-            "Only specify train_val_split or cross_val_folds, exclusively!"
-
-        if "train_val_split" in kwargs:
+        if "train_val_split" in kwargs and kwargs["train_val_split"] != 1.0:
             self.train_val_split = kwargs.get("train_val_split")
 
-        if "cross_val_folds" in kwargs:
+        if "cross_val_folds" in kwargs and kwargs["cross_val_folds"]:
             self.cross_val_folds = kwargs.get("cross_val_folds")
             self.fold = 0
 
@@ -325,34 +322,28 @@ class UltrasoundDataModule(pl.LightningDataModule):
 
     def setup(self, stage='fit'):
         """
-        Prepares data for model training/testing
+        Prepares data for model training/validation/testing
         """
-        # Fitting stage
-        if stage == 'fit':
-            # (1) Split into training and test sets
-            if hasattr(self, "train_test_split") and self.train_test_split < 1:
-                train_idx, test_idx = split_by_ids(self.patient_ids, 
-                                                   self.train_test_split)
-                self._assign_dset_idx("train", "test", train_idx, test_idx)
-            
-            # (2) Further split training set into train-val or cross-val sets
-            # (2.1) Train-Val Split
-            if hasattr(self, "train_val_split"):
-                train_idx, val_idx = split_by_ids(self.dset_to_ids["train"], 
-                                                  self.train_val_split)
-                self._assign_dset_idx("train", "val", train_idx, val_idx)
-            # (2.2) K-Fold Cross Validation
-            elif hasattr(self, "cross_val_folds"):
-                self._cross_val_id_set = self.dset_to_ids["train"]
-                self.cross_fold_indices = cross_validation_by_patient(
-                    self.dset_to_ids["train"], self.cross_val_folds)
-                # By default, set to first kfold
-                self.set_kfold_index(0)
-
-        # TODO: Testing stage
-        elif stage == 'test':
-            raise NotImplementedError()
+        # (1) Split into training and test sets
+        if hasattr(self, "train_test_split") and self.train_test_split < 1:
+            train_idx, test_idx = split_by_ids(self.patient_ids, 
+                                                self.train_test_split)
+            self._assign_dset_idx("train", "test", train_idx, test_idx)
         
+        # (2) Further split training set into train-val or cross-val sets
+        # (2.1) Train-Val Split
+        if hasattr(self, "train_val_split"):
+            train_idx, val_idx = split_by_ids(self.dset_to_ids["train"], 
+                                                self.train_val_split)
+            self._assign_dset_idx("train", "val", train_idx, val_idx)
+        # (2.2) K-Fold Cross Validation
+        elif hasattr(self, "cross_val_folds"):
+            self._cross_val_id_set = self.dset_to_ids["train"]
+            self.cross_fold_indices = cross_validation_by_patient(
+                self.dset_to_ids["train"], self.cross_val_folds)
+            # By default, set to first kfold
+            self.set_kfold_index(0)
+
 
     def train_dataloader(self):
         """
@@ -511,6 +502,9 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         X = read_image(img_path, self.mode)
         X = self.transforms(X)
 
+        # Normalize between [0, 1]
+        X = X / 255.
+
         # Get metadata from filename
         filename = os.path.basename(img_path)
         filename_parts = filename.split("_")
@@ -533,7 +527,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
     """
     Dataset to load images from a directory.
     """
-    def __init__(self, dir, img_size=None, mode=1):
+    def __init__(self, dir, img_size=None, mode=3):
         """
         Initialize KidneyDatasetDir object.
 
@@ -552,10 +546,10 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         self.mode = IMAGE_MODES[mode]
 
         # Get all images in flat directory
-        self.paths = glob.glob(os.path.join(dir, "*"))
+        self.paths = np.array(glob.glob(os.path.join(dir, "*")))
 
         # Get all patient IDs
-        self.ids = get_patient_ids(self.paths)
+        self.ids = np.array(get_patient_ids(self.paths))
 
         # Define image loading and transforms
         transforms = []
@@ -569,7 +563,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     """
     Dataset to load images and labels from a DataFrame.
     """
-    def __init__(self, df, dir=None, img_size=None, mode=1):
+    def __init__(self, df, dir=None, img_size=None, mode=3):
         """
         Initialize KidneyDatasetDataFrame object.
 
@@ -599,20 +593,24 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             has_path = df.filename.map(lambda x: dir in x)
             df[~has_path]["filename"] = df[~has_path]["filename"].map(
                 lambda x: os.path.join(dir, x))
-        self.paths = df["filename"].tolist()
+        self.paths = df["filename"].to_numpy()
 
         # Get labels
-        self.labels = df["label"].tolist()
+        self.labels = df["label"].to_numpy()
 
         # Get all patient IDs
-        self.ids = get_patient_ids(self.paths)
+        self.ids = np.array(get_patient_ids(self.paths))
 
         # Define image loading and transforms
         transforms = []
         if img_size:
             transforms.append(T.Resize(img_size))
 
-        self.transforms = transforms
+        # TODO: Try standardizing image
+        # transforms.append(T.Normalize(mean=[0.5, 0.5, 0.5],
+        #                               std=[0.5, 0.5, 0.5]))
+
+        self.transforms = T.Compose(transforms)
 
 
     def __getitem__(self, index):
@@ -630,8 +628,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             Contains torch.Tensor and dict (containing metadata). Metadata may
             include path to image and label.
         """
-        X, metadata = super()[index]
-        metadata["label"] = self.labels[index]
+        X, metadata = super().__getitem__(index)
+        metadata["label"] = constants.CLASS_TO_IDX[self.labels[index]]
 
         return X, metadata
-
