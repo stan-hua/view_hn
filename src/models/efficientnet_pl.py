@@ -16,7 +16,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
     PyTorch Lightning wrapper module over EfficientNet.
     """
     def __init__(self, num_classes=5, img_size=(256, 256),
-                 adam=True, lr=0.001, momentum=0.9, weight_decay=0.0005,
+                 adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  *args, **kwargs):
         """
         Initialize EfficientNetPL object.
@@ -31,7 +31,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
             If True, use Adam optimizer. Otherwise, use Stochastic Gradient
             Descent (SGD), by default True.
         lr : float, optional
-            Optimizer learning rate, by default 0.001
+            Optimizer learning rate, by default 0.0001
         momentum : float, optional
             If SGD optimizer, value to use for momentum during SGD, by
             default 0.9
@@ -41,7 +41,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         """
         # Instantiate EfficientNetB0
         blocks_args, global_params = get_model_params(
-            "efficientnet-b0", {"num_classes": num_classes,
+            "efficientnet-b1", {"num_classes": num_classes,
                                 "image_size": img_size})
         super().__init__(blocks_args=blocks_args, global_params=global_params)
 
@@ -55,11 +55,13 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         dsets = ['train', 'val', 'test']
         for dset in dsets:
             exec(f"self.{dset}_acc = torchmetrics.Accuracy()")
-            # TODO: Uncomment AUROC/AUPRC for binary classification task
-            # exec(f"self.{dset}_auroc = torchmetrics.AUROC("
-            #      "num_classes={num_classes}, average='micro')")
-            # exec(f"self.{dset}_auprc= torchmetrics.AveragePrecision("
-            #      "num_classes={num_classes})")
+
+            # Metrics for binary classification
+            if self.hparams.num_classes == 2:
+                exec(f"self.{dset}_auroc = torchmetrics.AUROC("
+                    "num_classes={num_classes}, average='micro')")
+                exec(f"self.{dset}_auprc= torchmetrics.AveragePrecision("
+                    "num_classes={num_classes})")
 
 
     def configure_optimizers(self):
@@ -115,8 +117,10 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
 
         # Log training metrics
         self.train_acc.update(y_pred, y_true)
-        # self.train_auroc.update(out[:, 1], y_true)
-        # self.train_auprc.update(out[:, 1], y_true)
+
+        if self.hparams.num_classes == 2:
+            self.train_auroc.update(out[:, 1], y_true)
+            self.train_auprc.update(out[:, 1], y_true)
 
         return loss
 
@@ -151,8 +155,10 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
 
         # Log validation metrics
         self.val_acc.update(y_pred, y_true)
-        # self.val_auroc.update(out[:, 1], y_true)
-        # self.val_auprc.update(out[:, 1], y_true)
+
+        if self.hparams.num_classes == 2:
+            self.val_auroc.update(out[:, 1], y_true)
+            self.val_auprc.update(out[:, 1], y_true)
 
         return loss
 
@@ -187,8 +193,10 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
 
         # Log test metrics
         self.test_acc.update(y_pred, y_true)
-        # self.test_auroc.update(out[:, 1], y_true)
-        # self.test_auprc.update(out[:, 1], y_true)
+
+        if self.hparams.num_classes == 2:
+            self.test_auroc.update(out[:, 1], y_true)
+            self.test_auprc.update(out[:, 1], y_true)
 
         return loss
 
@@ -207,17 +215,21 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         """
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         acc = self.train_acc.compute()
-        # auroc = self.train_auroc.compute()
-        # auprc = self.train_auprc.compute()
 
         self.log('train_loss', loss)
         self.log('train_acc', acc)
-        # self.log('train_auroc', auroc)
-        # self.log('train_auprc', auprc, prog_bar=True)
 
         self.train_acc.reset()
-        # self.train_auroc.reset()
-        # self.train_auprc.reset()
+
+        if self.hparams.num_classes == 2:
+            auroc = self.train_auroc.compute()
+            auprc = self.train_auprc.compute()
+
+            self.log('train_auroc', auroc)
+            self.log('train_auprc', auprc, prog_bar=True)
+
+            self.train_auroc.reset()
+            self.train_auprc.reset()
 
 
     def validation_epoch_end(self, validation_step_outputs):
@@ -231,17 +243,19 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         """
         loss = torch.tensor(validation_step_outputs).mean()
         acc = self.val_acc.compute()
-        # auroc = self.val_auroc.compute()
-        # auprc = self.val_auprc.compute()
 
         self.log('val_loss', loss)
         self.log('val_acc', acc)
-        # self.log('val_auroc', auroc)
-        # self.log('val_auprc', auprc, prog_bar=True)
 
         self.val_acc.reset()
-        # self.val_auroc.reset()
-        # self.val_auprc.reset()
+
+        if self.hparams.num_classes == 2:
+            auroc = self.val_auroc.compute()
+            auprc = self.val_auprc.compute()
+            self.log('val_auroc', auroc)
+            self.log('val_auprc', auprc, prog_bar=True)
+            self.val_auroc.reset()
+            self.val_auprc.reset()
 
 
     def test_epoch_end(self, test_step_outputs):
@@ -257,16 +271,16 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
 
         loss = torch.tensor(test_step_outputs).mean()
         acc = eval(f'self.{dset}_acc.compute()')
-        # auroc = eval(f'self.{dset}_auroc.compute()')
-        # auprc = eval(f'self.{dset}_auprc.compute()')
-
-        # print(acc, auroc, auprc)
 
         self.log(f'{dset}_loss', loss)
         self.log(f'{dset}_acc', acc)
-        # self.log(f'{dset}_auroc', auroc)
-        # self.log(f'{dset}_auprc', auprc, prog_bar=True)
 
         exec(f'self.{dset}_acc.reset()')
-        # exec(f'self.{dset}_auroc.reset()')
-        # exec(f'self.{dset}_auprc.reset()')
+
+        if self.hparams.num_classes == 2:
+            auroc = eval(f'self.{dset}_auroc.compute()')
+            auprc = eval(f'self.{dset}_auprc.compute()')
+            self.log(f'{dset}_auroc', auroc)
+            self.log(f'{dset}_auprc', auprc, prog_bar=True)
+            exec(f'self.{dset}_auroc.reset()')
+            exec(f'self.{dset}_auprc.reset()')
