@@ -84,6 +84,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
                                         weight_decay=self.hparams.weight_decay)
         return optimizer
 
+
     ############################################################################
     #                          Per-Batch Metrics                               #
     ############################################################################
