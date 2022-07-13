@@ -39,13 +39,14 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
         """
-        # Instantiate EfficientNetB0
+        # Instantiate EfficientNet
+        self.model_name = "efficientnet-b0"
         blocks_args, global_params = get_model_params(
-            "efficientnet-b1", {"num_classes": num_classes,
-                                "image_size": img_size})
+            self.model_name, {"num_classes": num_classes,
+                              "image_size": img_size})
         super().__init__(blocks_args=blocks_args, global_params=global_params)
 
-        # Save hyperparameters to self.hparams
+        # Save hyperparameters (now in self.hparams)
         self.save_hyperparameters()
 
         # Define loss
