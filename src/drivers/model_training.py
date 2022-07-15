@@ -222,10 +222,10 @@ def main(args):
     dm = UltrasoundDataModule(df=df, dir=constants.DIR_IMAGES, **hparams)
     dm.setup()
 
-    # 3.1 Run experiment (train-val split)
-    if not hparams["cross_val_folds"]:
+    # 3.1 Run experiment
+    if hparams["cross_val_folds"] == 1:
         run(hparams, dm, constants.DIR_RESULTS, **experiment_hparams)
-    # 3.2 Run experiment (kfold cross-validation)
+    # 3.2 Run experiment  w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)
