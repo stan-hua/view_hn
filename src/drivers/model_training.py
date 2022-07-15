@@ -6,14 +6,16 @@ Description: Used to train PyTorch models.
 
 # Standard libraries
 import argparse
+import logging
 import os
 from datetime import datetime
 
 # Non-standard libraries
+import numpy as np
 import pandas as pd
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 # Custom libraries
 from src.data import constants
@@ -22,9 +24,15 @@ from src.models.efficientnet_pl import EfficientNetPL
 from src.utilities.custom_logger import FriendlyCSVLogger
 
 
+# Set logging config
+logging.basicConfig(level=logging.DEBUG)
+
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
+LOGGER = logging.getLogger(__name__)
+
+# Expected image size of model
 IMG_SIZE = (256, 256)
 
 
@@ -55,7 +63,7 @@ def init(parser):
                            "with train_val_split!",
         "checkpoint": "If flagged, save last model checkpoint during training.",
         "precision": "Number of bits for precision of floating point values.",
-        "grad_clip_norm": "Value to normalize (clip) gradient to.",
+        "grad_clip_norm": "If specified, value to normalize gradient to.",
         "stop_epoch": "Number of epochs to train model.",
         "debug": "If flagged, runs Trainer in dev mode. 1 quick batch is run."
     }
@@ -67,21 +75,25 @@ def init(parser):
                         help=arg_help["checkpoint"])
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
-    parser.add_argument("--train_test_split", default=0.75,
+    parser.add_argument("--train_test_split", default=1.0, type=float,
                         help=arg_help["train_test_split"])
-    parser.add_argument("--train_val_split", default=0.75,
+    parser.add_argument("--train_val_split", default=1.0, type=float,
                         help=arg_help["train_test_split"])
-    parser.add_argument("--cross_val_folds", default=None, type=int,
+    parser.add_argument("--cross_val_folds", default=1, type=int,
                         help=arg_help["cross_val_folds"])
 
     # pl.Trainer related arguments
     parser.add_argument("--precision", default=32, type=int,
                         choices=[16, 32, 64], help=arg_help["precision"])
-    parser.add_argument("--grad_clip_norm", default=1.0, type=float,
+    parser.add_argument("--grad_clip_norm", default=None, type=float,
                         help=arg_help["grad_clip_norm"])
     parser.add_argument("--stop_epoch", default=50, type=int,
                         help=arg_help["stop_epoch"])
     parser.add_argument("--debug", action="store_true", help=arg_help["debug"])
+
+    # TODO: Add model related arguments
+
+    # TODO: Add data module related arguments
 
 
 ################################################################################
@@ -124,21 +136,27 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
     experiment_dir = f"{results_dir}/{version_name}/{fold}"
 
     # Instantiate model
-    model = EfficientNetPL(img_size=hparams["img_size"])
+    model = EfficientNetPL(**hparams)
 
     # Loggers
     csv_logger = FriendlyCSVLogger(results_dir, name=version_name,
                                    version=str(fold))
     tensorboard_logger = TensorBoardLogger(results_dir, name=version_name,
                                            version=str(fold))
+    # TODO: Consider logging experiments on Weights & Biases
+    # wandb_logger = WandbLogger(save_dir=results_dir, name=version_name,
+    #                            version=str(fold), project="view_hn")
+
+    # Flag for presence of validation set
+    includes_val = (hparams["train_val_split"] < 1.0) or \
+        (hparams["cross_val_folds"] > 1)
 
     # Callbacks (model checkpoint)
     callbacks = []
     if checkpoint:
-        # save_path = f"{experiment_dir}/checkpoints"
         callbacks.append(
-            ModelCheckpoint(dirpath=experiment_dir, monitor="val_loss",
-                            save_last=True))
+            ModelCheckpoint(dirpath=experiment_dir, save_last=True,
+                            monitor="val_loss" if includes_val else None))
 
     # Initialize Trainer
     trainer = Trainer(default_root_dir=experiment_dir,
@@ -156,12 +174,18 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
                       fast_dev_run=hparams["debug"],
                       )
 
+    # Show number of patients
+    num_patients_train = len(np.unique(dm.dset_to_ids['train']))
+    LOGGER.info(f"[Training] Num Patients: {num_patients_train}")
+    if dm.dset_to_ids['val'] is not None:
+        num_patients_val = len(np.unique(dm.dset_to_ids['val']))
+        LOGGER.info(f"[Validation] Num Patients: {num_patients_val}")
+
     # (1) Perform training
     if train:
         train_loader = dm.train_dataloader()
-        val_loader = dm.val_dataloader() if hparams["train_val_split"] != 1.0 \
-            else None
-        trainer.fit(model, train_dataloader=train_loader,
+        val_loader = dm.val_dataloader() if includes_val else None
+        trainer.fit(model, train_dataloaders=train_loader,
                     val_dataloaders=val_loader)
 
     # (2) Perform testing

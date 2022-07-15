@@ -184,12 +184,14 @@ def cross_validation_by_patient(patient_ids, num_folds=5):
     remaining_ids = patient_ids
 
     # Get patient IDs for training set in each folds
-    while num_folds > 0:
+    while num_folds > 1:
         proportion = 1 / num_folds
         train_idx, rest_idx = split_by_ids(remaining_ids, proportion)
 
         training_folds.append(np.unique(remaining_ids[train_idx]))
         remaining_ids = remaining_ids[rest_idx]
+        
+        num_folds -= 1
 
     # The last remaining IDs are the patient IDs of the last fold
     training_folds.append(np.unique(remaining_ids))
@@ -198,13 +200,16 @@ def cross_validation_by_patient(patient_ids, num_folds=5):
     fold_idx = list(range(len(training_folds)))
     for i in fold_idx:
         # Get training set indices
-        train_idx = np.argwhere(patient_ids in set(training_folds[i]))
+        uniq_train_ids = set(training_folds[i])
+        train_idx = np.where([_id in uniq_train_ids for _id in patient_ids])[0]
 
         # Get validation set indices
         val_indices = fold_idx.copy()
         val_indices.remove(i)
-        val_patient_ids = np.concatenate(training_folds[val_indices])
-        val_idx = np.argwhere(patient_ids in set(val_patient_ids))
+        val_patient_ids = np.concatenate(
+            np.array(training_folds, dtype=object)[val_indices])
+        uniq_val_ids = set(val_patient_ids)
+        val_idx = np.where([_id in uniq_val_ids for _id in patient_ids])[0]
 
         folds.append((train_idx, val_idx))
 
@@ -309,12 +314,12 @@ class UltrasoundDataModule(pl.LightningDataModule):
         if "train_val_split" in kwargs and kwargs["train_val_split"] != 1.0:
             self.train_val_split = kwargs.get("train_val_split")
 
-        if "cross_val_folds" in kwargs and kwargs["cross_val_folds"]:
+        if "cross_val_folds" in kwargs and kwargs["cross_val_folds"] > 1:
             self.cross_val_folds = kwargs.get("cross_val_folds")
             self.fold = 0
 
-            # Store training set patient IDs indexed in cross validation
-            self._cross_val_id_set = None
+            # Store total training metadata split during cross validation
+            self._cross_val_train_dict = None
 
             # Stores list of (train_idx, val_idx) for each fold
             self.cross_fold_indices = None
@@ -327,18 +332,23 @@ class UltrasoundDataModule(pl.LightningDataModule):
         # (1) Split into training and test sets
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
             train_idx, test_idx = split_by_ids(self.patient_ids, 
-                                                self.train_test_split)
+                                               self.train_test_split)
             self._assign_dset_idx("train", "test", train_idx, test_idx)
         
         # (2) Further split training set into train-val or cross-val sets
         # (2.1) Train-Val Split
         if hasattr(self, "train_val_split"):
             train_idx, val_idx = split_by_ids(self.dset_to_ids["train"], 
-                                                self.train_val_split)
+                                              self.train_val_split)
             self._assign_dset_idx("train", "val", train_idx, val_idx)
         # (2.2) K-Fold Cross Validation
         elif hasattr(self, "cross_val_folds"):
-            self._cross_val_id_set = self.dset_to_ids["train"]
+            self._cross_val_train_dict = {
+                "ids": self.dset_to_ids["train"],
+                "paths": self.dset_to_paths["train"],
+                "labels": self.dset_to_labels["train"]
+            }
+
             self.cross_fold_indices = cross_validation_by_patient(
                 self.dset_to_ids["train"], self.cross_val_folds)
             # By default, set to first kfold
@@ -359,6 +369,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "filename": self.dset_to_paths["train"],
             "label": self.dset_to_labels["train"]
         })
+
         train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir)
 
         # Create DataLoader with parameters specified
@@ -428,7 +439,9 @@ class UltrasoundDataModule(pl.LightningDataModule):
 
         # Set training and validation data for fold
         train_idx, val_idx = self.cross_fold_indices[self.fold]
-        self.dset_to_paths["train"] = self._cross_val_id_set
+        self.dset_to_ids["train"] = self._cross_val_train_dict["ids"]
+        self.dset_to_paths["train"] = self._cross_val_train_dict["paths"]
+        self.dset_to_labels["train"] = self._cross_val_train_dict["labels"]
         self._assign_dset_idx("train", "val", train_idx, val_idx)
 
         LOGGER.info(f"==Fold {fold + 1}/{self.cross_val_folds}==:")
