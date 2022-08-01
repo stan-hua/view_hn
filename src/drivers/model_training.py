@@ -19,6 +19,7 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 # Custom libraries
 from src.data import constants
+from src.data_prep.utils import load_metadata
 from src.data_prep.dataloaders import UltrasoundDataModule
 from src.models.efficientnet_pl import EfficientNetPL
 from src.utilities.custom_logger import FriendlyCSVLogger
@@ -31,9 +32,6 @@ logging.basicConfig(level=logging.DEBUG)
 #                                  Constants                                   #
 ################################################################################
 LOGGER = logging.getLogger(__name__)
-
-# Expected image size of model
-IMG_SIZE = (256, 256)
 
 
 ################################################################################
@@ -203,7 +201,7 @@ def main(args):
         Contains arguments needed to run experiments
     """
     # 0. Set up hyperparameters
-    hparams = {"img_size": IMG_SIZE}
+    hparams = {"img_size": constants.IMG_SIZE}
     hparams.update(vars(args))
 
     # 0. Arguments for experiment
@@ -214,12 +212,12 @@ def main(args):
         "version_name": hparams["exp_name"]
     }
 
-    # 1. Get image paths and labels
-    df = pd.read_csv(constants.METADATA_FILE)
-    df = df.rename(columns={"IMG_FILE": "filename", "revised_labels": "label"})
+    # 1. Get image filenames and labels
+    df_metadata = load_metadata()
 
     # 2. Instantiate data module
-    dm = UltrasoundDataModule(df=df, dir=constants.DIR_IMAGES, **hparams)
+    dm = UltrasoundDataModule(df=df_metadata, dir=constants.DIR_IMAGES,
+                              **hparams)
     dm.setup()
 
     # 3.1 Run experiment
