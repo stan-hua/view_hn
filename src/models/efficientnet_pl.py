@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
+from torch.nn import functional as F
 
 
 class EfficientNetPL(EfficientNet, pl.LightningModule):
@@ -115,7 +116,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         y_true = metadata["label"]
 
         # Get loss
-        loss = self.loss(out, y_true)
+        loss = self.loss(F.log_softmax(out, dim=1), y_true)
 
         # Log training metrics
         self.train_acc.update(y_pred, y_true)
@@ -153,7 +154,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         y_true = metadata["label"]
 
         # Get loss
-        loss = self.loss(out, y_true)
+        loss = self.loss(F.log_softmax(out, dim=1), y_true)
 
         # Log validation metrics
         self.val_acc.update(y_pred, y_true)
@@ -191,7 +192,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         y_true = metadata["label"]
 
         # Get loss
-        loss = self.loss(out, y_true)
+        loss = self.loss(F.log_softmax(out, dim=1), y_true)
 
         # Log test metrics
         self.test_acc.update(y_pred, y_true)
