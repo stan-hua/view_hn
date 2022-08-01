@@ -19,7 +19,7 @@ from tabulate import tabulate
 
 # Custom libraries
 from src.data import constants
-from src.data_prep.utils import load_metadata, extract_data_from_filename
+from src.data_prep.utils import load_metadata
 
 
 ################################################################################
@@ -221,34 +221,20 @@ def are_labels_strictly_ordered(df_metadata):
         df : pandas.DataFrame
             All sequences for one patient.
         """
-        views = df.sort_values(by=["seq_number"])["label"]
+        views = df.sort_values(by=["seq_number"])["label"].tolist()
 
-        # NOTE: prev_prev_view and prev_view only changee when curr_view changes
-        # 'view' label
-        prev_prev_view = None
-        prev_view = None
+        # Keep track of what views have been seen and previous view
+        seen = set()
+        prev = None
 
-        for curr_view in views:
-            # First two views are for setting up checks
-            if prev_view is None:
-                prev_view = curr_view
-                continue
-            elif prev_prev_view is None:
-                prev_prev_view = prev_view
-                prev_view = curr_view
-                continue
-            # Ignore if current view is the same as previous view
-            elif curr_view != prev_view:
-                continue
-
-            # If current view is equal to 2 views ago, then crossed back
-            if curr_view == prev_prev_view:
+        for view in views:
+            # If not same as last, but was seen previously, then crossed back
+            if view != prev and view in seen:
                 return True
-            
-            # If not, update views
-            prev_prev_view = prev_view
-            prev_view = curr_view
-        
+
+            seen.add(view)
+            prev = view
+
         return False
 
     # Group by unique ultrasound sequences
@@ -257,25 +243,22 @@ def are_labels_strictly_ordered(df_metadata):
     # Check if any US sequence is not unidirectional
     crossed_back = df_seqs.apply(_crosses_back)
 
-    return crossed_back.any()
+    return not crossed_back.any()
 
 
 if __name__ == '__main__':
     ############################################################################
     #                      Plot Distribution of Views                          #
     ############################################################################
-    # df_metadata = load_metadata(extract=True)
-    # plot_hist_of_view_labels(df_metadata)
-    # plt.tight_layout()
-    # plt.show()
+    df_metadata = load_metadata(extract=True)
+    plot_hist_of_view_labels(df_metadata)
+    plt.tight_layout()
+    plt.show()
 
     ############################################################################
     #                    Plot US Images with Prediction                        #
     ############################################################################
-    df_test_metadata = pd.read_csv(constants.DIR_RESULTS + "/test_set_results.csv")
-    df_test_metadata["orig_filename"] = df_test_metadata.filename.map(lambda x: x.split("\\")[-1])
-    extract_data_from_filename(df_test_metadata, col="orig_filename")
-
+    df_test_metadata = pd.read_csv(constants.DIR_RESULTS + "/test_set_results(five_view).csv")
     for _ in range(10):
         idx = np.random.randint(0, 84)
         patient_imgs_to_gif(df_test_metadata, patient_idx=idx)
