@@ -12,6 +12,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 import torchvision.transforms as T
 import yaml
@@ -28,6 +29,10 @@ from src.models.efficientnet_pl import EfficientNetPL
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
+# Configure seaborn color palette
+sns.set_palette("Paired")
+
+
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
@@ -41,7 +46,7 @@ CKPT_PATH_MULTI= constants.DIR_RESULTS + "/five_view/0/epoch=6-step=1392.ckpt"
 
 # Checkpoint for a trained binary-classifier model
 CKPT_PATH_BINARY = constants.DIR_RESULTS + \
-    "/binary_classifier/0/epoch=14-step=2984.ckpt"
+    "/binary_classifier/0/epoch=12-step=2586.ckpt"
 
 # Table containing predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
@@ -103,8 +108,8 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
 
     Returns
     -------
-    np.array
-        Prediction for each image 
+    tuple of np.array
+        (prediction for each image, probability of each prediction)
     """
     # Set to evaluation mode
     model.eval()
@@ -112,6 +117,9 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
     # Predict on each images one-by-one
     with torch.no_grad():
         preds = []
+        probs = []
+        progress = 0
+
         for i, filename in enumerate(filenames):
             img_path = filename if dir is None else f"{dir}/{filename}"
 
@@ -129,15 +137,23 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
             pred = torch.argmax(out, dim=1)
             pred = pred.detach().cpu().numpy()[0]
 
+            # Get probability
+            prob = torch.nn.functional.softmax(out, dim=1)
+            prob = prob.detach().cpu().numpy().max()
+            probs.append(prob)
+
             # Convert from encoded label to label name
             pred_label = constants.IDX_TO_CLASS[pred]
             preds.append(pred_label)
 
-            # Log progress
-            LOGGER.info("Test Set Inference: %i%",
-                        (int(100 * (i + 1) / len(filenames))))
+            # Log progress every 5%
+            curr_progress = int(100 * (i + 1) / len(filenames))
+            if progress != curr_progress:
+                progress = curr_progress
+                if progress % 5 == 0:
+                    LOGGER.info("Test Set Inference: %i %%", progress)
 
-    return np.array(preds)
+    return np.array(preds), np.array(probs)
 
 
 def plot_confusion_matrix(df_pred):
@@ -154,6 +170,33 @@ def plot_confusion_matrix(df_pred):
     disp = ConfusionMatrixDisplay(cm, display_labels=constants.CLASSES)
     disp.plot()
     plt.tight_layout()
+    plt.show()
+
+
+def plot_pred_probability_by_views(df_pred):
+    """
+    Plot average probability of prediction per view label.
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Each row is a test example with "label", "pred" and "prob" defined.
+    """
+    df_pred = df_pred.copy()
+
+    # Filter for correct test predictions
+    df_pred.binary_label = df_pred.label.map(
+        lambda x: "Bladder" if x == "Bladder" else "Other")
+    df_pred = df_pred[df_pred.binary_label == df_pred.pred]
+
+    # Average prediction probability over each view
+    df_prob_by_view = df_pred.groupby(by="label").mean()["prob"].reset_index()
+    df_prob_by_view = df_prob_by_view.rename(columns=
+        {"label": "View", "prob": "Probability"})
+    
+    # Bar plot
+    sns.barplot(data=df_prob_by_view, x="View", y="Probability",
+                order=constants.CLASSES)
     plt.show()
 
 
@@ -254,10 +297,11 @@ def main_test_set(checkpoint_path=CKPT_PATH_MULTI, save_path=TEST_PRED_PATH):
 
     # 4. Get predictions on test set
     filenames = df_test_metadata.filename.tolist()
-    preds = predict_on_images(model=model, filenames=filenames, dir=None)
+    preds, probs = predict_on_images(model=model, filenames=filenames, dir=None)
 
     # 5. Save predictions on test set
     df_test_metadata["pred"] = preds
+    df_test_metadata["prob"] = probs
     df_test_metadata.to_csv(save_path, index=False)
 
 
@@ -274,7 +318,11 @@ if __name__ == '__main__':
 
     # Load test metadata
     if os.path.exists(test_save_path):
-        df_test_metadata = pd.read_csv(test_save_path)
+        df_pred = pd.read_csv(test_save_path)
 
-        # Plot confusion matrix
-        plot_confusion_matrix(df_test_metadata)
+        if model_type != "binary":
+            # Plot confusion matrix
+            plot_confusion_matrix(df_pred)
+        else:
+            # Plot binary avg. prediction probabilites by view
+            plot_pred_probability_by_views(df_pred)
