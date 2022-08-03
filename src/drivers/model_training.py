@@ -201,7 +201,8 @@ def main(args):
         Contains arguments needed to run experiments
     """
     # 0. Set up hyperparameters
-    hparams = {"img_size": constants.IMG_SIZE}
+    hparams = {"img_size": constants.IMG_SIZE,
+               "num_classes": 2 if constants.BINARY else 5}
     hparams.update(vars(args))
 
     # 0. Arguments for experiment
@@ -209,7 +210,7 @@ def main(args):
         "train": hparams["train"],
         "test": hparams["test"],
         "checkpoint": hparams["checkpoint"],
-        "version_name": hparams["exp_name"]
+        "version_name": hparams["exp_name"],
     }
 
     # 1. Get image filenames and labels

@@ -60,10 +60,8 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
 
             # Metrics for binary classification
             if self.hparams.num_classes == 2:
-                exec(f"self.{dset}_auroc = torchmetrics.AUROC("
-                    "num_classes={num_classes}, average='micro')")
-                exec(f"self.{dset}_auprc= torchmetrics.AveragePrecision("
-                    "num_classes={num_classes})")
+                exec(f"self.{dset}_auroc = torchmetrics.AUROC()")
+                exec(f"self.{dset}_auprc = torchmetrics.AveragePrecision()")
 
 
     def configure_optimizers(self):
