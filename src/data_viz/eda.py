@@ -185,7 +185,7 @@ def show_dist_of_ith_view(df_metadata, i=0):
         columns={0: f"Num. Seqs. w/ View at index {i}"})
 
     # Print to console
-    print(tabulate(view_counts, headers="keys", tablefmt="psql"))
+    print_table(view_counts)
 
 
 ################################################################################
@@ -219,7 +219,12 @@ def are_labels_strictly_ordered(df_metadata):
         Parameters
         ----------
         df : pandas.DataFrame
-            All sequences for one patient.
+            One full US sequence for one patient.
+
+        Returns
+        -------
+        bool
+            If True, labels are not unidirectional (crosses back).
         """
         views = df.sort_values(by=["seq_number"])["label"].tolist()
 
@@ -246,11 +251,127 @@ def are_labels_strictly_ordered(df_metadata):
     return not crossed_back.any()
 
 
+def get_unique_label_sequences(df_metadata):
+    """
+    Prints the unique view progression over each US sequence, where each view
+    label is encoded as an integer.
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image.
+    """
+    def _get_label_sequence(df):
+        """
+        Given a unique US sequence for one patient, get the order of contiguous
+        labels in the sequence.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            One full US sequence for one patient.
+
+        Returns
+        -------
+        list
+            Unique label section within the sequence provided
+        """
+        views = df.sort_values(by=["seq_number"])["label"].tolist()
+
+        # Keep track of order of views
+        prev = None
+        seq = []
+
+        for view in views:
+            # If not same as last, but was seen previously, then crossed back
+            if view != prev:
+                seq.append(view)
+            prev = view
+
+        return seq
+
+    df_metadata = df_metadata.copy()
+
+    # Map label to encoded integer
+    class_to_idx = {"Saggital_Left": "0", "Transverse_Left": "1",
+                    "Bladder": "2", "Transverse_Right": "3",
+                    "Saggital_Right": "4", "Other": "-"}
+    df_metadata.label = df_metadata.label.map(class_to_idx)
+
+    # Get unique label sequences per patient
+    df_seqs = df_metadata.groupby(by=["id", "visit"])
+    label_seqs = df_seqs.apply(_get_label_sequence)
+    label_seqs = label_seqs.map(lambda x: "".join(x))
+    label_seq_counts = label_seqs.value_counts().reset_index().rename(
+        columns={"index": "Label Sequence", 0: "Count"})
+
+    # Print to stdout
+    print_table(label_seq_counts, show_index=False)
+
+
+def get_transition_matrix(df_metadata):
+    """
+    Print transition matrix
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image.
+    """
+    def transition_matrix(transitions):
+        """
+        Taken from Stack Overflow:
+        Link: https://stackoverflow.com/questions/46657221/
+              generating-markov-transition-matrix-in-python
+
+        The following code takes a list such as
+        [1,1,2,6,8,5,5,7,8,8,1,1,4,5,5,0,0,0,1,1,4,4,5,1,3,3,4,5,4,1,1]
+        with states labeled as successive integers starting with 0
+        and returns a transition matrix, M,
+        where M[i][j] is the probability of transitioning from i to j
+        """
+        n = 1+ max(transitions) #number of states
+
+        M = [[0]*n for _ in range(n)]
+
+        for (i,j) in zip(transitions,transitions[1:]):
+            M[i][j] += 1
+
+        #now convert to probabilities:
+        for row in M:
+            s = sum(row)
+            if s > 0:
+                row[:] = [f/s for f in row]
+        return M
+
+
+################################################################################
+#                               Helper Functions                               #
+################################################################################
+def print_table(df, show_cols=True, show_index=True):
+    """
+    Prints table to stdout in a pretty format.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A table
+    show_cols : bool
+        If True, prints column names, by default True.
+    show_index : bool
+        If True, prints row index, by default True.
+    """
+    print(tabulate(df, tablefmt="psql",
+                   headers="keys" if show_cols else None,
+                   showindex=show_index))
+
+
 if __name__ == '__main__':
     ############################################################################
     #                      Plot Distribution of Views                          #
     ############################################################################
-    df_metadata = load_metadata(extract=True)
+    df_metadata = load_metadata(extract=True, include_unlabeled=True,
+                                dir=constants.DIR_IMAGES)
     plot_hist_of_view_labels(df_metadata)
     plt.tight_layout()
     plt.show()
@@ -262,3 +383,8 @@ if __name__ == '__main__':
     for _ in range(10):
         idx = np.random.randint(0, 84)
         patient_imgs_to_gif(df_test_metadata, patient_idx=idx)
+
+    ############################################################################
+    #                 Print Examples of Label Progression                      #
+    ############################################################################
+    get_unique_label_sequences(df_metadata)

@@ -5,6 +5,10 @@ Description: Contains helper functions for a variety of data/label preprocessing
              functions.
 """
 
+# Standard libraries
+import glob
+import os
+
 # Non-standard libraries
 import numpy as np
 import pandas as pd
@@ -12,12 +16,18 @@ import pandas as pd
 # Custom libraries
 from src.data import constants
 
+
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
-def load_metadata(path=constants.METADATA_FILE, extract=False):
+def load_metadata(path=constants.METADATA_FILE, extract=False,
+                  include_unlabeled=False, dir=None):
     """
     Load metadata table with filenames and view labels.
+
+    Note
+    ----
+    If <include_unlabeled> specified, <dir> must be provided.
 
     Parameters
     ----------
@@ -26,6 +36,10 @@ def load_metadata(path=constants.METADATA_FILE, extract=False):
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
+    include_unlabeled : bool, optional
+        If True, include all unlabeled images in <dir>, by default False.
+    dir : str, optional
+        Directory containing unlabeled (and labeled) images.
 
     Returns
     -------
@@ -37,8 +51,31 @@ def load_metadata(path=constants.METADATA_FILE, extract=False):
     df_metadata = df_metadata.rename(columns={"IMG_FILE": "filename",
                                               "revised_labels": "label"})
 
+    # If specified, include unlabeled images in directory provided
+    if include_unlabeled:
+        assert dir is not None, "Please provide `dir` as an argument!"
+
+        # Get all image paths
+        all_img_paths = glob.glob(os.path.join(dir, "*"))
+        df_others = pd.DataFrame({"filename": all_img_paths})
+        df_others.filename = df_others.filename.map(os.path.basename)
+        
+        # Remove found paths to already labeled images
+        labeled_img_paths = set(df_metadata.filename.tolist())
+        df_others = df_others[~df_others.filename.isin(labeled_img_paths)]
+
+        # Remove external data
+        df_others = df_others[~df_others.filename.str.startswith("SU2")]
+
+        # NOTE: Unlabeled images have label "Other"
+        df_others["label"] = "Other"
+        
+        # Merge labeled and unlabeled data
+        df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
+
     if extract:
         extract_data_from_filename(df_metadata)
+
     return df_metadata
 
 
