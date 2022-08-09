@@ -47,6 +47,8 @@ CKPT_PATH_MULTI= constants.DIR_RESULTS + "/five_view/0/epoch=6-step=1392.ckpt"
 # Checkpoint for a trained binary-classifier model
 CKPT_PATH_BINARY = constants.DIR_RESULTS + \
     "/binary_classifier/0/epoch=12-step=2586.ckpt"
+CKPT_PATH_BINARY_WEIGHTED = constants.DIR_RESULTS + \
+    "/binary_classifier_weighted/0/epoch=11-step=2387.ckpt"
 
 # Table containing predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
@@ -93,7 +95,8 @@ def get_test_set_metadata(df_metadata, hparams, dir=constants.DIR_IMAGES):
     return df_test
 
 
-def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
+def predict_on_images(model, filenames, dir=constants.DIR_IMAGES,
+                      probability=False):
     """
     Performs inference on images specified, and returns predictions.
 
@@ -105,6 +108,9 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
         Filenames (or full paths) to images to infer on.
     dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
+    probability : bool, optional
+        If True, saves probability of prediction. Otherwise, saves raw model
+        output (activation), by default True.
 
     Returns
     -------
@@ -135,12 +141,17 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
             # Perform inference
             out = model(img)
             pred = torch.argmax(out, dim=1)
-            pred = pred.detach().cpu().numpy()[0]
+            pred = int(pred.detach().cpu())
 
-            # Get probability
-            prob = torch.nn.functional.softmax(out, dim=1)
-            prob = prob.detach().cpu().numpy().max()
-            probs.append(prob)
+            if probability:
+                # Get probability
+                prob = torch.nn.functional.softmax(out, dim=1)
+                prob = prob.detach().cpu().numpy().max()
+                probs.append(prob)
+            else:
+                # Get maximum activation
+                prob = float(out.max().detach().cpu())
+                probs.append(prob)
 
             # Convert from encoded label to label name
             pred_label = constants.IDX_TO_CLASS[pred]
@@ -306,21 +317,21 @@ def main_test_set(checkpoint_path=CKPT_PATH_MULTI, save_path=TEST_PRED_PATH):
 
 
 if __name__ == '__main__':
-    model_type = "binary"
+    model_type = "five_view"
     assert model_type in MODEL_TYPES
 
     # Add model type to save path
     test_save_path = TEST_PRED_PATH % (model_type,)
 
     # Inference on test set
-    main_test_set(CKPT_PATH_MULTI if model_type == "five_view" \
+    main_test_set(CKPT_PATH_MULTI if "five_view" in model_type  \
         else CKPT_PATH_BINARY, test_save_path)
 
     # Load test metadata
     if os.path.exists(test_save_path):
         df_pred = pd.read_csv(test_save_path)
 
-        if model_type != "binary":
+        if "five_view" in model_type:
             # Plot confusion matrix
             plot_confusion_matrix(df_pred)
         else:

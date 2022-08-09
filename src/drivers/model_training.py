@@ -66,13 +66,13 @@ def init(parser):
         "debug": "If flagged, runs Trainer in dev mode. 1 quick batch is run."
     }
 
-    # (General) Experiment related
-    parser.add_argument("--train", action="store_true", help=arg_help["train"])
-    parser.add_argument("--test", action="store_true", help=arg_help["test"])
-    parser.add_argument("--checkpoint", type=bool, default=True,
-                        help=arg_help["checkpoint"])
+    # General arguments
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
+
+    # Data arguments
+    parser.add_argument("--train", action="store_true", help=arg_help["train"])
+    parser.add_argument("--test", action="store_true", help=arg_help["test"])
     parser.add_argument("--train_test_split", default=1.0, type=float,
                         help=arg_help["train_test_split"])
     parser.add_argument("--train_val_split", default=1.0, type=float,
@@ -80,7 +80,9 @@ def init(parser):
     parser.add_argument("--cross_val_folds", default=1, type=int,
                         help=arg_help["cross_val_folds"])
 
-    # pl.Trainer related arguments
+    # pl.Trainer arguments
+    parser.add_argument("--checkpoint", type=bool, default=True,
+                        help=arg_help["checkpoint"])
     parser.add_argument("--precision", default=32, type=int,
                         choices=[16, 32, 64], help=arg_help["precision"])
     parser.add_argument("--grad_clip_norm", default=None, type=float,
@@ -88,10 +90,6 @@ def init(parser):
     parser.add_argument("--stop_epoch", default=50, type=int,
                         help=arg_help["stop_epoch"])
     parser.add_argument("--debug", action="store_true", help=arg_help["debug"])
-
-    # TODO: Add model related arguments
-
-    # TODO: Add data module related arguments
 
 
 ################################################################################
@@ -202,7 +200,7 @@ def main(args):
     """
     # 0. Set up hyperparameters
     hparams = {"img_size": constants.IMG_SIZE,
-               "num_classes": 2 if constants.BINARY else 5}
+               "num_classes": constants.NUM_CLASSES}
     hparams.update(vars(args))
 
     # 0. Arguments for experiment
