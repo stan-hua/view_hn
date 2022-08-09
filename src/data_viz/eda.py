@@ -27,6 +27,11 @@ from src.data_prep.utils import load_metadata
 ################################################################################
 LOGGER = logging.getLogger(__name__)
 
+# Map label to encoded integer
+CLASS_TO_IDX = {"Saggital_Left": 0, "Transverse_Left": 1, "Bladder": 2,
+                "Transverse_Right": 3, "Saggital_Right": 4, "Other": 5}
+IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
+
 
 ################################################################################
 #                                    Plots                                     #
@@ -88,7 +93,7 @@ def patient_imgs_to_gif(df_metadata, patient_idx=0, dir=None,
         Each row contains metadata for an ultrasound image, and it may include
         the prediction for each image under "pred".
     patient_idx : int
-        Relative positional index of unnique patient-visit in df_metadata, by
+        Relative positional index of unique patient-visit in df_metadata, by
         default 0
     dir : str, optional
         Path to directory containing images, by default None
@@ -292,11 +297,8 @@ def get_unique_label_sequences(df_metadata):
 
     df_metadata = df_metadata.copy()
 
-    # Map label to encoded integer
-    class_to_idx = {"Saggital_Left": "0", "Transverse_Left": "1",
-                    "Bladder": "2", "Transverse_Right": "3",
-                    "Saggital_Right": "4", "Other": "-"}
-    df_metadata.label = df_metadata.label.map(class_to_idx)
+    # Encode labels as integers
+    df_metadata.label = df_metadata.label.map(CLASS_TO_IDX).astype(str)
 
     # Get unique label sequences per patient
     df_seqs = df_metadata.groupby(by=["id", "visit"])
@@ -320,30 +322,76 @@ def get_transition_matrix(df_metadata):
     """
     def transition_matrix(transitions):
         """
-        Taken from Stack Overflow:
+        Given a unique US sequence for one patient, get the transition matrix
+        between views encoded as integers.
+
+        Note
+        ----
+        Adapted from Stack Overflow:
+            The following code takes a list such as
+            [1,1,2,6,8,5,5,7,8,8,1,1,4,5,5,0,0,0,1,1,4,4,5,1,3,3,4,5,4,1,1]
+            with states labeled as successive integers starting with 0
+            and returns a transition matrix, M,
+            where M[i][j] is the probability of transitioning from i to j
+
         Link: https://stackoverflow.com/questions/46657221/
               generating-markov-transition-matrix-in-python
 
-        The following code takes a list such as
-        [1,1,2,6,8,5,5,7,8,8,1,1,4,5,5,0,0,0,1,1,4,4,5,1,3,3,4,5,4,1,1]
-        with states labeled as successive integers starting with 0
-        and returns a transition matrix, M,
-        where M[i][j] is the probability of transitioning from i to j
+        Parameters
+        ----------
+        transitions : list
+            List of transitions with N states, represented by numbers from
+            0 to N-1.
         """
-        n = 1+ max(transitions) #number of states
+        states = list(range(6))
+        # Instantiate matrix
+        matrix = {i: {j: 0 for j in states} for i in states}
 
-        M = [[0]*n for _ in range(n)]
+        # Get number of times each transition occurs from state i to j
+        for i, j in zip(transitions, transitions[1:]):
+            matrix[i][j] += 1
 
-        for (i,j) in zip(transitions,transitions[1:]):
-            M[i][j] += 1
+        # Convert counts to probabilities
+        for i in matrix.keys():
+            # Get number of  transitions from state i
+            n = sum(matrix[i].values())
+            if n == 0:
+                continue
 
-        #now convert to probabilities:
-        for row in M:
-            s = sum(row)
-            if s > 0:
-                row[:] = [f/s for f in row]
-        return M
+            # Convert each transition count into a probability
+            for j in matrix[i]:
+                matrix[i][j] = matrix[i][j] / n
 
+        return matrix
+
+    df_metadata = df_metadata.copy()
+
+    # Encode labels as integers
+    df_metadata["encoded_label"] = df_metadata.label.map(CLASS_TO_IDX)
+
+    # Get transition matrix per patient
+    df_seqs = df_metadata.groupby(by=["id", "visit"])
+    all_matrices = df_seqs.apply(
+        lambda df: transition_matrix(df.encoded_label.tolist()))
+
+    # Convert transition matrix dicts to numpy arrays
+    all_matrices = all_matrices.map(lambda d: pd.DataFrame(d).T.to_numpy())\
+        .to_numpy()
+    all_matrices = np.stack(all_matrices)
+
+    # Get weighted average of transition matrix across all sequences
+    len_per_seq = df_seqs.apply(len).to_numpy()
+    weights = len_per_seq / len_per_seq.sum()
+    trans_matrix = pd.DataFrame(np.average(all_matrices,
+                                           axis=0, weights=weights))
+
+    # Rename columns and rows
+    trans_matrix.index = trans_matrix.index.map(IDX_TO_CLASS)
+    trans_matrix.columns = trans_matrix.columns.map(IDX_TO_CLASS)
+
+    print_table(trans_matrix)
+
+    return trans_matrix
 
 ################################################################################
 #                               Helper Functions                               #
@@ -388,3 +436,10 @@ if __name__ == '__main__':
     #                 Print Examples of Label Progression                      #
     ############################################################################
     get_unique_label_sequences(df_metadata)
+
+    ############################################################################
+    #                          Transition Matrix                               #
+    ############################################################################
+    df_metadata = load_metadata(extract=True, include_unlabeled=True,
+                                dir=constants.DIR_IMAGES)
+    get_transition_matrix(df_metadata)
