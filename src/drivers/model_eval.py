@@ -18,6 +18,7 @@ import torchvision.transforms as T
 import yaml
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from torchvision.io import read_image, ImageReadMode
+from tqdm import tqdm
 
 # Custom libraries
 from src.data import constants
@@ -124,9 +125,8 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES,
     with torch.no_grad():
         preds = []
         probs = []
-        progress = 0
 
-        for i, filename in enumerate(filenames):
+        for filename in tqdm(filenames):
             img_path = filename if dir is None else f"{dir}/{filename}"
 
             # Load image as expected by model
@@ -156,13 +156,6 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES,
             # Convert from encoded label to label name
             pred_label = constants.IDX_TO_CLASS[pred]
             preds.append(pred_label)
-
-            # Log progress every 5%
-            curr_progress = int(100 * (i + 1) / len(filenames))
-            if progress != curr_progress:
-                progress = curr_progress
-                if progress % 5 == 0:
-                    LOGGER.info("Test Set Inference: %i %%", progress)
 
     return np.array(preds), np.array(probs)
 
