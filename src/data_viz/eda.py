@@ -193,69 +193,6 @@ def show_dist_of_ith_view(df_metadata, i=0):
     print_table(view_counts)
 
 
-################################################################################
-#                              One-Time Questions                              #
-################################################################################
-def are_labels_strictly_ordered(df_metadata):
-    """
-    Check if each sequence has unidirectional labels.
-
-    Note
-    ----
-    Unidirectional if it follows one of two sequences:
-        1. Saggital (R), Transverse (R), Bladder, Transverse (L), Saggital (L)
-        2. Saggital (L), Transverse (L), Bladder, Transverse (R), Saggital (R)
-
-    Parameters
-    ----------
-    df_metadata : pandas.DataFrame
-        Each row contains metadata for an ultrasound image.
-
-    Returns
-    -------
-    bool
-        If True, labels never cross back. Otherwise, False.
-    """
-    def _crosses_back(df):
-        """
-        Given a unique US sequence for one patient, checks if the sequence of
-        labels is unidirectional.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            One full US sequence for one patient.
-
-        Returns
-        -------
-        bool
-            If True, labels are not unidirectional (crosses back).
-        """
-        views = df.sort_values(by=["seq_number"])["label"].tolist()
-
-        # Keep track of what views have been seen and previous view
-        seen = set()
-        prev = None
-
-        for view in views:
-            # If not same as last, but was seen previously, then crossed back
-            if view != prev and view in seen:
-                return True
-
-            seen.add(view)
-            prev = view
-
-        return False
-
-    # Group by unique ultrasound sequences
-    df_seqs = df_metadata.groupby(by=["id", "visit"])
-    
-    # Check if any US sequence is not unidirectional
-    crossed_back = df_seqs.apply(_crosses_back)
-
-    return not crossed_back.any()
-
-
 def get_unique_label_sequences(df_metadata):
     """
     Prints the unique view progression over each US sequence, where each view
@@ -394,6 +331,69 @@ def get_transition_matrix(df_metadata):
     return trans_matrix
 
 ################################################################################
+#                              One-Time Questions                              #
+################################################################################
+def are_labels_strictly_ordered(df_metadata):
+    """
+    Check if each sequence has unidirectional labels.
+
+    Note
+    ----
+    Unidirectional if it follows one of two sequences:
+        1. Saggital (R), Transverse (R), Bladder, Transverse (L), Saggital (L)
+        2. Saggital (L), Transverse (L), Bladder, Transverse (R), Saggital (R)
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image.
+
+    Returns
+    -------
+    bool
+        If True, labels never cross back. Otherwise, False.
+    """
+    def _crosses_back(df):
+        """
+        Given a unique US sequence for one patient, checks if the sequence of
+        labels is unidirectional.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            One full US sequence for one patient.
+
+        Returns
+        -------
+        bool
+            If True, labels are not unidirectional (crosses back).
+        """
+        views = df.sort_values(by=["seq_number"])["label"].tolist()
+
+        # Keep track of what views have been seen and previous view
+        seen = set()
+        prev = None
+
+        for view in views:
+            # If not same as last, but was seen previously, then crossed back
+            if view != prev and view in seen:
+                return True
+
+            seen.add(view)
+            prev = view
+
+        return False
+
+    # Group by unique ultrasound sequences
+    df_seqs = df_metadata.groupby(by=["id", "visit"])
+    
+    # Check if any US sequence is not unidirectional
+    crossed_back = df_seqs.apply(_crosses_back)
+
+    return not crossed_back.any()
+
+
+################################################################################
 #                               Helper Functions                               #
 ################################################################################
 def print_table(df, show_cols=True, show_index=True):
@@ -435,6 +435,7 @@ if __name__ == '__main__':
     ############################################################################
     #                 Print Examples of Label Progression                      #
     ############################################################################
+    df_metadata = load_metadata(extract=True)
     get_unique_label_sequences(df_metadata)
 
     ############################################################################

@@ -22,6 +22,7 @@ from torchvision.io import read_image, ImageReadMode
 # Custom libraries
 from src.data import constants
 
+
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
