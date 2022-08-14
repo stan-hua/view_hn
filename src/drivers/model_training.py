@@ -20,7 +20,8 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 # Custom libraries
 from src.data import constants
 from src.data_prep.utils import load_metadata
-from src.data_prep.dataloaders import UltrasoundDataModule
+from src.data_prep.dataset import UltrasoundDataModule
+from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_pl import EfficientNetPL
 from src.utilities.custom_logger import FriendlyCSVLogger
 
@@ -49,6 +50,7 @@ def init(parser):
     # Help messages
     arg_help = {
         "exp_name": "Name of experiment",
+        "full_seq": "If True, trains a CNN-LSTM model on full US sequences.",
         "train": "If flagged, run experiment to train model.",
         "test": "If flagged, run experiment to evaluate a trained model.",
         "train_test_split" : "Prop. of total data to leave for training (rest "
@@ -69,6 +71,9 @@ def init(parser):
     # General arguments
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
+
+    # Model and data - related arguments
+    parser.add_argument("--full_seq", help=arg_help["full_seq"], default=False)
 
     # Data arguments
     parser.add_argument("--train", action="store_true", help=arg_help["train"])
@@ -95,7 +100,7 @@ def init(parser):
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
-def run(hparams, dm, results_dir, train=True, test=True, fold=0,
+def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
         checkpoint=True, version_name="1"):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
@@ -105,8 +110,10 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
     hparams : dict
         Contains (data-related, model-related) setup parameters for training and
         testing
-    dm : pytorch_lightning.LightningDataModule
+    dm : pl.LightningDataModule
         Data module, which already called .setup()
+    model_cls : class
+        Class reference to model, used to instantiate a pl.LightningModule
     results_dir : str
         Path to directory containing trained model and/or test results
     train : bool, optional
@@ -132,7 +139,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
     experiment_dir = f"{results_dir}/{version_name}/{fold}"
 
     # Instantiate model
-    model = EfficientNetPL(**hparams)
+    model = model_cls(**hparams)
 
     # Loggers
     csv_logger = FriendlyCSVLogger(results_dir, name=version_name,
@@ -219,14 +226,17 @@ def main(args):
                               **hparams)
     dm.setup()
 
+    # 3. Specify model class
+    model_cls = EfficientNetLSTM if args.full_seq else EfficientNetPL
+
     # 3.1 Run experiment
     if hparams["cross_val_folds"] == 1:
-        run(hparams, dm, constants.DIR_RESULTS, **experiment_hparams)
+        run(hparams, dm, model_cls, constants.DIR_RESULTS, **experiment_hparams)
     # 3.2 Run experiment  w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)
-            run(hparams, dm, constants.DIR_RESULTS, fold=fold_idx,
+            run(hparams, dm, model_cls, constants.DIR_RESULTS, fold=fold_idx,
                 **experiment_hparams)
 
 
