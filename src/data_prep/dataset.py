@@ -1,5 +1,5 @@
 """
-dataloaders.py
+dataset.py
 
 Description: Contains functions/classes to load dataset in PyTorch.
 """
@@ -15,12 +15,12 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torchvision.transforms as T
-from sklearn.utils import shuffle
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 
 # Custom libraries
 from src.data import constants
+from src.data_prep import utils
 
 
 ################################################################################
@@ -35,7 +35,7 @@ IMAGE_MODES = {1: ImageReadMode.GRAY, 3: ImageReadMode.RGB}
 ################################################################################
 #                                Main Functions                                #
 ################################################################################
-def load_dataset_from_dir(dir):
+def load_dataset_from_dir(dir, full_seq=True):
     """
     Loads image dataset from directory of images.
 
@@ -43,16 +43,19 @@ def load_dataset_from_dir(dir):
     ----------
     dir : str
         Path to directory containing ultrasound images.
-    
+    full_seq : str
+        If True, groups ultrasound images by unique patient-visits, by default
+        False.
+
     Returns
     -------
     torch.utils.data.Dataset
         Contains images and metadata from filename
     """
-    return UltrasoundDatasetDir(dir, img_size=None)
+    return UltrasoundDatasetDir(dir, img_size=None, full_seq=full_seq)
 
 
-def load_dataset_from_dataframe(df, dir=None):
+def load_dataset_from_dataframe(df, dir=None, full_seq=True):
     """
     Loads image dataset from dataframe of image paths and labels.
 
@@ -62,159 +65,16 @@ def load_dataset_from_dataframe(df, dir=None):
         Contains column with absolute/relative path to images, and labels
     dir : str, optional
         Path to directory containing ultrasound images, by default None.
-    
+    full_seq : str
+        If True, groups ultrasound images by unique patient-visits, by default
+        False.
+
     Returns
     -------
     torch.utils.data.Dataset
         Contains images, metadata from filename, and labels from dataframe
     """
-    return UltrasoundDatasetDataFrame(df, dir=dir)
-
-
-################################################################################
-#                               Helper Function                                #
-################################################################################
-def get_patient_ids(paths):
-    """
-    Get patient IDs from a list of paths.
-
-    Returns
-    -------
-    np.array
-        List of patient ID strings
-    """
-    patient_ids = []
-    for path in paths:
-        patient_ids.append(os.path.basename(path).split("_")[0])
-    return np.array(patient_ids)
-
-
-def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
-    """
-    Splits list of patient IDs into training and val/test set.
-
-    Note
-    ----
-    Split may not be exactly equal to desired train_split due to imbalance of
-    patients.
-
-    Parameters
-    ----------
-    patient_ids : np.array or array-like
-        List of patient IDs (IDs can repeat).
-    train_split : float, optional
-        Proportion of total data to leave for training, by default 0.8
-    seed : int, optional
-        If provided, sets random seed to value, by default constants.SEED
-
-    Returns
-    -------
-    tuple of (np.array, np.array)
-        Contains (train_indices, val_indices), which are arrays of indices into
-        patient_ids to specify which are used for training or validation/test.
-    """
-    # Get expected # of items in training set
-    n = len(patient_ids)
-    n_train = int(n * train_split)
-
-    # Add soft lower/upper bounds (5%) to expected number. 
-    # NOTE: Assume it won't become negative
-    n_train_min = int(n_train - (n * 0.05))
-    n_train_max = int(n_train + (n * 0.05))
-
-    # Create mapping of patient ID to number of occurrences
-    id_to_len = {}
-    for _id in patient_ids:
-        if _id not in id_to_len:
-            id_to_len[_id] = 0
-        id_to_len[_id] += 1
-
-    # Shuffle unique patient IDs
-    unique_ids = list(id_to_len.keys())
-    shuffled_unique_ids = shuffle(unique_ids, random_state=seed)
-
-    # Randomly choose patients to add to training set until full
-    train_ids = set()
-    n_train_curr = 0
-    for _id in shuffled_unique_ids:
-        # Add patient if number of training samples doesn't exceed upper bound
-        if n_train_curr + id_to_len[_id] <= n_train_max:
-            train_ids.add(_id)
-            n_train_curr += id_to_len[_id]
-
-        # Stop when there is roughly enough in the training set 
-        if n_train_curr >= n_train_min:
-            break
-
-    # Create indices
-    train_idx = []
-    val_idx = []
-    for idx, _id in enumerate(patient_ids):
-        if _id in train_ids:
-            train_idx.append(idx)
-        else:
-            val_idx.append(idx)
-
-    # Convert to arrays
-    train_idx = np.array(train_idx)
-    val_idx = np.array(val_idx)
-
-    return train_idx, val_idx
-
-
-def cross_validation_by_patient(patient_ids, num_folds=5):
-    """
-    Create train/val indices for Cross-Validation with exclusive patient ids
-    betwen training and validation sets.
-
-    Parameters
-    ----------
-    patient_ids : np.array or array-like
-        List of patient IDs (IDs can repeat).
-    num_folds : int
-        Number of folds for cross-validation
-
-    Returns
-    -------
-    list of <num_folds> tuples of (np.array, np.array)
-        Each tuple in the list corresponds to a fold's (train_ids, val_ids)
-    """
-    folds = []
-
-    training_folds = []
-    remaining_ids = patient_ids
-
-    # Get patient IDs for training set in each folds
-    while num_folds > 1:
-        proportion = 1 / num_folds
-        train_idx, rest_idx = split_by_ids(remaining_ids, proportion)
-
-        training_folds.append(np.unique(remaining_ids[train_idx]))
-        remaining_ids = remaining_ids[rest_idx]
-        
-        num_folds -= 1
-
-    # The last remaining IDs are the patient IDs of the last fold
-    training_folds.append(np.unique(remaining_ids))
-
-    # Create folds
-    fold_idx = list(range(len(training_folds)))
-    for i in fold_idx:
-        # Get training set indices
-        uniq_train_ids = set(training_folds[i])
-        train_idx = np.where([_id in uniq_train_ids for _id in patient_ids])[0]
-
-        # Get validation set indices
-        val_indices = fold_idx.copy()
-        val_indices.remove(i)
-        val_patient_ids = np.concatenate(
-            np.array(training_folds, dtype=object)[val_indices])
-        uniq_val_ids = set(val_patient_ids)
-        val_idx = np.where([_id in uniq_val_ids for _id in patient_ids])[0]
-
-        folds.append((train_idx, val_idx))
-
-    return folds
+    return UltrasoundDatasetDataFrame(df, dir=dir, full_seq=full_seq)
 
 
 ################################################################################
@@ -225,7 +85,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
     Top-level object used to access all data preparation and loading
     functionalities.
     """
-    def __init__(self, dataloader_params=None, df=None, dir=None, **kwargs):
+    def __init__(self, dataloader_params=None, df=None, dir=None,
+                 full_seq=False, **kwargs):
         """
         Initialize UltrasoundDataModule object.
 
@@ -244,6 +105,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
             None
         dir : str, optional
             Path to directory containing ultrasound images, by default None
+        full_seq : bool, optional
+            If True, each item has all ordered images for one full
+            ultrasound sequence (determined by patient ID and visit). If False,
+            treats each image under a patient as independent, by default False.
         **kwargs : dict
             Optional keyword arguments:
                 img_size : int or tuple of ints, optional
@@ -265,19 +130,20 @@ class UltrasoundDataModule(pl.LightningDataModule):
         self.df = df
         self.dir = dir
         self.dataset = None
+        self.full_seq = full_seq
 
-        # Get image paths, patient IDs, and labels
+        # Get image paths, patient IDs, and labels (and visit)
         if self.df is not None:
             if dir:
                 df["filename"] = df["filename"].map(
                     lambda x: os.path.join(dir, x))
             self.img_paths = df["filename"].to_numpy()
             self.labels = df["label"].to_numpy()
-            self.patient_ids = get_patient_ids(self.img_paths)
+            self.patient_ids = utils.get_from_paths(self.img_paths)
         else:
             self.img_paths = np.array(glob.glob(os.path.join(dir, "*")))
             self.labels = np.array([None] * len(self.img_paths))
-            self.patient_ids = get_patient_ids(self.img_paths)
+            self.patient_ids = utils.get_from_paths(self.img_paths)
 
         ########################################################################
         #                        DataLoader Parameters                         #
@@ -332,15 +198,15 @@ class UltrasoundDataModule(pl.LightningDataModule):
         """
         # (1) Split into training and test sets
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
-            train_idx, test_idx = split_by_ids(self.patient_ids, 
-                                               self.train_test_split)
+            train_idx, test_idx = utils.split_by_ids(self.patient_ids, 
+                                                     self.train_test_split)
             self._assign_dset_idx("train", "test", train_idx, test_idx)
         
         # (2) Further split training set into train-val or cross-val sets
         # (2.1) Train-Val Split
         if hasattr(self, "train_val_split"):
-            train_idx, val_idx = split_by_ids(self.dset_to_ids["train"], 
-                                              self.train_val_split)
+            train_idx, val_idx = utils.split_by_ids(self.dset_to_ids["train"], 
+                                                    self.train_val_split)
             self._assign_dset_idx("train", "val", train_idx, val_idx)
         # (2.2) K-Fold Cross Validation
         elif hasattr(self, "cross_val_folds"):
@@ -350,7 +216,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
                 "labels": self.dset_to_labels["train"]
             }
 
-            self.cross_fold_indices = cross_validation_by_patient(
+            self.cross_fold_indices = utils.cross_validation_by_patient(
                 self.dset_to_ids["train"], self.cross_val_folds)
             # By default, set to first kfold
             self.set_kfold_index(0)
@@ -370,6 +236,9 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "filename": self.dset_to_paths["train"],
             "label": self.dset_to_labels["train"]
         })
+
+        # Add metadata for patient ID, visit number and sequence number
+        df_train = utils.extract_data_from_filename(df_train)
 
         train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir)
 
@@ -391,6 +260,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "filename": self.dset_to_paths["val"],
             "label": self.dset_to_labels["val"]
         })
+
+        # Add metadata for patient ID, visit number and sequence number
+        df_val = utils.extract_data_from_filename(df_val)
+
         val_dataset = UltrasoundDatasetDataFrame(df_val, self.dir)
 
         # Create DataLoader with parameters specified
@@ -411,6 +284,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "filename": self.dset_to_paths["test"],
             "label": self.dset_to_labels["test"]
         })
+
+        # Add metadata for patient ID, visit number and sequence number
+        df_test = utils.extract_data_from_filename(df_test)
+
         test_dataset = UltrasoundDatasetDataFrame(df_test, self.dir)
 
         # Create DataLoader with parameters specified
@@ -513,24 +390,48 @@ class UltrasoundDataset(torch.utils.data.Dataset):
             include path to image, patient ID, and hospital.
         """
         img_path = self.paths[index]
+
+        # Load image
+        X = self.load_image(img_path)
+
+        # Get metadata from filename
+        filename = os.path.basename(img_path)
+        patient_id = self.ids[index]
+        visit = self.visits[index]
+        seq_number = self.seq_numbers[index]
+        # NOTE: ID naming is used to identify hospital
+        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
+
+        metadata = {"filename": filename, "id": patient_id,
+                    "visit": visit, "seq_number": seq_number,
+                    "hospital": hospital}
+
+        return X, metadata
+
+
+    def load_image(self, img_path):
+        """
+        Loads an image given the image path
+
+        Parameters
+        ----------
+        img_path : str
+            Path to image
+
+        Returns
+        -------
+        torch.Tensor
+            Image
+        """
+        assert os.path.exists(img_path), "No image at path specified!"
+
         X = read_image(img_path, self.mode)
         X = self.transforms(X)
 
         # Normalize between [0, 1]
         X = X / 255.
 
-        # Get metadata from filename
-        filename = os.path.basename(img_path)
-        filename_parts = filename.split("_")
-        patient_id = filename_parts[0]
-        us_num = int(filename_parts[-1].replace(".jpg", ""))
-        # NOTE: ID naming is used to identify hospital
-        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
-
-        metadata = {"filename": filename, "id": patient_id, "us_num": us_num,
-                    "hospital": hospital}
-
-        return X, metadata
+        return X
 
 
     def __len__(self):
@@ -541,7 +442,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
     """
     Dataset to load images from a directory.
     """
-    def __init__(self, dir, img_size=None, mode=3):
+    def __init__(self, dir, full_seq=False, img_size=None, mode=3):
         """
         Initialize KidneyDatasetDir object.
 
@@ -549,12 +450,17 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         ----------
         dir : str
             Path to flat directory containing ultrasound images.
+        full_seq : bool, optional
+            If True, each item returned is a full ultrasound sequence with shape
+            (sequence_length, num_channels, img_height, img_width). Otherwise,
+            each item is an ultrasound image of shape of
+            (num_channels, img_height, img_width).
         img_size : int or tuple of ints, optional
             If int provided, resizes found images to (img_size x img_size), by
             default None.
         mode : int
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
-            by default 1.
+            by default 3.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
@@ -563,9 +469,27 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         self.paths = np.array(glob.glob(os.path.join(dir, "*")))
 
         # Get all patient IDs
-        self.ids = np.array(get_patient_ids(self.paths))
+        self.ids = np.array(utils.get_from_paths(self.paths))
 
-        # Define image loading and transforms
+        # Get hospital visit number
+        self.visits = utils.get_from_paths(self.paths, "visit")
+
+        # Get number in US sequence
+        self.seq_numbers = utils.get_from_paths(self.paths, "seq_number")
+
+        ########################################################################
+        #                  For Full US Sequence Data Loading                   #
+        ########################################################################
+        self.full_seq = full_seq
+        self.id_visit = None
+
+        # Get unique patient ID and visits, corresponding to unique US seqs
+        if full_seq:
+            self.id_visit = np.unique(tuple(zip(self.ids, self.visits)), axis=0)
+
+        ########################################################################
+        #                           Image Transforms                           #
+        ########################################################################
         transforms = []
         if img_size:
             transforms.append(T.Resize(img_size))
@@ -573,11 +497,101 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         self.transforms = T.Compose(transforms)
 
 
+    def __getitem__(self, index):
+        """
+        Loads an image with metadata, or a group of images from the same US
+        sequence.
+
+        Parameters
+        ----------
+        index : int
+            Integer index to paths.
+
+        Returns
+        -------
+        tuple
+            Contains torch.Tensor and dict (containing metadata). Metadata may
+            include path to image.
+        """
+        # If returning all images from full US sequences, override logic
+        if self.full_seq:
+            return self.get_sequence(index)
+
+        # If returning an image
+        X, metadata = super().__getitem__(index)
+
+        return X, metadata
+
+
+    def get_sequence(self, index):
+        """
+        Used to override __getitem__ when loading ultrasound sequences as each
+        item.
+
+        Parameters
+        ----------
+        index : int
+            Integer index to a list of unique (patient id, visit number)
+
+        Returns
+        -------
+        tuple
+            Contains torch.Tensor and dict (containing metadata). Metadata may
+            include paths to images.
+        """
+        # 1. Create boolean mask for the right US sequence
+        patient_id, visit = self.id_visit[index]
+        id_mask = (self.ids == patient_id)
+        visit_mask = (self.visits == visit)
+        mask = (id_mask & visit_mask)
+
+        # 2. Filter for the image paths and metadata
+        paths = self.paths[mask]
+        seq_numbers = self.seq_numbers[mask]
+
+        # 3. Order by sequence number
+        sort_idx = np.argsort(seq_numbers)
+        paths = paths[sort_idx]
+        seq_numbers = seq_numbers[sort_idx]
+
+        # 4. Load images
+        imgs = []
+        for path in paths:
+            imgs.append(self.load_image(path))
+        X = torch.stack(imgs)
+
+        # 5. Metadata
+        filename = os.path.basename(path)
+        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
+
+        metadata = {"filename": filename, "id": patient_id,
+                    "visit": visit, "seq_number": seq_numbers,
+                    "hospital": hospital}
+
+        return X, metadata
+
+
+    def __len__(self):
+        """
+        Return number of items in the dataset. If returning full sequences,
+        groups images under the same specific patient ID and hospital visit.
+
+        Returns
+        -------
+        int
+            Number of items in dataset
+        """
+        if self.full_seq:
+            return len(self.id_visit)
+
+        return super().__len__()
+
+
 class UltrasoundDatasetDataFrame(UltrasoundDataset):
     """
     Dataset to load images and labels from a DataFrame.
     """
-    def __init__(self, df, dir=None, img_size=None, mode=3):
+    def __init__(self, df, dir=None, full_seq=False, img_size=None, mode=3):
         """
         Initialize KidneyDatasetDataFrame object.
 
@@ -592,12 +606,18 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         dir : str, optional
             If provided, uses paths in dataframe as relative paths find
             ultrasound images, by default None.
+        full_seq : bool, optional
+            If True, each item returned is a full ultrasound sequence with shape
+            (sequence_length, num_channels, img_height, img_width). Otherwise,
+            each item is an ultrasound image of shape of
+            (num_channels, img_height, img_width).
         img_size : int or tuple of ints, optional
-            If int provided, resizes found images to (img_size x img_size), by
+            If int provided, resizes found images to (img_size x img_size). If
+            tuple provided, resizes images to (img_height, img_width), by
             default None.
         mode : int
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
-            by default 1.
+            by default 3.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
@@ -605,7 +625,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # Get paths to images. Add directory to path, if not already in.
         if dir:
             has_path = df.filename.map(lambda x: dir in x)
-            df[~has_path]["filename"] = df[~has_path]["filename"].map(
+            df.loc[~has_path, "filename"] = df.loc[~has_path, "filename"].map(
                 lambda x: os.path.join(dir, x))
         self.paths = df["filename"].to_numpy()
 
@@ -613,9 +633,33 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         self.labels = df["label"].to_numpy()
 
         # Get all patient IDs
-        self.ids = np.array(get_patient_ids(self.paths))
+        self.ids = np.array(utils.get_from_paths(self.paths))
 
-        # Define image loading and transforms
+        # Get hospital visit number
+        if "visit" in df.columns:
+            self.visits = df["visit"].to_numpy()
+        else:
+            self.visits = utils.get_from_paths(self.paths, "visit")
+
+        # Get number in US sequence
+        if "seq_number" in df.columns:
+            self.seq_numbers = df["seq_number"].to_numpy()
+        else:
+            self.seq_numbers = utils.get_from_paths(self.paths, "seq_number")
+
+        ########################################################################
+        #                  For Full US Sequence Data Loading                   #
+        ########################################################################
+        self.full_seq = full_seq
+        self.id_visit = None
+
+        # Get unique patient ID and visits, corresponding to unique US seqs
+        if full_seq:
+            self.id_visit = np.unique(tuple(zip(self.ids, self.visits)), axis=0)
+
+        ########################################################################
+        #                           Image Transforms                           #
+        ########################################################################
         transforms = []
         if img_size:
             transforms.append(T.Resize(img_size))
@@ -629,7 +673,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
     def __getitem__(self, index):
         """
-        Loads an image with metadata.
+        Loads an image with metadata, or a group of images from the same US
+        sequence.
 
         Parameters
         ----------
@@ -642,7 +687,81 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             Contains torch.Tensor and dict (containing metadata). Metadata may
             include path to image and label.
         """
+        # If returning all images from full US sequences, override logic
+        if self.full_seq:
+            return self.get_sequence(index)
+
+        # If returning an image
         X, metadata = super().__getitem__(index)
         metadata["label"] = constants.CLASS_TO_IDX[self.labels[index]]
 
         return X, metadata
+
+
+    def get_sequence(self, index):
+        """
+        Used to override __getitem__ when loading ultrasound sequences as each
+        item.
+
+        Parameters
+        ----------
+        index : int
+            Integer index to a list of unique (patient id, visit number)
+
+        Returns
+        -------
+        tuple
+            Contains torch.Tensor and dict (containing metadata). Metadata may
+            include paths to images and labels.
+        """
+        # 1. Create boolean mask for the right US sequence
+        patient_id, visit = self.id_visit[index]
+        id_mask = (self.ids == patient_id)
+        visit_mask = (self.visits == visit)
+        mask = (id_mask & visit_mask)
+
+        # 2. Filter for the image paths and metadata
+        paths = self.paths[mask]
+        labels = self.labels[mask]
+        seq_numbers = self.seq_numbers[mask]
+
+        # 3. Order by sequence number
+        sort_idx = np.argsort(seq_numbers)
+        paths = paths[sort_idx]
+        labels = labels[sort_idx]
+        seq_numbers = seq_numbers[sort_idx]
+
+        # 4. Load images
+        imgs = []
+        for path in paths:
+            imgs.append(self.load_image(path))
+        X = torch.stack(imgs)
+
+        # 5. Get metadata (hospital)
+        filename = os.path.basename(path)
+        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
+
+        # 6. Encode labels
+        labels = [constants.CLASS_TO_IDX[label] for label in labels]
+
+        metadata = {"filename": filename, "label": labels, "id": patient_id,
+                    "visit": visit, "seq_number": seq_numbers,
+                    "hospital": hospital}
+
+        return X, metadata
+
+
+    def __len__(self):
+        """
+        Return number of items in the dataset. If returning full sequences,
+        groups images under the same specific patient ID and hospital visit.
+
+        Returns
+        -------
+        int
+            Number of items in dataset
+        """
+        if self.full_seq:
+            return len(self.id_visit)
+
+        return super().__len__()

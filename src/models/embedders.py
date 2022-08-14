@@ -17,7 +17,7 @@ from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
 from src.data.constants import CYTO_WEIGHTS_PATH
-from src.data_prep.dataloaders import UltrasoundDataModule
+from src.data_prep.dataset import UltrasoundDataModule
 from src.models.siamnet import load_siamnet
 
 

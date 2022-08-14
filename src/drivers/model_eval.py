@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 # Custom libraries
 from src.data import constants
-from src.data_prep.dataloaders import UltrasoundDataModule
+from src.data_prep.dataset import UltrasoundDataModule
 from src.data_prep.utils import load_metadata, extract_data_from_filename
 from src.data_viz.eda import print_table
 from src.models.efficientnet_pl import EfficientNetPL
