@@ -11,8 +11,7 @@ import os
 from datetime import datetime
 
 # Non-standard libraries
-import numpy as np
-import pandas as pd
+import numpy as np 
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
@@ -51,6 +50,14 @@ def init(parser):
     arg_help = {
         "exp_name": "Name of experiment",
         "full_seq": "If True, trains a CNN-LSTM model on full US sequences.",
+        "adam": "If flagged, uses Adam optimizer during training. Otherwise, "
+                "uses Stochastic Gradient Descent (SGD).",
+        "lr": "Learning rate of optimizer",
+        "momentum": "Optimizer momentum",
+        "weight_decay": "Weight decay during training",
+        "n_lstm_layers": "Number of LSTM layers",
+        "hidden_dim": "Number of nodes in each LSTM hidden layer",
+        "bidirectional": "If flagged, LSTM will be bidirectional",
         "train": "If flagged, run experiment to train model.",
         "test": "If flagged, run experiment to evaluate a trained model.",
         "train_test_split" : "Prop. of total data to leave for training (rest "
@@ -61,6 +68,11 @@ def init(parser):
         "cross_val_folds": "If num. of folds (k) specified, runs kfold "
                            "validation, training k models. Cannot be specified "
                            "with train_val_split!",
+        "batch_size": "Batch size during a training/validation/test step",
+        "shuffle": "If flagged, shuffled data within batch during training.",
+        "num_workers": "Number of CPU workers used to retrieve data during "
+                       "training.",
+        "pin_memory": "If flagged, pins tensors on GPU to speed data loading.",
         "checkpoint": "If flagged, save last model checkpoint during training.",
         "precision": "Number of bits for precision of floating point values.",
         "grad_clip_norm": "If specified, value to normalize gradient to.",
@@ -73,7 +85,22 @@ def init(parser):
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
 
     # Model and data - related arguments
-    parser.add_argument("--full_seq", help=arg_help["full_seq"], default=False)
+    parser.add_argument("--full_seq", action="store_true",
+                        help=arg_help["full_seq"])
+
+    # Model arguments
+    parser.add_argument("--adam", action="store_true", help=arg_help["adam"])
+    parser.add_argument("--lr", default=0.001, type=float, help=arg_help["lr"])
+    parser.add_argument("--momentum", default=0.9, type=float,
+                        help=arg_help["momentum"])
+    parser.add_argument("--weight_decay", default=0.0005, type=float,
+                        help=arg_help["weight_decay"]) 
+    parser.add_argument("--n_lstm_layers", default=1, type=int,
+                        help=arg_help["n_lstm_layers"])
+    parser.add_argument("--hidden_dim", default=512, type=int, 
+                        help=arg_help["hidden_dim"])
+    parser.add_argument("--bidirectional", action="store_true",
+                        help=arg_help["bidirectional"])
 
     # Data arguments
     parser.add_argument("--train", action="store_true", help=arg_help["train"])
@@ -84,6 +111,14 @@ def init(parser):
                         help=arg_help["train_test_split"])
     parser.add_argument("--cross_val_folds", default=1, type=int,
                         help=arg_help["cross_val_folds"])
+    parser.add_argument("--batch_size", default=32, type=int,
+                        help=arg_help["batch_size"])
+    parser.add_argument("--shuffle", action="store_true",
+                        help=arg_help["shuffle"])
+    parser.add_argument("--num_workers", default=4, type=int,
+                        help=arg_help["num_workers"])
+    parser.add_argument("--pin_memory", action="store_true",
+                        help=arg_help["pin_memory"])
 
     # pl.Trainer arguments
     parser.add_argument("--checkpoint", type=bool, default=True,
@@ -101,7 +136,7 @@ def init(parser):
 #                           Training/Inference Flow                            #
 ################################################################################
 def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
-        checkpoint=True, version_name="1"):
+        checkpoint=True, early_stopping=False, version_name="1"):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
 
@@ -127,6 +162,9 @@ def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
         default 0.
     checkpoint : bool, optional
         If True, saves model (last epoch) to checkpoint, by default True
+    early_stopping : bool, optional
+        If True, performs early stopping on plateau of val loss, by default
+        False.
     version_name : str, optional
         If provided, specifies current experiment number. Version will be shown
         in the logging folder, by default "1"
@@ -160,13 +198,16 @@ def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
         callbacks.append(
             ModelCheckpoint(dirpath=experiment_dir, save_last=True,
                             monitor="val_loss" if includes_val else None))
+    if early_stopping:
+        # TODO: Implement this
+        raise NotImplementedError
 
     # Initialize Trainer
     trainer = Trainer(default_root_dir=experiment_dir,
                       gpus=1,
                       num_sanity_val_steps=0,
                       # log_every_n_steps=100,
-                      accumulate_grad_batches=None,
+                      accumulate_grad_batches=hparams["accum_batches"],
                       precision=hparams['precision'],
                       gradient_clip_val=hparams['grad_clip_norm'],
                       max_epochs=hparams['stop_epoch'],
@@ -218,21 +259,29 @@ def main(args):
         "version_name": hparams["exp_name"],
     }
 
+    hparams["accum_batches"] = args.batch_size if args.full_seq else None
+
     # 1. Get image filenames and labels
     df_metadata = load_metadata()
 
     # 2. Instantiate data module
-    dm = UltrasoundDataModule(df=df_metadata, dir=constants.DIR_IMAGES,
-                              **hparams)
+    dataloader_params = {
+        'batch_size': args.batch_size if not args.full_seq else 1,
+        'shuffle': args.shuffle,
+        'num_workers': args.num_workers,
+        'pin_memory': args.pin_memory,
+    }
+    dm = UltrasoundDataModule(dataloader_params, df=df_metadata,
+                              dir=constants.DIR_IMAGES, **hparams)
     dm.setup()
 
     # 3. Specify model class
     model_cls = EfficientNetLSTM if args.full_seq else EfficientNetPL
 
-    # 3.1 Run experiment
+    # 4.1 Run experiment
     if hparams["cross_val_folds"] == 1:
         run(hparams, dm, model_cls, constants.DIR_RESULTS, **experiment_hparams)
-    # 3.2 Run experiment  w/ kfold cross-validation)
+    # 4.2 Run experiment  w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)
