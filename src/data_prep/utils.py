@@ -91,12 +91,14 @@ def extract_data_from_filename(df_metadata, col="filename"):
     col : str, optional
         Name of column containing filename, by default "filename"
     """
-    df_metadata["id"] = df_metadata[col].map(
-            lambda x: int(x.split("_")[0]))
-    df_metadata["visit"] = df_metadata[col].map(
-        lambda x: int(x.split("_")[1]))
-    df_metadata["seq_number"] = df_metadata[col].map(
+    df_metadata["basename"] = df_metadata[col].map(os.path.basename)
+    df_metadata["id"] = df_metadata["basename"].map(
+            lambda x: x.split("_")[0])
+    df_metadata["visit"] = df_metadata["basename"].map(
+        lambda x: x.split("_")[1])
+    df_metadata["seq_number"] = df_metadata["basename"].map(
         lambda x: int(x.split("_")[2].replace(".jpg", "")))
+    df_metadata = df_metadata.drop(columns=["basename"])
 
 
 def get_from_paths(paths, item="id"):

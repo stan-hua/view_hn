@@ -115,7 +115,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
             x = self._fc(x)
 
         # Remove extra dimension added for LSTM
-        x = x.squeeze()
+        x = x.squeeze(dim=0)
 
         return x
 
@@ -168,12 +168,20 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         """
         data, metadata = train_batch
 
+        # If shape is (1, seq_len, C, H, W), flatten first dimension
+        if len(data.size()) == 5:
+            data = data.squeeze(dim=0)
+
         # Get prediction
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
 
         # Get label
         y_true = metadata["label"]
+
+        # If shape of labels is (1, seq_len), flatten first dimension
+        if len(y_true.size()) > 1:
+            y_true = y_true.flatten()
 
         # Get loss
         loss = self.loss(F.log_softmax(out, dim=1), y_true)
@@ -212,12 +220,20 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         """
         data, metadata = val_batch
 
+        # If shape is (1, seq_len, C, H, W), flatten first dimension
+        if len(data.size()) == 5:
+            data = data.squeeze(dim=0)
+
         # Get prediction
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
 
         # Get label
         y_true = metadata["label"]
+
+        # If shape of labels is (1, seq_len), flatten first dimension
+        if len(y_true.size()) > 1:
+            y_true = y_true.flatten()
 
         # Get loss
         loss = self.loss(F.log_softmax(out, dim=1), y_true)
@@ -256,12 +272,20 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         """
         data, metadata = test_batch
 
+        # If shape is (1, seq_len, C, H, W), flatten first dimension
+        if len(data.size()) == 5:
+            data = data.squeeze(dim=0)
+
         # Get prediction
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
 
         # Get label
         y_true = metadata["label"]
+
+        # If shape of labels is (1, seq_len), flatten first dimension
+        if len(y_true.size()) > 1:
+            y_true = y_true.flatten()
 
         # Get loss
         loss = self.loss(F.log_softmax(out, dim=1), y_true)

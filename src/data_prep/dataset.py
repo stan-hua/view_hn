@@ -159,6 +159,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
         if dataloader_params:
             self.train_dataloader_params.update(dataloader_params)
 
+        # NOTE: Shuffle is turned off during validation/test
+        # NOTE: Batch size is set to 1 during validation/test
         self.val_dataloader_params = self.train_dataloader_params.copy()
         self.val_dataloader_params['batch_size'] = 1
         self.val_dataloader_params['shuffle'] = False
@@ -238,9 +240,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        df_train = utils.extract_data_from_filename(df_train)
+        utils.extract_data_from_filename(df_train)
 
-        train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir)
+        train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir,
+                                                   self.full_seq)
 
         # Create DataLoader with parameters specified
         return DataLoader(train_dataset, **self.train_dataloader_params)
@@ -262,9 +265,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        df_val = utils.extract_data_from_filename(df_val)
+        utils.extract_data_from_filename(df_val)
 
-        val_dataset = UltrasoundDatasetDataFrame(df_val, self.dir)
+        val_dataset = UltrasoundDatasetDataFrame(df_val, self.dir,
+                                                 self.full_seq)
 
         # Create DataLoader with parameters specified
         return DataLoader(val_dataset, **self.val_dataloader_params)
@@ -286,9 +290,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        df_test = utils.extract_data_from_filename(df_test)
+        utils.extract_data_from_filename(df_test)
 
-        test_dataset = UltrasoundDatasetDataFrame(df_test, self.dir)
+        test_dataset = UltrasoundDatasetDataFrame(df_test, self.dir,
+                                                  self.full_seq)
 
         # Create DataLoader with parameters specified
         return DataLoader(test_dataset, **self.val_dataloader_params)
@@ -557,8 +562,12 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         # 4. Load images
         imgs = []
         for path in paths:
-            imgs.append(self.load_image(path))
+            imgs.append(self.load_image(path)) 
         X = torch.stack(imgs)
+
+        # 4.1 If only 1 image for a sequence, pad first dimension
+        if len(imgs) == 1:
+            X = torch.unsqueeze(X, 0)
 
         # 5. Metadata
         filename = os.path.basename(path)
@@ -733,19 +742,24 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # 4. Load images
         imgs = []
+        filenames = []
         for path in paths:
             imgs.append(self.load_image(path))
+
+            filename = os.path.basename(path)
+            filenames.append(filename)
+
         X = torch.stack(imgs)
 
         # 5. Get metadata (hospital)
-        filename = os.path.basename(path)
         hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
 
         # 6. Encode labels
-        labels = [constants.CLASS_TO_IDX[label] for label in labels]
+        labels = torch.LongTensor(
+            [constants.CLASS_TO_IDX[label] for label in labels])
 
-        metadata = {"filename": filename, "label": labels, "id": patient_id,
-                    "visit": visit, "seq_number": seq_numbers,
+        metadata = {"filename": filenames, "label": labels,
+                    "id": patient_id, "visit": visit, "seq_number": seq_numbers,
                     "hospital": hospital}
 
         return X, metadata
