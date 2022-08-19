@@ -252,13 +252,14 @@ class GridSearch:
 
                 if v is None:
                     continue
-                elif isinstance(v, bool) and v:
-                    command_str += f" --{u}"
+                elif isinstance(v, bool):
+                    if v:
+                        command_str += f" --{u}"
                 else:
                     command_str += f" --{u} {v}"
 
-            LOGGER.info(command_str)
-
+            LOGGER.info(command_str) 
+ 
             # Add current time as experiment name
             exp_timestamp = datetime.now().strftime(r"%Y-%m-%d_%H-%M")
             exp_name = f"{MODEL_NAME}({exp_timestamp})"
