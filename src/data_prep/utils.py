@@ -162,6 +162,39 @@ def get_from_path(path, item="id"):
     return extracted
 
 
+def remove_only_unlabeled_seqs(df_metadata):
+    """
+    Removes rows from fully unlabeled ultrasound sequences.
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image. May contain
+        unlabeled images (label as "Other")
+
+    Returns
+    -------
+    pandas.DataFrame
+        Metadata dataframe with completely unlabeled sequences removed
+    """
+    # If including unlabeled, exclude sequences that are all "Others"
+    # NOTE: This leads to the same patient-visit splits as in training
+    mask = df_metadata.groupby(by=["id", "visit"]).apply(
+        lambda df: not all(df.label == "Other"))
+    mask = mask[mask]
+    mask.name = "bool_mask"
+
+    # Join to filter 
+    df_metadata = df_metadata.set_index(["id", "visit"])
+    df_metadata = df_metadata.join(mask, how="inner")
+
+    # Remove added column
+    df_metadata = df_metadata.reset_index()
+    df_metadata = df_metadata.drop(columns=["bool_mask"])
+
+    return df_metadata
+
+
 ################################################################################
 #                                Data Splitting                                #
 ################################################################################
