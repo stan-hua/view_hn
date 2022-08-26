@@ -225,10 +225,9 @@ def get_unique_label_sequences(df_metadata):
         seq = []
 
         for view in views:
-            # If not same as last, but was seen previously, then crossed back
             if view != prev:
                 seq.append(view)
-            prev = view
+                prev = view
 
         return seq
 

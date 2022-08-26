@@ -7,6 +7,7 @@ Description: Used to evaluate a trained model's performance on the testing set.
 # Standard libraries
 import logging
 import os
+from colorama import Fore, Style
 
 # Non-standard libraries
 import pandas as pd
@@ -44,9 +45,17 @@ LOGGER = logging.getLogger(__name__)
 # Flag to use GPU or not
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+# Map label to encoded integer (for visualization)
+CLASS_TO_IDX = {"Saggital_Left": 0, "Transverse_Left": 1, "Bladder": 2,
+                "Transverse_Right": 3, "Saggital_Right": 4, "Other": 5}
+IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
+
 # Type of models
 MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other")
 
+################################################################################
+#                               Paths Constants                                #
+################################################################################
 # Checkpoint for a trained 5-view model
 CKPT_PATH_MULTI= constants.DIR_RESULTS + "/five_view/0/epoch=6-step=1392.ckpt"
 
@@ -64,10 +73,6 @@ CKPT_PATH_SEQUENTIAL = constants.DIR_RESULTS + \
 
 # Table to store/retrieve predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
-
-# NOTE: Chosen checkpoint and model type
-CKPT_PATH = CKPT_PATH_SEQUENTIAL
-MODEL_TYPE = MODEL_TYPES[-1]
 
 
 ################################################################################
@@ -285,7 +290,7 @@ def plot_pred_probability_by_views(df_pred):
     plt.show()
 
 
-def check_misclassifications(df_pred):
+def check_misclassifications(df_pred, local=True):
     """
     Given the most confident test set predictions, determine the percentage of
     misclassifications that are due to:
@@ -297,9 +302,14 @@ def check_misclassifications(df_pred):
     df_pred : pandas.DataFrame
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
+    local : bool, optional
+        If True, gets the most confident prediction within each group of
+        consecutive images with the same label. Otherwise, aggregates by view
+        label to find the most confident view label predictions,
+        by default True.
     """
     # Filter for most confident predictions for each expected view label
-    df_filtered = filter_most_confident(df_pred, local=True)
+    df_filtered = filter_most_confident(df_pred, local=local)
 
     # Get misclassified instances
     df_misclassified = df_filtered[(df_filtered.label != df_filtered.pred)]
@@ -365,6 +375,75 @@ def plot_image_count_over_sequence(df_pred):
     plt.ylabel("Number of Images")
     plt.tight_layout()
     plt.show()
+
+
+def check_others_pred_progression(df_pred):
+    """
+    Given test set predictions for full sequences that include "Other" labels,
+    show (predicted) label progression for unlabeled images among real labels.
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Test set predictions. Each row is a test example with a label,
+        prediction, and other patient and sequence-related metadata.
+    """
+    def _get_label_sequence(df):
+        """
+        Given a unique US sequence for one patient, get the order of contiguous
+        labels in the sequence.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            One full US sequence for one patient.
+
+        Returns
+        -------
+        list
+            Unique label section within the sequence provided
+        """
+        label_views = df.sort_values(by=["seq_number"])["label"].tolist()
+        pred_views = df.sort_values(by=["seq_number"])["pred"].tolist()
+
+        # Encoded label for "Other"
+        other_label = str(CLASS_TO_IDX["Other"])
+        
+        # Keep track of order of views
+        prev_label = None
+        prev_pred = None
+        seq = []
+
+        for i, view in enumerate(label_views):
+            # If not 'Other', show regular label progression
+            if view != other_label and view != prev_label:
+                seq.append(view)
+                prev_pred = None
+            # If 'Other', show prediction progression until out of 'Other'
+            elif view == other_label and pred_views[i] != prev_pred:
+                prev_pred = pred_views[i]
+
+                # Color predicted view, so it's distinguishable in stdout
+                seq.append(f"{Fore.MAGENTA}{prev_pred}{Style.RESET_ALL}")
+
+            prev_label = view
+        return seq
+
+    df_pred = df_pred.copy()
+
+    # Encode labels as integers
+    df_pred.label = df_pred.label.map(CLASS_TO_IDX).astype(str)
+    df_pred.pred = df_pred.pred.map(CLASS_TO_IDX).astype(str)
+
+    # Get unique label sequences per patient
+    df_seqs = df_pred.groupby(by=["id", "visit"])
+    label_seqs = df_seqs.apply(_get_label_sequence)
+    label_seqs = label_seqs.map(lambda x: "".join(x))
+    label_seq_counts = label_seqs.value_counts().reset_index().rename(
+        columns={"index": "Label Sequence", 0: "Count"})
+
+    # Print to stdout
+    print_table(label_seq_counts, show_index=False)
 
 
 ################################################################################
@@ -434,6 +513,46 @@ def get_hyperparameters(hparam_dir=None, filename="hparams.yaml"):
     return hparams
 
 
+def get_local_groups(values):
+    """
+    Identify local groups of consecutive labels/predictions in a list of values.
+    Return a list of increasing integers which identify these groups.
+
+    Note
+    ----
+    Input of [1, 1, 2, 1, 1] would return [1, 1, 2, 3, 3]. Groupings would be:
+        - Group 1: (1, 1)
+        - Group 2: (2)
+        - Group 3: (1, 1)
+    
+
+    Parameters
+    ----------
+    values: list
+        List of values in some sequential order
+    col : str
+        Name of column to check for consecutive values
+
+    Returns
+    -------
+    list
+        Increasing integer values, which represent each local group of
+        images with the same label.
+    """
+    curr_val = 0
+    prev_val = None
+    local_groups = []
+
+    for val in values:
+        if val != prev_val:
+            curr_val += 1
+            prev_val = val
+        
+        local_groups.append(curr_val)
+
+    return local_groups
+
+
 def filter_most_confident(df_pred, local=False):
     """
     Given predictions for all images across multiple US sequences, filter the
@@ -455,40 +574,6 @@ def filter_most_confident(df_pred, local=False):
     pandas.DataFrame
         Filtered predictions
     """
-    def _get_local_groups(df):
-        """
-        Identify local groups of consecutive labels. Return a list of increasing
-        integers which identify these groups.
-
-        Note
-        ----
-        Assumes input dataframe is already sorted by US sequence number.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            Contains test set predictions and metadata for the US sequence for
-            one patient.
-
-        Returns
-        -------
-        list
-            Increasing integer values, which represent each local group of
-            images with the same label.
-        """
-        curr_val = 0
-        prev_label = None
-        local_groups = []
-
-        for label in df.label.tolist():
-            if label != prev_label:
-                curr_val += 1
-                prev_label = label
-            
-            local_groups.append(curr_val)
-
-        return local_groups
-
     df_pred = df_pred.copy()
 
     if not local:
@@ -502,7 +587,7 @@ def filter_most_confident(df_pred, local=False):
 
         # 1. Identify local groups of consecutive labels
         local_grps_per_seq = df_pred.groupby(by=["id", "visit"]).apply(
-            _get_local_groups)
+            lambda df: get_local_groups(df.label.values))
         df_pred["local_group"] = np.concatenate(local_grps_per_seq.values)
 
         df_seqs = df_pred.groupby(by=["id", "visit", "local_group"])
@@ -583,6 +668,10 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
 
 
 if __name__ == '__main__':
+    # NOTE: Chosen checkpoint and model type
+    CKPT_PATH = CKPT_PATH_SEQUENTIAL
+    MODEL_TYPE = MODEL_TYPES[-1]
+
     # Add model type to save path
     test_save_path = TEST_PRED_PATH % (MODEL_TYPE,)
 
@@ -606,14 +695,19 @@ if __name__ == '__main__':
     # Load test metadata
     df_pred = pd.read_csv(test_save_path)
 
+    # 5-View (Not including 'Other' label)
     if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
         # Print reasons for misclassification of most confident predictions
         check_misclassifications(df_pred)
 
         # Plot confusion matrix
         plot_confusion_matrix(df_pred, filter_confident=True)
-    elif "binary" in MODEL_TYPE:
+
+    # Bladder vs. Other models
+    if "binary" in MODEL_TYPE:
         # Plot binary avg. prediction probabilites by view
         plot_pred_probability_by_views(df_pred)
 
-    pass
+    # 5-View (Includin 'Other' label)
+    if "five_view" in MODEL_TYPE and "other" in MODEL_TYPE:
+        check_others_pred_progression(df_pred)
