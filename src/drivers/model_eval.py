@@ -290,7 +290,7 @@ def plot_pred_probability_by_views(df_pred):
     plt.show()
 
 
-def check_misclassifications(df_pred, local=True):
+def check_misclassifications(df_pred, filter=True, local=True):
     """
     Given the most confident test set predictions, determine the percentage of
     misclassifications that are due to:
@@ -302,6 +302,9 @@ def check_misclassifications(df_pred, local=True):
     df_pred : pandas.DataFrame
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
+    filter : bool, optional
+        If True, filters for most confident prediction in consecutive label
+        groups or for each of the 5 main views per sequence, by default True.
     local : bool, optional
         If True, gets the most confident prediction within each group of
         consecutive images with the same label. Otherwise, aggregates by view
@@ -309,20 +312,27 @@ def check_misclassifications(df_pred, local=True):
         by default True.
     """
     # Filter for most confident predictions for each expected view label
-    df_filtered = filter_most_confident(df_pred, local=local)
+    if filter:
+        df_pred = filter_most_confident(df_pred, local=local)
 
     # Get misclassified instances
-    df_misclassified = df_filtered[(df_filtered.label != df_filtered.pred)]
+    df_misclassified = df_pred[(df_pred.label != df_pred.pred)]
 
-    # 1. Proportion of misclassification from wrong body side
+    # 1. Proportion and count of misclassification from wrong body side
     prop_swapped = df_misclassified.apply(
         lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
         axis=1).mean()
+    num_swapped = df_misclassified.apply(
+        lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
+        axis=1).sum()
 
-    # 2. Proportion of misclassification from adjacent views
+    # 2. Proportion and count of misclassification from adjacent views
     prop_adjacent = df_misclassified.apply(
         lambda row: row.pred in constants.LABEL_ADJACENCY[row.label],
         axis=1).mean()
+    num_adjacent = df_misclassified.apply(
+        lambda row: row.pred in constants.LABEL_ADJACENCY[row.label],
+        axis=1).sum()
 
     # Format output
     df_results = pd.Series({
@@ -330,15 +340,19 @@ def check_misclassifications(df_pred, local=True):
         "Adjacent Label": prop_adjacent,
         "Other": 1 - (prop_swapped + prop_adjacent)
     })
-    df_results.name = "Proportion"
-    df_results = df_results.reset_index(name="Proportion")
-    df_results = df_results.rename(columns={"index": ""})
+
+    df_results = pd.DataFrame({
+        "Proportion": [prop_swapped, prop_adjacent,
+                       1-(prop_swapped+prop_adjacent)],
+        "Count": [num_swapped, num_adjacent,
+                  len(df_misclassified)-num_swapped-num_adjacent]
+    }, index=["Wrong Side", "Adjacent Label", "Other"])
 
     # Print to command line
-    print_table(df_results, show_index=False)
+    print_table(df_results)
 
 
-def plot_prob_over_sequence(df_pred):
+def plot_prob_over_sequence(df_pred, correct_only=False):
     """
     Plots average probability of prediction over each number in the sequence.
 
@@ -347,11 +361,39 @@ def plot_prob_over_sequence(df_pred):
     df_pred : pandas.DataFrame
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
+    correct_only : bool, optional
+        If True, filters for correctly predicted samples before plotting, by
+        default False.
     """
+    # Filter correct if specified
+    if correct_only:
+        df_pred = df_pred[df_pred.label == df_pred.pred]
+
     df = df_pred.groupby(by=["seq_number"])["prob"].mean().reset_index()
     sns.barplot(data=df, x="seq_number", y="prob")
     plt.xlabel("Number in the US Sequence")
     plt.ylabel("Prediction Probability")
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_acc_over_sequence(df_pred):
+    """
+    Plots accuracy of predictions over each number in the sequence.
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Test set predictions. Each row is a test example with a label,
+        prediction, and other patient and sequence-related metadata.
+    """
+    df = df_pred.groupby(by=["seq_number"]).apply(
+        lambda df: (df.pred == df.label).mean())
+    df.name = "accuracy"
+    df = df.reset_index()
+    sns.barplot(data=df, x="seq_number", y="accuracy")
+    plt.xlabel("Number in the US Sequence")
+    plt.ylabel("Accuracy")
     plt.tight_layout()
     plt.show()
 
@@ -596,6 +638,50 @@ def filter_most_confident(df_pred, local=False):
     return df_filtered
 
 
+def calculate_planar_acc(labels, preds):
+    """
+    Calculates the accuracy of plane (Saggital/Transverse/Bladder), ignoring
+    side predicted.
+
+    Parameters
+    ----------
+    labels : np.array
+        True labels as strings
+    preds : np.array
+        Predicted labels as strings
+
+    Returns
+    -------
+    float
+        Accuracy in predicting planes
+    """
+    # Vectorize get_plane function
+    get_plane = np.vectorize(get_plane)
+
+    # Get planes
+    label_planes = get_plane(labels)
+    pred_planes = get_plane(preds)
+
+    return (label_planes == pred_planes).mean()
+
+
+def get_plane(label):
+    """
+    Get plane label from full string label
+
+    Parameters
+    ----------
+    label : str
+        One of the 5 views (e.g., Saggital_Left, Bladder)
+
+    Returns
+    -------
+    str
+        Extracted plane
+    """
+    return label.split("_")[0]
+    
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -670,7 +756,7 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
 if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
     CKPT_PATH = CKPT_PATH_SEQUENTIAL
-    MODEL_TYPE = MODEL_TYPES[-1]
+    MODEL_TYPE = MODEL_TYPES[-2]
 
     # Add model type to save path
     test_save_path = TEST_PRED_PATH % (MODEL_TYPE,)
@@ -698,10 +784,17 @@ if __name__ == '__main__':
     # 5-View (Not including 'Other' label)
     if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
         # Print reasons for misclassification of most confident predictions
-        check_misclassifications(df_pred)
+        # check_misclassifications(df_pred)
 
         # Plot confusion matrix
-        plot_confusion_matrix(df_pred, filter_confident=True)
+        # plot_confusion_matrix(df_pred, filter_confident=True)
+
+        # Plot probability of predicted labels over the sequence number
+        # plot_prob_over_sequence(df_pred, correct_only=True)
+
+        # Plot accuracy over sequence number
+        plot_acc_over_sequence(df_pred)
+
 
     # Bladder vs. Other models
     if "binary" in MODEL_TYPE:
