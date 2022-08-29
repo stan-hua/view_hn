@@ -195,6 +195,28 @@ def remove_only_unlabeled_seqs(df_metadata):
     return df_metadata
 
 
+def extract_from_label(label, extract="plane"):
+    """
+    Extract data from label string.
+
+    Parameters
+    ----------
+    label : str
+        Label of the form <plane>_<side> or "Bladder"
+    extract : str, optional
+        One of "plane" or "side", by default "plane"
+
+    Returns
+    -------
+    str
+        Extracted item from label
+    """
+    label_parts = label.split("_")
+    if extract == "side":
+        return label_parts[1] if len(label_parts) > 1 else "None"
+    return label_parts[0]
+
+
 ################################################################################
 #                                Data Splitting                                #
 ################################################################################

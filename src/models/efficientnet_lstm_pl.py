@@ -20,7 +20,8 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
     def __init__(self, num_classes=5, img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=512, bidirectional=True,
-                 extract_features=False, *args, **kwargs):
+                 extract_features=False, multi_output=True,
+                 *args, **kwargs):
         """
         Initialize EfficientNetLSTM object.
 
@@ -70,7 +71,13 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         # Define classification layer
         multiplier = 2 if self.hparams.bidirectional else 1
         size_after_lstm = self.hparams.hidden_dim * multiplier
-        self._fc = torch.nn.Linear(size_after_lstm, self.hparams.num_classes)
+
+        if not self.hparams.multi_output:
+            self._fc = torch.nn.Linear(size_after_lstm,
+                                       self.hparams.num_classes)
+        else:
+            self._fc_side = torch.nn.Linear(size_after_lstm, 3)
+            self._fc_plane = torch.nn.Linear(size_after_lstm, 3)
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
@@ -78,7 +85,12 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
         for dset in dsets:
-            exec(f"self.{dset}_acc = torchmetrics.Accuracy()")
+            if not self.hparams.multi_output:
+                exec(f"self.{dset}_acc = torchmetrics.Accuracy()")
+            else:
+                # NOTE: Separate accuracy for side and plane
+                exec(f"self.{dset}_acc_side = torchmetrics.Accuracy()")
+                exec(f"self.{dset}_acc_plane = torchmetrics.Accuracy()")
 
             # Metrics for binary classification
             if self.hparams.num_classes == 2:
@@ -111,13 +123,25 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         x = x.view(1, seq_len, -1)
         x, _ = self._lstm(x)
 
-        if not self.hparams.extract_features:
-            x = self._fc(x)
+        if not self.hparams.multi_output:
+            if not self.hparams.extract_features:
+                x = self._fc(x)
 
-        # Remove extra dimension added for LSTM
-        x = x.squeeze(dim=0)
+            # Remove extra dimension added for LSTM
+            x = x.squeeze(dim=0)
 
-        return x
+            return x
+        else:
+            # Predict side (Left, Right, None)
+            x_side = self._fc_side(x)
+            # Predict plane (Sagittal, Transverse, Bladder)
+            x_plane = self._fc_plane(x)
+
+            # Remove extra dimension added for LSTM
+            x_side = x_side.squeeze(dim=0)
+            x_plane = x_plane.squeeze(dim=0)
+
+            return x_side, x_plane
 
 
     def configure_optimizers(self):
@@ -166,6 +190,9 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         torch.FloatTensor
             Loss for training batch
         """
+        if self.hparams.multi_output:
+            return self.training_step_multi(train_batch, batch_idx)
+
         data, metadata = train_batch
 
         # If shape is (1, seq_len, C, H, W), flatten first dimension
@@ -196,6 +223,59 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         return loss
 
 
+    def training_step_multi(self, train_batch, batch_idx):
+        """
+        Training step for multi-output model, where a batch represents all
+        images from the same ultrasound sequence.
+
+        Note
+        ----
+        Image tensors are of the shape:
+            - (sequence_length, num_channels, img_height, img_width)
+
+        Parameters
+        ----------
+        train_batch : tuple
+            Contains (img tensor, metadata dict)
+        batch_idx : int
+            Training batch index
+
+        Returns
+        -------
+        torch.FloatTensor
+            Loss for training batch
+        """
+        data, metadata = train_batch
+
+        # If shape is (1, seq_len, C, H, W), flatten first dimension
+        if len(data.size()) == 5:
+            data = data.squeeze(dim=0)
+
+        # Get prediction
+        out_side, out_plane = self.forward(data)
+        side_pred = torch.argmax(out_side, dim=1)
+        plane_pred = torch.argmax(out_plane, dim=1)
+
+        # Get label
+        side_true = metadata["side"]
+        plane_true = metadata["plane"]
+
+        # If shape of labels is (1, seq_len), flatten first dimension
+        if len(side_true.size()) > 1:
+            side_true = side_true.flatten()
+            plane_true = plane_true.flatten()
+
+        # Get loss
+        loss = self.loss(F.log_softmax(out_side, dim=1), side_true)
+        loss += self.loss(F.log_softmax(out_plane, dim=1), plane_true)
+
+        # Log training metrics
+        self.train_acc_side.update(side_pred, side_true)
+        self.train_acc_plane.update(plane_pred, plane_true)
+
+        return loss
+
+
     def validation_step(self, val_batch, batch_idx):
         """
         Validation step, where a batch represents all images from the same
@@ -218,6 +298,9 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         torch.FloatTensor
             Loss for validation batch
         """
+        if self.hparams.multi_output:
+            return self.validation_step_multi(val_batch, batch_idx)
+
         data, metadata = val_batch
 
         # If shape is (1, seq_len, C, H, W), flatten first dimension
@@ -248,6 +331,59 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         return loss
 
 
+    def validation_step_multi(self, val_batch, batch_idx):
+        """
+        Validation step for multi-output model, where a batch represents all
+        images from the same ultrasound sequence.
+
+        Note
+        ----
+        Image tensors are of the shape:
+            - (sequence_length, num_channels, img_height, img_width)
+
+        Parameters
+        ----------
+        val_batch : tuple
+            Contains (img tensor, metadata dict)
+        batch_idx : int
+            Validation batch index
+
+        Returns
+        -------
+        torch.FloatTensor
+            Loss for validation batch
+        """
+        data, metadata = val_batch
+
+        # If shape is (1, seq_len, C, H, W), flatten first dimension
+        if len(data.size()) == 5:
+            data = data.squeeze(dim=0)
+
+        # Get prediction
+        out_side, out_plane = self.forward(data)
+        side_pred = torch.argmax(out_side, dim=1)
+        plane_pred = torch.argmax(out_plane, dim=1)
+
+        # Get label
+        side_true = metadata["side"]
+        plane_true = metadata["plane"]
+
+        # If shape of labels is (1, seq_len), flatten first dimension
+        if len(side_true.size()) > 1:
+            side_true = side_true.flatten()
+            plane_true = plane_true.flatten()
+
+        # Get loss
+        loss = self.loss(F.log_softmax(out_side, dim=1), side_true)
+        loss += self.loss(F.log_softmax(out_plane, dim=1), plane_true)
+
+        # Log validation metrics
+        self.val_acc_side.update(side_pred, side_true)
+        self.val_acc_plane.update(plane_pred, plane_true)
+
+        return loss
+
+
     def test_step(self, test_batch, batch_idx):
         """
         Test step, where a batch represents all images from the same
@@ -270,6 +406,9 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         torch.FloatTensor
             Loss for test batch
         """
+        if self.hparams.multi_output:
+            return self.test_step_multi(test_batch, batch_idx)
+
         data, metadata = test_batch
 
         # If shape is (1, seq_len, C, H, W), flatten first dimension
@@ -300,6 +439,59 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         return loss
 
 
+    def test_step_multi(self, val_batch, batch_idx):
+        """
+        Validation step for multi-output model, where a batch represents all
+        images from the same ultrasound sequence.
+
+        Note
+        ----
+        Image tensors are of the shape:
+            - (sequence_length, num_channels, img_height, img_width)
+
+        Parameters
+        ----------
+        test_batch : tuple
+            Contains (img tensor, metadata dict)
+        batch_idx : int
+            Test batch index
+
+        Returns
+        -------
+        torch.FloatTensor
+            Loss for test batch
+        """
+        data, metadata = val_batch
+
+        # If shape is (1, seq_len, C, H, W), flatten first dimension
+        if len(data.size()) == 5:
+            data = data.squeeze(dim=0)
+
+        # Get prediction
+        out_side, out_plane = self.forward(data)
+        side_pred = torch.argmax(out_side, dim=1)
+        plane_pred = torch.argmax(out_plane, dim=1)
+
+        # Get label
+        side_true = metadata["side"]
+        plane_true = metadata["plane"]
+
+        # If shape of labels is (1, seq_len), flatten first dimension
+        if len(side_true.size()) > 1:
+            side_true = side_true.flatten()
+            plane_true = plane_true.flatten()
+
+        # Get loss
+        loss = self.loss(F.log_softmax(out_side, dim=1), side_true)
+        loss += self.loss(F.log_softmax(out_plane, dim=1), plane_true)
+
+        # Log test metrics
+        self.test_acc_side.update(side_pred, side_true)
+        self.test_acc_plane.update(plane_pred, plane_true)
+
+        return loss
+
+
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
@@ -313,11 +505,21 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
             Dict of outputs of every training step in the epoch
         """
         loss = torch.stack([d['loss'] for d in outputs]).mean()
-        acc = self.train_acc.compute()
-
         self.log('train_loss', loss)
-        self.log('train_acc', acc)
 
+        # Override function if multi-output
+        if self.hparams.multi_output:
+            acc_side = self.train_acc_side.compute()
+            self.log('train_acc_side', acc_side)
+            self.train_acc_side.reset()
+
+            acc_plane = self.train_acc_plane.compute()
+            self.log('train_acc_plane', acc_plane)
+            self.train_acc_plane.reset()
+            return
+
+        acc = self.train_acc.compute()
+        self.log('train_acc', acc)
         self.train_acc.reset()
 
         if self.hparams.num_classes == 2:
@@ -341,11 +543,21 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
             Dict of outputs of every validation step in the epoch
         """
         loss = torch.tensor(validation_step_outputs).mean()
-        acc = self.val_acc.compute()
-
         self.log('val_loss', loss)
-        self.log('val_acc', acc)
 
+        # Override function if multi-output
+        if self.hparams.multi_output:
+            acc_side = self.val_acc_side.compute()
+            self.log('val_acc_side', acc_side)
+            self.val_acc_side.reset()
+
+            acc_plane = self.val_acc_plane.compute()
+            self.log('val_acc_plane', acc_plane)
+            self.val_acc_plane.reset()
+            return
+
+        acc = self.val_acc.compute()
+        self.log('val_acc', acc)
         self.val_acc.reset()
 
         if self.hparams.num_classes == 2:
@@ -369,11 +581,21 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         dset = f'test'
 
         loss = torch.tensor(test_step_outputs).mean()
-        acc = eval(f'self.{dset}_acc.compute()')
-
         self.log(f'{dset}_loss', loss)
-        self.log(f'{dset}_acc', acc)
 
+        # Override function if multi-output
+        if self.hparams.multi_output:
+            acc_side = eval(f'self.{dset}_acc_side.compute()')
+            self.log(f'{dset}_acc_side', acc_side)
+            exec(f'self.{dset}_acc_side.reset()')
+
+            acc_plane = eval(f'self.{dset}_acc_plane.compute()')
+            self.log(f'{dset}_acc_plane', acc_plane)
+            exec(f'self.{dset}_acc_plane.reset()')
+            return
+
+        acc = eval(f'self.{dset}_acc.compute()')
+        self.log(f'{dset}_acc', acc)
         exec(f'self.{dset}_acc.reset()')
 
         if self.hparams.num_classes == 2:

@@ -702,7 +702,14 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # If returning an image
         X, metadata = super().__getitem__(index)
-        metadata["label"] = constants.CLASS_TO_IDX[self.labels[index]]
+
+        label = self.labels[index]
+        side = utils.extract_from_label(label, "side")
+        plane = utils.extract_from_label(label, "plane")
+
+        metadata["label"] = constants.CLASS_TO_IDX[label]
+        metadata["side"] = constants.CLASS_TO_SIDE_IDX[side]
+        metadata["plane"] = constants.CLASS_TO_PLANE_IDX[plane]
 
         return X, metadata
 
@@ -737,8 +744,10 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # 3. Order by sequence number
         sort_idx = np.argsort(seq_numbers)
         paths = paths[sort_idx]
-        labels = labels[sort_idx]
         seq_numbers = seq_numbers[sort_idx]
+        labels = labels[sort_idx]
+        sides = [utils.extract_from_label(label, "side") for label in labels]
+        planes = [utils.extract_from_label(label, "plane") for label in labels]
 
         # 4. Load images
         imgs = []
@@ -757,10 +766,14 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # 6. Encode labels
         labels = torch.LongTensor(
             [constants.CLASS_TO_IDX[label] for label in labels])
+        sides = torch.LongTensor(
+            [constants.CLASS_TO_SIDE_IDX[side] for side in sides])
+        planes = torch.LongTensor(
+            [constants.CLASS_TO_PLANE_IDX[plane] for plane in planes])
 
         metadata = {"filename": filenames, "label": labels,
                     "id": patient_id, "visit": visit, "seq_number": seq_numbers,
-                    "hospital": hospital}
+                    "hospital": hospital, "side": sides, "plane": planes}
 
         return X, metadata
 

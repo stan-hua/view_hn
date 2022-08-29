@@ -35,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 RESULTS_DIR = constants.DIR_RESULTS
 
 # Name of model (appended to folder name)
-MODEL_NAME = "cnn_lstm"
+MODEL_NAME = "cnn_lstm_multi"
 
 # Metric to optimize 
 METRIC = "loss"
@@ -45,11 +45,11 @@ KEEP_BEST_WEIGHTS = False
 
 # Parameters to test
 SEARCH_SPACE = {
-        'lr': [1e-3, 1e-4, 1e-5],
+        'lr': [1e-3, 1e-4],
         'adam': [True, False],
         'momentum': [0.8, 0.9],
-        'weight_decay': [5e-3, 5e-4],
-        "grad_clip_norm": [None, 1., 2.],
+        'weight_decay': 5e-4,
+        "grad_clip_norm": 1.,
         'precision': 16, 
         "pin_memory": True,
         "batch_size": [1, 8, 16],
@@ -58,9 +58,10 @@ SEARCH_SPACE = {
         "train_val_split": 0.75,
         "train_test_split": 0.75,
         "full_seq": True,
-        "n_lstm_layers": [1, 2, 3],
-        "hidden_dim": [256, 512, 1024],
+        "n_lstm_layers": [1, 2],
+        "hidden_dim": [256, 512],
         "bidirectional": False,
+        "stop_epoch": 15,
     }
 
 # Example command string
