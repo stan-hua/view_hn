@@ -355,7 +355,7 @@ def check_misclassifications(df_pred, filter=True, local=True):
     print_table(df_results)
 
 
-def plot_prob_over_sequence(df_pred, correct_only=False):
+def plot_prob_over_sequence(df_pred, correct_only=False, update_seq_num=False):
     """
     Plots average probability of prediction over each number in the sequence.
 
@@ -367,20 +367,34 @@ def plot_prob_over_sequence(df_pred, correct_only=False):
     correct_only : bool, optional
         If True, filters for correctly predicted samples before plotting, by
         default False.
+    update_seq_num : bool, optional
+        If True, accounts for missing images between sequence numbers by
+        creating new (raw) sequence number based on existing images, by default
+        False.
     """
+    col = "seq_number"
+
+    # If specified, create new sequence numbers
+    if update_seq_num:
+        df_pred = get_new_seq_numbers(df_pred)
+        col = "seq_number_new"
+
     # Filter correct if specified
     if correct_only:
         df_pred = df_pred[df_pred.label == df_pred.pred]
 
-    df = df_pred.groupby(by=["seq_number"])["prob"].mean().reset_index()
-    sns.barplot(data=df, x="seq_number", y="prob")
+    # Create plot
+    df = df_pred.groupby(by=[col])["prob"].mean().reset_index()
+    sns.barplot(data=df, x=col, y="prob")
     plt.xlabel("Number in the US Sequence")
     plt.ylabel("Prediction Probability")
+    plt.xlim(0, max(df_pred[col])+1)
+    plt.xticks(np.arange(0, max(df[col])+1, 5.0))
     plt.tight_layout()
     plt.show()
 
 
-def plot_acc_over_sequence(df_pred):
+def plot_acc_over_sequence(df_pred, update_seq_num=False):
     """
     Plots accuracy of predictions over each number in the sequence.
 
@@ -389,19 +403,33 @@ def plot_acc_over_sequence(df_pred):
     df_pred : pandas.DataFrame
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
+    update_seq_num : bool, optional
+        If True, accounts for missing images between sequence numbers by
+        creating new (raw) sequence number based on existing images, by default
+        False.
     """
-    df = df_pred.groupby(by=["seq_number"]).apply(
+    col = "seq_number"
+
+    # If specified, create new sequence numbers
+    if update_seq_num:
+        df_pred = get_new_seq_numbers(df_pred)
+        col = "seq_number_new"
+
+    # Create plot
+    df = df_pred.groupby(by=[col]).apply(
         lambda df: (df.pred == df.label).mean())
     df.name = "accuracy"
     df = df.reset_index()
-    sns.barplot(data=df, x="seq_number", y="accuracy")
+    sns.barplot(data=df, x=col, y="accuracy")
     plt.xlabel("Number in the US Sequence")
     plt.ylabel("Accuracy")
+    plt.xlim(0, max(df_pred[col])+1)
+    plt.xticks(np.arange(0, max(df[col])+1, 5))
     plt.tight_layout()
     plt.show()
 
 
-def plot_image_count_over_sequence(df_pred):
+def plot_image_count_over_sequence(df_pred, update_seq_num=False):
     """
     Plots number of imgaes for each number in the sequence.
 
@@ -411,13 +439,22 @@ def plot_image_count_over_sequence(df_pred):
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
     """
-    df_count = df_pred.groupby(by=["seq_number"]).apply(lambda df: len(df))
+    col = "seq_number"
+
+    # If specified, create new sequence numbers
+    if update_seq_num:
+        df_pred = get_new_seq_numbers(df_pred)
+        col = "seq_number_new"
+
+    # Create plot
+    df_count = df_pred.groupby(by=[col]).apply(lambda df: len(df))
     df_count.name = "count"
-    df_count = df_count.rename(columns={"seq_number": "Number in Sequence",
-                                        0: "Number of Images"})
-    sns.barplot(data=df_count, x="seq_number", y="count")
+    df_count = df_count.reset_index()
+    sns.barplot(data=df_count, x=col, y="count")
     plt.xlabel("Number in the US Sequence")
     plt.ylabel("Number of Images")
+    plt.xlim(0, max(df_pred[col])+1)
+    plt.xticks(np.arange(0, max(df_pred[col])+1, 5))
     plt.tight_layout()
     plt.show()
 
@@ -664,6 +701,35 @@ def extract_from_label(df, col="label", extract="plane"):
     df[f"{col}_{extract}"] = df[col].map(lambda x: _extract_str(x, extract))
 
 
+def get_new_seq_numbers(df_pred):
+    """
+    Since sequence numbers are not all present (due to unlabeled images), create
+    new sequence numbers from order of existing images in the sequence.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Test set predictions. Each row is a test example with a label,
+        prediction, and other patient and sequence-related metadata.
+
+    Returns
+    -------
+    pd.DataFrame
+        df_pred with added column "seq_number_new"
+    """
+    # Sort by sequence number
+    df_pred = df_pred.sort_values(by=["id", "visit", "seq_number"],
+                                  ignore_index=True)
+
+    # Get new sequence numbers (rank)
+    new_seq_numbers = np.concatenate(df_pred.groupby(by=["id", "visit"]).apply(
+        lambda df: list(range(len(df)))).to_numpy())
+
+    df_pred["seq_number_new"] = new_seq_numbers
+
+    return df_pred
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -766,16 +832,19 @@ if __name__ == '__main__':
     # 5-View (Not including 'Other' label)
     if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
         # Print reasons for misclassification of most confident predictions
-        # check_misclassifications(df_pred)
+        check_misclassifications(df_pred, filter=False)
 
         # Plot confusion matrix
-        # plot_confusion_matrix(df_pred, filter_confident=True)
+        plot_confusion_matrix(df_pred, filter_confident=True)
 
         # Plot probability of predicted labels over the sequence number
-        # plot_prob_over_sequence(df_pred, correct_only=True)
+        plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
 
         # Plot accuracy over sequence number
-        plot_acc_over_sequence(df_pred)
+        plot_acc_over_sequence(df_pred, update_seq_num=True)
+
+        # Plot number of images over sequence number
+        plot_image_count_over_sequence(df_pred, update_seq_num=True)
 
 
     # Bladder vs. Other models
