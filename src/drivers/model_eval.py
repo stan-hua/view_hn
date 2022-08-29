@@ -318,20 +318,23 @@ def check_misclassifications(df_pred, filter=True, local=True):
     # Get misclassified instances
     df_misclassified = df_pred[(df_pred.label != df_pred.pred)]
 
-    # 1. Proportion and count of misclassification from wrong body side
-    prop_swapped = df_misclassified.apply(
-        lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
-        axis=1).mean()
-    num_swapped = df_misclassified.apply(
-        lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
-        axis=1).sum()
-
-    # 2. Proportion and count of misclassification from adjacent views
+    # 1. Proportion and count of misclassification from adjacent views
     prop_adjacent = df_misclassified.apply(
         lambda row: row.pred in constants.LABEL_ADJACENCY[row.label],
         axis=1).mean()
     num_adjacent = df_misclassified.apply(
         lambda row: row.pred in constants.LABEL_ADJACENCY[row.label],
+        axis=1).sum()
+
+    # 2. Proportion and count of misclassification from wrong body side
+    # Filter out Bladder images
+    df_misclassified = df_misclassified[(df_misclassified.label != "Bladder")]
+    df_misclassified = df_misclassified[(df_misclassified.pred != "Bladder")]
+    prop_swapped = df_misclassified.apply(
+        lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
+        axis=1).mean()
+    num_swapped = df_misclassified.apply(
+        lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
         axis=1).sum()
 
     # Format output
@@ -598,7 +601,7 @@ def get_local_groups(values):
 def filter_most_confident(df_pred, local=False):
     """
     Given predictions for all images across multiple US sequences, filter the
-    prediction with the highest confidence (based on probability).
+    prediction with the highest confidence (based on output activation).
 
     Parameters
     ----------
@@ -638,49 +641,28 @@ def filter_most_confident(df_pred, local=False):
     return df_filtered
 
 
-def calculate_planar_acc(labels, preds):
+def extract_from_label(df, col="label", extract="plane"):
     """
-    Calculates the accuracy of plane (Saggital/Transverse/Bladder), ignoring
-    side predicted.
+    Creates a new column called "<col>_<extract>", made from extracting data
+    from a column of label/predicted label strings.
 
     Parameters
     ----------
-    labels : np.array
-        True labels as strings
-    preds : np.array
-        Predicted labels as strings
-
-    Returns
-    -------
-    float
-        Accuracy in predicting planes
+    df : pd.DataFrame
+        Contains <col> column with strings of the form <plane>_<side>
+    col : str, optional
+        Name of column of strings, by default "label"
+    extract : str, optional
+        What to extract. One of "plane" or "side", by default "plane"
     """
-    # Vectorize get_plane function
-    get_plane = np.vectorize(get_plane)
+    def _extract_str(x, extract="plane"):
+        parts = x.split("_")
+        if extract == "side" and len(parts) > 1:
+            return parts[1]
+        return parts[0]
 
-    # Get planes
-    label_planes = get_plane(labels)
-    pred_planes = get_plane(preds)
+    df[f"{col}_{extract}"] = df[col].map(lambda x: _extract_str(x, extract))
 
-    return (label_planes == pred_planes).mean()
-
-
-def get_plane(label):
-    """
-    Get plane label from full string label
-
-    Parameters
-    ----------
-    label : str
-        One of the 5 views (e.g., Saggital_Left, Bladder)
-
-    Returns
-    -------
-    str
-        Extracted plane
-    """
-    return label.split("_")[0]
-    
 
 ################################################################################
 #                                  Main Flows                                  #
