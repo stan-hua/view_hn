@@ -327,13 +327,13 @@ def check_misclassifications(df_pred, filter=True, local=True):
         axis=1).sum()
 
     # 2. Proportion and count of misclassification from wrong body side
-    # Filter out Bladder images
-    df_misclassified = df_misclassified[(df_misclassified.label != "Bladder")]
-    df_misclassified = df_misclassified[(df_misclassified.pred != "Bladder")]
-    prop_swapped = df_misclassified.apply(
+    # Filter out Bladder images (so remains are Sagittal/Transverse labels/pred)
+    df_swapped = df_misclassified[(df_misclassified.label != "Bladder")]
+    df_swapped = df_swapped[(df_swapped.pred != "Bladder")]
+    prop_swapped = df_swapped.apply(
         lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
         axis=1).mean()
-    num_swapped = df_misclassified.apply(
+    num_swapped = df_swapped.apply(
         lambda row: row.label.split("_")[0] == row.pred.split("_")[0],
         axis=1).sum()
 
@@ -348,7 +348,7 @@ def check_misclassifications(df_pred, filter=True, local=True):
         "Proportion": [prop_swapped, prop_adjacent,
                        1-(prop_swapped+prop_adjacent)],
         "Count": [num_swapped, num_adjacent,
-                  len(df_misclassified)-num_swapped-num_adjacent]
+                  len(df_misclassified) - num_swapped - num_adjacent]
     }, index=["Wrong Side", "Adjacent Label", "Other"])
 
     # Print to command line
@@ -832,7 +832,7 @@ if __name__ == '__main__':
     # 5-View (Not including 'Other' label)
     if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
         # Print reasons for misclassification of most confident predictions
-        check_misclassifications(df_pred, filter=False)
+        check_misclassifications(df_pred)
 
         # Plot confusion matrix
         plot_confusion_matrix(df_pred, filter_confident=True)
