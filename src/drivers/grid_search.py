@@ -75,8 +75,8 @@ class GridSearch:
     Implementation of RandomizedGridSearchCV.
     """
 
-    def __init__(self, model_type, timestamp, grid_search_dir, metric='loss'):
-        self.model_type = model_type
+    def __init__(self, model_name, timestamp, grid_search_dir, metric='loss'):
+        self.model_name = model_name
         self.timestamp = timestamp
         self.grid_search_dir = grid_search_dir
         self.metric = metric
@@ -163,17 +163,14 @@ class GridSearch:
         list
             Absolute paths to each directory in the grid search directory
         """
-        all_dirs = glob(f"{RESULTS_DIR}/*")
-
         temp_folders = []
-        for i in all_dirs:
-            if ("grid_search" not in i) and (self.model_type in i):
-                temp_folders.append(i)
+        for dir in glob(f"{RESULTS_DIR}/*"):
+            if ("grid_search" not in dir) and (self.model_name in dir):
+                temp_folders.append(dir)
 
         # Move folders to grid search directory
-        for folder in temp_folders:
-            if len(os.listdir(folder)) != 1:
-                shutil.move(folder, self.grid_search_dir)
+        for dir in temp_folders:
+            shutil.move(dir, self.grid_search_dir)
 
         # Get list of model directory names
         model_dirs = []
