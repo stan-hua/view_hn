@@ -51,7 +51,8 @@ CLASS_TO_IDX = {"Saggital_Left": 0, "Transverse_Left": 1, "Bladder": 2,
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 # Type of models
-MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other")
+MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other",
+               "multi_output_seq")
 
 ################################################################################
 #                               Paths Constants                                #
@@ -70,6 +71,10 @@ CKPT_PATH_BINARY_WEIGHTED = constants.DIR_RESULTS + \
 # Checkpoint for 5-view (sequential) CNN-LSTM model
 CKPT_PATH_SEQUENTIAL = constants.DIR_RESULTS + \
     "cnn_lstm_8/0/epoch=31-step=5023.ckpt"
+
+# Checkpoint for multi-output CNN-LSTM model
+CKPT_PATH_MULTI = constants.DIR_RESULTS + \
+    "cnn_lstm_multi(2022-08-28_23-11)/0/epoch=10-step=219.ckpt"
 
 # Table to store/retrieve predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
@@ -217,19 +222,30 @@ def predict_on_sequences(model, filenames, dir=constants.DIR_IMAGES):
         imgs = torch.FloatTensor(imgs).to(DEVICE)
 
         # Perform inference
-        outs = model(imgs)
-        outs = outs.detach().cpu()
-        preds = torch.argmax(outs, dim=1).numpy()
+        side_outs, plane_outs = model(imgs)
+        side_outs = side_outs.detach().cpu()
+        plane_outs = plane_outs.detach().cpu()
+        side_preds = torch.argmax(side_outs, dim=1).numpy()
+        plane_preds = torch.argmax(plane_outs, dim=1).numpy()
 
         # Get probability
-        probs = torch.nn.functional.softmax(outs, dim=1)
-        probs = torch.max(probs, dim=1).values.numpy()
+        side_probs = torch.nn.functional.softmax(side_outs, dim=1)
+        side_probs = torch.max(side_probs, dim=1).values.numpy()
+
+        plane_probs = torch.nn.functional.softmax(plane_outs, dim=1)
+        plane_probs = torch.max(plane_probs, dim=1).values.numpy()
 
         # Get maximum activation
-        outs = torch.max(outs, dim=1).values.numpy()
+        side_outs = torch.max(side_outs, dim=1).values.numpy()
+        plane_outs = torch.max(plane_outs, dim=1).values.numpy()
 
         # Convert from encoded label to label name
-        preds = np.vectorize(constants.IDX_TO_CLASS.__getitem__)(preds)
+        side_preds = np.vectorize(constants.SIDE_IDX_TO_CLASS.__getitem__)(side_preds)
+        plane_preds = np.vectorize(constants.PLANE_IDX_TO_CLASS.__getitem__)(plane_preds)
+
+    preds = side_preds, plane_preds
+    probs = side_probs, plane_probs
+    outs = side_outs, plane_outs
 
     return preds, probs, outs
 
@@ -237,7 +253,9 @@ def predict_on_sequences(model, filenames, dir=constants.DIR_IMAGES):
 ################################################################################
 #                            Analysis of Inference                             #
 ################################################################################
-def plot_confusion_matrix(df_pred, filter_confident=False):
+def plot_confusion_matrix(df_pred, filter_confident=False,
+                          label_col="label", pred_col="pred", out_col="out",
+                          expected_labels=constants.CLASSES):
     """
     Plot confusion matrix based on model predictions.
 
@@ -249,14 +267,21 @@ def plot_confusion_matrix(df_pred, filter_confident=False):
     filter_confident : bool, optional
         If True, filters for most confident prediction in each view label for
         each unique sequence, before creating the confusion matrix.
+    label_col : str, optional
+        Name of label column. Defaults to "label"
+    pred_col : str, optional
+        Name of predicted label column. Defaults to "pred"
+    out_col : str, optional
+        Name of column for activation value of predicted label. Defaults to
+        "out"
     """
     # If flagged, get for most confident pred. for each view label per seq.
     if filter_confident:
-        df_pred = filter_most_confident(df_pred)
+        df_pred = filter_most_confident(df_pred, out_col=out_col)
 
-    cm = confusion_matrix(df_pred["label"], df_pred["pred"],
-                          labels=constants.CLASSES)
-    disp = ConfusionMatrixDisplay(cm, display_labels=constants.CLASSES)
+    cm = confusion_matrix(df_pred[label_col], df_pred[pred_col],
+                          labels=expected_labels)
+    disp = ConfusionMatrixDisplay(cm, display_labels=expected_labels)
     disp.plot()
     plt.tight_layout()
     plt.show()
@@ -635,7 +660,8 @@ def get_local_groups(values):
     return local_groups
 
 
-def filter_most_confident(df_pred, local=False):
+def filter_most_confident(df_pred, local=False, label_col="label",
+                          out_col="out"):
     """
     Given predictions for all images across multiple US sequences, filter the
     prediction with the highest confidence (based on output activation).
@@ -650,6 +676,11 @@ def filter_most_confident(df_pred, local=False):
         consecutive images with the same label. Otherwise, aggregates by view
         label to find the most confident view label predictions,
         by default False.
+    label_col : str, optional
+        Name of label column. Defaults to "label"
+    out_col : str, optional
+        Name of column for activation value of predicted label. Defaults to
+        "out"
 
     Returns
     -------
@@ -660,8 +691,8 @@ def filter_most_confident(df_pred, local=False):
 
     if not local:
         # Get most confident pred per view per sequence (ignoring seq. number)
-        df_seqs = df_pred.groupby(by=["id", "visit", "label"])
-        df_filtered = df_seqs.apply(lambda df: df[df.out == df.out.max()])
+        df_seqs = df_pred.groupby(by=["id", "visit", label_col])
+        df_filtered = df_seqs.apply(lambda df: df[df[out_col] == df[out_col].max()])
     else:
         # Get most confident pred per group of consecutive labels per sequence
         # 0. Sort by id, visit and sequence number
@@ -669,11 +700,11 @@ def filter_most_confident(df_pred, local=False):
 
         # 1. Identify local groups of consecutive labels
         local_grps_per_seq = df_pred.groupby(by=["id", "visit"]).apply(
-            lambda df: get_local_groups(df.label.values))
+            lambda df: get_local_groups(df[label_col].values))
         df_pred["local_group"] = np.concatenate(local_grps_per_seq.values)
 
         df_seqs = df_pred.groupby(by=["id", "visit", "local_group"])
-        df_filtered = df_seqs.apply(lambda df: df[df.out == df.out.max()])
+        df_filtered = df_seqs.apply(lambda df: df[df[out_col] == df[out_col].max()])
 
     return df_filtered
 
@@ -790,21 +821,27 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
         )
 
         # Flatten predictions, probs and model outputs from all sequences
-        preds = np.concatenate(ret.map(lambda x: x[0]).to_numpy())
-        probs = np.concatenate(ret.map(lambda x: x[1]).to_numpy())
-        outs = np.concatenate(ret.map(lambda x: x[2]).to_numpy())
+        side_preds = np.concatenate(ret.map(lambda x: x[0][0]).to_numpy())
+        plane_preds = np.concatenate(ret.map(lambda x: x[0][1]).to_numpy())
+        side_probs = np.concatenate(ret.map(lambda x: x[1][0]).to_numpy())
+        plane_probs = np.concatenate(ret.map(lambda x: x[1][1]).to_numpy())
+        side_outs = np.concatenate(ret.map(lambda x: x[2][0]).to_numpy())
+        plane_outs = np.concatenate(ret.map(lambda x: x[2][1]).to_numpy())
 
     # 5. Save predictions on test set
-    df_test_metadata["pred"] = preds
-    df_test_metadata["prob"] = probs
-    df_test_metadata["out"] = outs
+    df_test_metadata["side_pred"] = side_preds
+    df_test_metadata["side_prob"] = side_probs
+    df_test_metadata["side_out"] = side_outs
+    df_test_metadata["plane_pred"] = plane_preds
+    df_test_metadata["plane_prob"] = plane_probs
+    df_test_metadata["plane_out"] = plane_outs
     df_test_metadata.to_csv(save_path, index=False)
 
 
 if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
-    CKPT_PATH = CKPT_PATH_SEQUENTIAL
-    MODEL_TYPE = MODEL_TYPES[-2]
+    CKPT_PATH = CKPT_PATH_MULTI
+    MODEL_TYPE = MODEL_TYPES[-1]
 
     # Add model type to save path
     test_save_path = TEST_PRED_PATH % (MODEL_TYPE,)
@@ -855,3 +892,21 @@ if __name__ == '__main__':
     # 5-View (Includin 'Other' label)
     if "five_view" in MODEL_TYPE and "other" in MODEL_TYPE:
         check_others_pred_progression(df_pred)
+
+    # Multi-output model
+    if "multi" in MODEL_TYPE:
+        df_pred["side_label"] = df_pred["label"].map(
+            lambda x: utils.extract_from_label(x, "side"))
+        df_pred["plane_label"] = df_pred["label"].map(
+            lambda x: utils.extract_from_label(x, "plane"))
+
+        # Plot confusion matrix
+        plot_confusion_matrix(
+            df_pred, filter_confident=True,
+            label_col="side_label", pred_col="side_pred", out_col="side_out",
+            expected_labels=list(constants.CLASS_TO_SIDE_IDX.keys()))
+
+        plot_confusion_matrix(
+            df_pred, filter_confident=True,
+            label_col="plane_label", pred_col="plane_pred", out_col="plane_out",
+            expected_labels=list(constants.CLASS_TO_PLANE_IDX.keys()))
