@@ -9,7 +9,7 @@ import umap
 from sklearn.preprocessing import StandardScaler
 
 # Custom libraries
-from src.data.constants import DIR_EMBEDS, DIR_IMAGES
+from src.data import constants
 from src.models import embedders
 
 
@@ -17,21 +17,31 @@ from src.models import embedders
 #                                  Constants                                   #
 ################################################################################
 EMBED_SUFFIX = "_embeddings(histogram_norm).h5"
+EMBED_SUFFIX_RAW = "_embeddings(raw).h5"
 
 
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
-def extract_all_embeds():
+def extract_all_embeds(raw=False):
     """
     Extract embeddings using both ImageNet and CytoImageNet-trained models.
+
+    Parameters
+    ----------
+    raw : bool, optional
+        If True, extracts embeddings for raw images. Otherwise, uses
+        preprocessed images, by default False.
     """
+    img_dir = constants.DIR_IMAGES if not raw else constants.DIR_IMAGES_RAW
+
     for model in ("hn", "imagenet", "cytoimagenet"):
-        embedders.main(model, DIR_EMBEDS + f"/{model}{EMBED_SUFFIX}",
-                       img_dir=DIR_IMAGES)
+        embed_suffix = EMBED_SUFFIX_RAW if raw else EMBED_SUFFIX
+        save_dir = constants.DIR_EMBEDS + f"/{model}{embed_suffix}"
+        embedders.main(model, save_dir, img_dir=img_dir)
 
 
-def get_embeds(model):
+def get_embeds(model, raw=False):
     """
     Retrieve extracted deep embeddings using model specified.
 
@@ -40,6 +50,9 @@ def get_embeds(model):
     model : str
         Name of pretraining dataset for model. Either "cytoimagenet" or
         "imagenet"
+    raw : bool, optional
+        If True, extracts embeddings for raw images. Otherwise, uses
+        preprocessed images, by default False.
     """
     def _get_embeds(model, drop_path=False):
         """
@@ -57,7 +70,8 @@ def get_embeds(model):
         pd.DataFrame
             Contains extracted image features and paths to files
         """
-        embed_path = DIR_EMBEDS + f"/{model}{EMBED_SUFFIX}"
+        suffix = EMBED_SUFFIX_RAW if raw else EMBED_SUFFIX
+        embed_path = constants.DIR_EMBEDS + f"/{model}{suffix}"
 
         df = pd.read_hdf(embed_path, "embeds")
 
@@ -111,4 +125,4 @@ def get_umap_embeddings(df_embeds):
 
 
 if __name__ == "__main__":
-    extract_all_embeds()
+    extract_all_embeds(raw=True)

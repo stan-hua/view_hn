@@ -14,6 +14,7 @@ import pandas as pd
 import tensorflow as tf
 import torch
 from tensorflow.keras.applications.efficientnet import EfficientNetB0
+from tqdm import tqdm
 
 # Custom libraries
 from src.data.constants import CYTO_WEIGHTS_PATH
@@ -160,18 +161,12 @@ class ImageEmbedder:
         all_embeds = []
         file_paths = []
 
-        for batch_idx, (img, metadata) in enumerate(train_set):
+        for img, metadata in tqdm(train_set):
             # Extract embeddings
             embeds = self.predict_torch(img)
 
             all_embeds.append(embeds)
             file_paths.extend(metadata["filename"])
-            
-            # Print progress
-            if VERBOSE:
-                LOGGER.info(f"Num Done: {batch_idx} / {len(train_set)}")
-                LOGGER.info(
-                    f"Progress: {100*batch_idx/len(train_set):.2f}%")
 
         # Save features. Each row is a feature vector
         df_features = pd.DataFrame(np.concatenate(all_embeds))
