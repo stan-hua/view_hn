@@ -36,6 +36,8 @@ logging.basicConfig(level=logging.INFO)
 # Configure seaborn color palette
 sns.set_palette("Paired")
 
+# Add progress_apply to pandas
+tqdm.pandas()
 
 ################################################################################
 #                                  Constants                                   #
@@ -51,7 +53,8 @@ CLASS_TO_IDX = {"Saggital_Left": 0, "Transverse_Left": 1, "Bladder": 2,
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 # Type of models
-MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other")
+MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other",
+               "five_view_seq_short")
 
 ################################################################################
 #                               Paths Constants                                #
@@ -538,7 +541,7 @@ def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES):
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
     unique_labels : list, optional
-        List of unique labels. Defaults to constants.CLASSES
+        List of unique labels, by default constants.CLASSES
     """
     def get_counts_and_prop(df):
         """
@@ -785,7 +788,7 @@ def get_new_seq_numbers(df_pred):
 ################################################################################
 def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
                   save_path=TEST_PRED_PATH, sequential=False,
-                  include_unlabeled=False):
+                  include_unlabeled=False, seq_number_limit=None):
     """
     Performs inference on test set, and saves results
 
@@ -802,6 +805,9 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
         If True, feed full image sequences into model, by default False.
     include_unlabeled : bool, optional
         If True, include unlabeled images in test set, by default False.
+    seq_number_limit : int, optional
+        If provided, filters out test set samples with sequence numbers higher
+        than this value, by default None.
     """
     # 2. Get metadata, specifically for the test set
     # 2.0 Get image filenames and labels
@@ -819,6 +825,11 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
     # 2.2 Load test metadata
     df_test_metadata = get_test_set_metadata(df_metadata, hparams)
 
+    # If provided, filter out high sequence number images
+    if seq_number_limit:
+        mask = (df_test_metadata["seq_number"] <= seq_number_limit)
+        df_test_metadata = df_test_metadata[mask]
+
     # 2.3 Sort, so no mismatch occurs due to groupby sorting
     df_test_metadata = df_test_metadata.sort_values(by=["id", "visit"],
                                                     ignore_index=True)
@@ -834,7 +845,7 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
                                                dir=None)
     else:
         # Perform inference one sequence at a time
-        ret = df_test_metadata.groupby(by=["id", "visit"]).apply(
+        ret = df_test_metadata.groupby(by=["id", "visit"]).progress_apply(
             lambda df: predict_on_sequences(
                 model=model, filenames=df.filename.tolist(), dir=None)
         )
@@ -854,16 +865,15 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
 if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
     CKPT_PATH = CKPT_PATH_SEQUENTIAL
-    MODEL_TYPE = MODEL_TYPES[-2]
+    MODEL_TYPE = MODEL_TYPES[-3]
 
     # Add model type to save path
     test_save_path = TEST_PRED_PATH % (MODEL_TYPE,)
 
     # Inference on test set
     if not os.path.exists(test_save_path):
-        sequential = ("seq" in MODEL_TYPE)
-
         # Get model class based on model type
+        sequential = ("seq" in MODEL_TYPE)
         if sequential:
             model_cls = EfficientNetLSTM
         else:
@@ -871,10 +881,13 @@ if __name__ == '__main__':
 
         # Includes other
         include_unlabeled = ("other" in MODEL_TYPE)
+        # Shortens sequences longer than 40
+        seq_number_limit = 40 if "short" in MODEL_TYPE else None
 
         main_test_set(model_cls, CKPT_PATH, test_save_path,
                       sequential=sequential,
-                      include_unlabeled=include_unlabeled)
+                      include_unlabeled=include_unlabeled,
+                      seq_number_limit=seq_number_limit)
 
     # Load test metadata
     df_pred = pd.read_csv(test_save_path)
@@ -882,20 +895,20 @@ if __name__ == '__main__':
     # 5-View (Not including 'Other' label)
     if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
         # Print reasons for misclassification of most confident predictions
-        # check_misclassifications(df_pred)
+        check_misclassifications(df_pred)
 
         # Plot/Print confusion matrix
-        # plot_confusion_matrix(df_pred, filter_confident=True)
+        plot_confusion_matrix(df_pred, filter_confident=True)
         print_confusion_matrix(df_pred, constants.CLASSES)
 
         # Plot probability of predicted labels over the sequence number
-        # plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
+        plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
 
         # Plot accuracy over sequence number
-        # plot_acc_over_sequence(df_pred, update_seq_num=True)
+        plot_acc_over_sequence(df_pred, update_seq_num=True)
 
         # Plot number of images over sequence number
-        # plot_image_count_over_sequence(df_pred, update_seq_num=True)
+        plot_image_count_over_sequence(df_pred, update_seq_num=True)
 
     # Bladder vs. Other models
     if "binary" in MODEL_TYPE:
