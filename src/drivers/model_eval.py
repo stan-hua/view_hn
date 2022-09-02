@@ -528,6 +528,56 @@ def check_others_pred_progression(df_pred):
     print_table(label_seq_counts, show_index=False)
 
 
+def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES):
+    """
+    Prints confusion matrix with proportion and count
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Test set predictions. Each row is a test example with a label,
+        prediction, and other patient and sequence-related metadata.
+    unique_labels : list, optional
+        List of unique labels. Defaults to constants.CLASSES
+    """
+    def get_counts_and_prop(df):
+        """
+        Given all instances for one label, get the proportions and counts for
+        each of the predicted labels.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Test set prediction for 1 label.
+        """
+        df_counts = df["pred"].value_counts()
+        num_samples = len(df)
+
+        return df_counts.map(lambda x: f"{round(x/num_samples, 2)} ({x})")
+
+    # Check that test labels include all labels
+    assert set(df_pred["label"].unique()) == set(unique_labels), \
+        "Not all given labels are present!"
+
+    # Accumulate counts and proportion of predicted labels for each label
+    df_labels = df_pred.groupby(by=["label"]).apply(get_counts_and_prop)
+
+    # Rename columns
+    df_labels = df_labels.reset_index().rename(
+        columns={"pred": "proportion", "level_1": "pred"})
+
+    # Reformat table to become a confusion matrix
+    df_cm = df_labels.pivot(index="label", columns="pred", values="proportion")
+
+    # Remove axis names
+    df_cm = df_cm.rename_axis(None).rename_axis(None, axis=1)
+
+    # Reorder column and index by given labels
+    df_cm = df_cm.loc[:, unique_labels].reindex(unique_labels)
+
+    print_table(df_cm)
+
+
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
@@ -832,20 +882,20 @@ if __name__ == '__main__':
     # 5-View (Not including 'Other' label)
     if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
         # Print reasons for misclassification of most confident predictions
-        check_misclassifications(df_pred)
+        # check_misclassifications(df_pred)
 
-        # Plot confusion matrix
-        plot_confusion_matrix(df_pred, filter_confident=True)
+        # Plot/Print confusion matrix
+        # plot_confusion_matrix(df_pred, filter_confident=True)
+        print_confusion_matrix(df_pred, constants.CLASSES)
 
         # Plot probability of predicted labels over the sequence number
-        plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
+        # plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
 
         # Plot accuracy over sequence number
-        plot_acc_over_sequence(df_pred, update_seq_num=True)
+        # plot_acc_over_sequence(df_pred, update_seq_num=True)
 
         # Plot number of images over sequence number
-        plot_image_count_over_sequence(df_pred, update_seq_num=True)
-
+        # plot_image_count_over_sequence(df_pred, update_seq_num=True)
 
     # Bladder vs. Other models
     if "binary" in MODEL_TYPE:
