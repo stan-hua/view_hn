@@ -49,7 +49,9 @@ def init(parser):
     # Help messages
     arg_help = {
         "exp_name": "Name of experiment",
-        "full_seq": "If True, trains a CNN-LSTM model on full US sequences.",
+        "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
+        "relative_side": "If flagged, relabels side Left/Right to First/Second "
+                         "based on which appeared first per sequence.",
         "adam": "If flagged, uses Adam optimizer during training. Otherwise, "
                 "uses Stochastic Gradient Descent (SGD).",
         "lr": "Learning rate of optimizer",
@@ -87,6 +89,8 @@ def init(parser):
     # Model and data - related arguments
     parser.add_argument("--full_seq", action="store_true",
                         help=arg_help["full_seq"])
+    parser.add_argument("--relative_side", action="store_true",
+                        help=arg_help["relative_side"])
 
     # Model arguments
     parser.add_argument("--adam", action="store_true", help=arg_help["adam"])
@@ -262,7 +266,8 @@ def main(args):
     hparams["accum_batches"] = args.batch_size if args.full_seq else None
 
     # 1. Get image filenames and labels
-    df_metadata = load_metadata()
+    df_metadata = load_metadata(extract=True,
+                                relative_side=hparams["relative_side"])
 
     # 2. Instantiate data module
     dataloader_params = {

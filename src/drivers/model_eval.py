@@ -54,7 +54,7 @@ IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 # Type of models
 MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other",
-               "five_view_seq_short")
+               "five_view_seq_short", "five_view_seq_relative")
 
 ################################################################################
 #                               Paths Constants                                #
@@ -73,6 +73,11 @@ CKPT_PATH_BINARY_WEIGHTED = constants.DIR_RESULTS + \
 # Checkpoint for 5-view (sequential) CNN-LSTM model
 CKPT_PATH_SEQUENTIAL = constants.DIR_RESULTS + \
     "cnn_lstm_8/0/epoch=31-step=5023.ckpt"
+
+# Checkpoint for 5-view (sequential) CNN-LSTM model with relative side labels
+CKPT_PATH_RELATIVE = constants.DIR_RESULTS + \
+    "cnn_lstm_relative_side/0/epoch=6-step=279.ckpt"
+
 
 # Table to store/retrieve predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
@@ -788,7 +793,8 @@ def get_new_seq_numbers(df_pred):
 ################################################################################
 def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
                   save_path=TEST_PRED_PATH, sequential=False,
-                  include_unlabeled=False, seq_number_limit=None):
+                  include_unlabeled=False, seq_number_limit=None,
+                  relative_side=False):
     """
     Performs inference on test set, and saves results
 
@@ -805,18 +811,19 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
         If True, feed full image sequences into model, by default False.
     include_unlabeled : bool, optional
         If True, include unlabeled images in test set, by default False.
+    relative_side : bool, optional
+        If True, converts side (Left/Right) to order in which side appeared
+        (First/Second/None). Requires <extract> to be True, by default False.
     seq_number_limit : int, optional
         If provided, filters out test set samples with sequence numbers higher
         than this value, by default None.
     """
     # 2. Get metadata, specifically for the test set
     # 2.0 Get image filenames and labels
-    if not include_unlabeled:
-        df_metadata = utils.load_metadata()
-    else:
-        df_metadata = utils.load_metadata(extract=True, include_unlabeled=True,
-                                          dir=constants.DIR_IMAGES)
-        df_metadata = utils.remove_only_unlabeled_seqs(df_metadata)
+    df_metadata = utils.load_metadata(
+        extract=True,
+        include_unlabeled=include_unlabeled, dir=constants.DIR_IMAGES,
+        relative_side=relative_side)
 
     # 2.1 Get hyperparameters for run
     model_dir = os.path.dirname(checkpoint_path)
@@ -864,8 +871,8 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
 
 if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
-    CKPT_PATH = CKPT_PATH_SEQUENTIAL
-    MODEL_TYPE = MODEL_TYPES[-3]
+    CKPT_PATH = CKPT_PATH_RELATIVE
+    MODEL_TYPE = MODEL_TYPES[-1]
 
     # Add model type to save path
     test_save_path = TEST_PRED_PATH % (MODEL_TYPE,)
@@ -878,16 +885,19 @@ if __name__ == '__main__':
             model_cls = EfficientNetLSTM
         else:
             model_cls = EfficientNetPL
-
+        
         # Includes other
         include_unlabeled = ("other" in MODEL_TYPE)
         # Shortens sequences longer than 40
         seq_number_limit = 40 if "short" in MODEL_TYPE else None
+        # Relative side label
+        relative_side = ("relative" in MODEL_TYPE)
 
         main_test_set(model_cls, CKPT_PATH, test_save_path,
                       sequential=sequential,
                       include_unlabeled=include_unlabeled,
-                      seq_number_limit=seq_number_limit)
+                      seq_number_limit=seq_number_limit,
+                      relative_side=relative_side)
 
     # Load test metadata
     df_pred = pd.read_csv(test_save_path)

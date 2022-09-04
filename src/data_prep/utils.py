@@ -22,13 +22,19 @@ from src.data import constants
 #                               Metadata Related                               #
 ################################################################################
 def load_metadata(path=constants.METADATA_FILE, extract=False,
-                  include_unlabeled=False, dir=None):
+                  include_unlabeled=False, relative_side=False, dir=None):
     """
     Load metadata table with filenames and view labels.
 
     Note
     ----
     If <include_unlabeled> specified, <dir> must be provided.
+
+    If <relative_side> is True, the following examples happens:
+        - [Saggital_Left, Transverse_Right, Bladder] ->
+                [Saggital_First, Transverse_Second, Bladder]
+        - [Saggital_Right, Transverse_Left, Bladder] ->
+                [Saggital_First, Transverse_Second, Bladder]
 
     Parameters
     ----------
@@ -37,6 +43,9 @@ def load_metadata(path=constants.METADATA_FILE, extract=False,
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
+    relative_side : bool, optional
+        If True, converts side (Left/Right) to order in which side appeared
+        (First/Second/None). Requires <extract> to be True, by default False.
     include_unlabeled : bool, optional
         If True, include all unlabeled images in <dir>, by default False.
     dir : str, optional
@@ -76,6 +85,15 @@ def load_metadata(path=constants.METADATA_FILE, extract=False,
 
     if extract:
         extract_data_from_filename(df_metadata)
+
+        # Convert side (in label) to order of relative appearance (First/Second)
+        if relative_side:
+            df_metadata = df_metadata.sort_values(
+                by=["id", "visit", "seq_number"])
+            relative_labels = df_metadata.groupby(by=["id", "visit"])\
+                .apply(lambda df: pd.Series(make_side_label_relative(
+                    df.label.tolist()))).to_numpy()
+            df_metadata["label"] = relative_labels
 
     return df_metadata
 
@@ -215,6 +233,49 @@ def extract_from_label(label, extract="plane"):
     return label_parts[0]
 
 
+def make_side_label_relative(labels):
+    """
+    First side (Left/Right) becomes First, while the other becomes Second. Use
+    this to convert all labels from side to relative side.
+
+    Parameters
+    ----------
+    labels : array-like
+        List of labels of the form <plane>_<side> or Bladder
+
+    Returns
+    -------
+    list
+        List of transformed label to <plane>_[First/Second] or Bladder
+    """
+    first_side = None
+    # Mapping from label with side to relative (First/Second)
+    side_to_relative = {}
+
+    new_labels = []
+    for label in labels:
+        label_parts = label.split("_")
+
+        # If Bladder
+        if len(label_parts) == 1:
+            new_labels.append(label)
+            continue
+
+        # If first side, perform set up
+        if first_side is None:
+            first_side = label_parts[1]
+            second_side = "Left" if first_side != "Left" else "Right"
+
+            for plane in ("Transverse", "Saggital"):
+                side_to_relative[f"{plane}_{first_side}"] = f"{plane}_First"
+                side_to_relative[f"{plane}_{second_side}"] = f"{plane}_Second"
+
+        # Convert label with side to relative side
+        new_labels.append(side_to_relative[label])
+
+    return new_labels
+
+
 ################################################################################
 #                                Data Splitting                                #
 ################################################################################
@@ -344,46 +405,3 @@ def cross_validation_by_patient(patient_ids, num_folds=5):
         folds.append((train_idx, val_idx))
 
     return folds
-
-
-################################################################################
-#                                Miscellaneous                                 #
-################################################################################
-# TODO: Finish implementing this
-def disc_to_cont(lst):
-    """
-    Given an ordered list of discrete integers, convert to a continuous
-    increasing list of floats. Assumes uniformly distributed within and across
-    boundaries.
-
-    Parameters
-    ----------
-    lst : list or array-like
-        List of N ordered discrete integers with no gaps between integers
-    
-    Returns
-    -------
-    np.array
-        Array of N continuous decimal numbers
-    """
-    raise NotImplementedError()
-
-    assert len(lst) > 3
-
-    # Convert to array if not already
-    if not isinstance(lst, np.array):
-        lst = np.array(lst)
-
-    # Get mapping of discrete value to count
-    uniq_vals = sorted(np.unique(lst))
-    count = {}
-    for discrete_val in uniq_vals:
-        count[discrete_val] = (lst == discrete_val).sum()
-
-    # Interpolate values between boundaries
-    cont_vals = []
-
-    for i in range(0, len(uniq_vals) -1):
-        curr_val = uniq_vals[i]
-        next_val = uniq_vals[i + 1]
-        cont_vals.append(np.linspace(curr_val, next_val, count[curr_val] + 1)[:-1])
