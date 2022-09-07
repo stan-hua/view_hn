@@ -86,7 +86,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
     functionalities.
     """
     def __init__(self, dataloader_params=None, df=None, dir=None,
-                 full_seq=False, **kwargs):
+                 full_seq=False, mode=3, **kwargs):
         """
         Initialize UltrasoundDataModule object.
 
@@ -109,6 +109,9 @@ class UltrasoundDataModule(pl.LightningDataModule):
             If True, each item has all ordered images for one full
             ultrasound sequence (determined by patient ID and visit). If False,
             treats each image under a patient as independent, by default False.
+        mode : int
+            Number of channels (mode) to read images into (1=grayscale, 3=RGB),
+            by default 3.
         **kwargs : dict
             Optional keyword arguments:
                 img_size : int or tuple of ints, optional
@@ -131,6 +134,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
         self.dir = dir
         self.dataset = None
         self.full_seq = full_seq
+        self.mode = mode
+        self.no_label = (self.df is None)   # flag to use UltrasoundDatasetDir
 
         # Get image paths, patient IDs, and labels (and visit)
         if self.df is not None:
@@ -233,17 +238,23 @@ class UltrasoundDataModule(pl.LightningDataModule):
         torch.utils.data.DataLoader
             Data loader for training data
         """
-        # Instantiate UltrasoundDatasetDataFrame
-        df_train = pd.DataFrame({
-            "filename": self.dset_to_paths["train"],
-            "label": self.dset_to_labels["train"]
-        })
+        if self.no_label:
+            # Instantiate UltrasoundDatasetDir
+            train_dataset = UltrasoundDatasetDir(self.dir, self.full_seq,
+                                                 mode=self.mode)
+        else:
+            df_train = pd.DataFrame({
+                "filename": self.dset_to_paths["train"],
+                "label": self.dset_to_labels["train"]
+            })
 
-        # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_train)
+            # Add metadata for patient ID, visit number and sequence number
+            utils.extract_data_from_filename(df_train)
 
-        train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir,
-                                                   self.full_seq)
+            # Instantiate UltrasoundDatasetDataFrame
+            train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir,
+                                                       self.full_seq,
+                                                       mode=self.mode)
 
         # Create DataLoader with parameters specified
         return DataLoader(train_dataset, **self.train_dataloader_params)
@@ -258,17 +269,23 @@ class UltrasoundDataModule(pl.LightningDataModule):
         torch.utils.data.DataLoader
             Data loader for validation data
         """
-        # Instantiate UltrasoundDatasetDataFrame
-        df_val = pd.DataFrame({
-            "filename": self.dset_to_paths["val"],
-            "label": self.dset_to_labels["val"]
-        })
+        if self.no_label:
+            # Instantiate UltrasoundDatasetDir
+            val_dataset = UltrasoundDatasetDir(self.dir, self.full_seq,
+                                               mode=self.mode)
+        else:
+            # Instantiate UltrasoundDatasetDataFrame
+            df_val = pd.DataFrame({
+                "filename": self.dset_to_paths["val"],
+                "label": self.dset_to_labels["val"]
+            })
 
-        # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_val)
+            # Add metadata for patient ID, visit number and sequence number
+            utils.extract_data_from_filename(df_val)
 
-        val_dataset = UltrasoundDatasetDataFrame(df_val, self.dir,
-                                                 self.full_seq)
+            val_dataset = UltrasoundDatasetDataFrame(df_val, self.dir,
+                                                     self.full_seq,
+                                                     mode=self.mode)
 
         # Create DataLoader with parameters specified
         return DataLoader(val_dataset, **self.val_dataloader_params)
@@ -283,17 +300,23 @@ class UltrasoundDataModule(pl.LightningDataModule):
         torch.utils.data.DataLoader
             Data loader for test data
         """
-        # Instantiate UltrasoundDatasetDataFrame
-        df_test = pd.DataFrame({
-            "filename": self.dset_to_paths["test"],
-            "label": self.dset_to_labels["test"]
-        })
+        if self.no_label:
+            # Instantiate UltrasoundDatasetDir
+            test_dataset = UltrasoundDatasetDir(self.dir, self.full_seq,
+                                                mode=self.mode)
+        else:
+            # Instantiate UltrasoundDatasetDataFrame
+            df_test = pd.DataFrame({
+                "filename": self.dset_to_paths["test"],
+                "label": self.dset_to_labels["test"]
+            })
 
-        # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_test)
+            # Add metadata for patient ID, visit number and sequence number
+            utils.extract_data_from_filename(df_test)
 
-        test_dataset = UltrasoundDatasetDataFrame(df_test, self.dir,
-                                                  self.full_seq)
+            test_dataset = UltrasoundDatasetDataFrame(df_test, self.dir,
+                                                      self.full_seq,
+                                                      mode=self.mode)
 
         # Create DataLoader with parameters specified
         return DataLoader(test_dataset, **self.val_dataloader_params)
