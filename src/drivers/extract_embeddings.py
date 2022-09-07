@@ -91,7 +91,7 @@ def get_embeds(model, raw=False):
         run = False
         embed_lst = []
 
-        for m in MODELS:
+        for m in ("cytoimagenet", "imagenet"):
             embed_lst.append(_get_embeds(m, run))
             run = True
 

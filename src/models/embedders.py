@@ -154,7 +154,7 @@ class ImageEmbedder:
             "Do not use this function if not extracting Cyto/ImageNet features!"
 
         # Load data
-        data_module = UltrasoundDataModule(dir=dir)
+        data_module = UltrasoundDataModule(dir=dir, mode=3)
         data_module.setup()
         train_set = data_module.train_dataloader()
 
