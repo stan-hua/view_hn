@@ -245,7 +245,7 @@ def predict_on_sequences(model, filenames, dir=constants.DIR_IMAGES):
 ################################################################################
 #                            Analysis of Inference                             #
 ################################################################################
-def plot_confusion_matrix(df_pred, filter_confident=False):
+def plot_confusion_matrix(df_pred, filter_confident=False, relative_side=False):
     """
     Plot confusion matrix based on model predictions.
 
@@ -257,20 +257,27 @@ def plot_confusion_matrix(df_pred, filter_confident=False):
     filter_confident : bool, optional
         If True, filters for most confident prediction in each view label for
         each unique sequence, before creating the confusion matrix.
+    relative_side : bool, optional
+        If True, assumes predicted labels are encoded for relative sides, by
+        default False.
     """
     # If flagged, get for most confident pred. for each view label per seq.
     if filter_confident:
         df_pred = filter_most_confident(df_pred)
 
+    # Gets all labels based on side encoding
+    all_labels = constants.CLASSES["relative" if relative_side else ""]
+
+    # Plots confusion matrix
     cm = confusion_matrix(df_pred["label"], df_pred["pred"],
-                          labels=constants.CLASSES)
-    disp = ConfusionMatrixDisplay(cm, display_labels=constants.CLASSES)
+                          labels=all_labels)
+    disp = ConfusionMatrixDisplay(cm, display_labels=all_labels)
     disp.plot()
     plt.tight_layout()
     plt.show()
 
 
-def plot_pred_probability_by_views(df_pred):
+def plot_pred_probability_by_views(df_pred, relative_side=False):
     """
     Plot average probability of prediction per view label.
 
@@ -279,6 +286,9 @@ def plot_pred_probability_by_views(df_pred):
     df_pred : pandas.DataFrame
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
+    relative_side : bool, optional
+        If True, assumes predicted labels are encoded for relative sides, by
+        default False.
     """
     df_pred = df_pred.copy()
 
@@ -292,13 +302,16 @@ def plot_pred_probability_by_views(df_pred):
     df_prob_by_view = df_prob_by_view.rename(columns=
         {"label": "View", "prob": "Probability"})
     
+    # Gets all labels based on side encoding
+    all_labels = constants.CLASSES["relative" if relative_side else ""]
     # Bar plot
     sns.barplot(data=df_prob_by_view, x="View", y="Probability",
-                order=constants.CLASSES)
+                order=all_labels)
     plt.show()
 
 
-def check_misclassifications(df_pred, filter=True, local=True):
+def check_misclassifications(df_pred, filter=True, local=True,
+                             relative_side=False):
     """
     Given the most confident test set predictions, determine the percentage of
     misclassifications that are due to:
@@ -318,6 +331,9 @@ def check_misclassifications(df_pred, filter=True, local=True):
         consecutive images with the same label. Otherwise, aggregates by view
         label to find the most confident view label predictions,
         by default True.
+    relative_side : bool, optional
+        If True, assumes predicted labels are encoded for relative sides, by
+        default False.
     """
     # Filter for most confident predictions for each expected view label
     if filter:
@@ -326,12 +342,16 @@ def check_misclassifications(df_pred, filter=True, local=True):
     # Get misclassified instances
     df_misclassified = df_pred[(df_pred.label != df_pred.pred)]
 
+    # Get label adjacency dict based on side label
+    label_adjacency_dict = constants.LABEL_ADJACENCY["relative" if \
+        relative_side else ""]
+
     # 1. Proportion and count of misclassification from adjacent views
     prop_adjacent = df_misclassified.apply(
-        lambda row: row.pred in constants.LABEL_ADJACENCY[row.label],
+        lambda row: row.pred in label_adjacency_dict[row.label],
         axis=1).mean()
     num_adjacent = df_misclassified.apply(
-        lambda row: row.pred in constants.LABEL_ADJACENCY[row.label],
+        lambda row: row.pred in label_adjacency_dict[row.label],
         axis=1).sum()
 
     # 2. Proportion and count of misclassification from wrong body side
@@ -481,7 +501,8 @@ def check_others_pred_progression(df_pred):
     def _get_label_sequence(df):
         """
         Given a unique US sequence for one patient, get the order of contiguous
-        labels in the sequence.
+        labels in the sequence, where there is blocks of unlabeled image, show
+        progression of predicted labels.
 
         Parameters
         ----------
@@ -536,7 +557,90 @@ def check_others_pred_progression(df_pred):
     print_table(label_seq_counts, show_index=False)
 
 
-def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES):
+def check_rel_side_pred_progression(df_pred):
+    """
+    Given test set predictions for full sequences where side labels are relative
+    to the first side, show label/predicted label progression.
+
+    Note
+    ----
+    Highlight locations where error in toggling between first/second occurs.
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Test set predictions. Each row is a test example with a label,
+        prediction, and other patient and sequence-related metadata.
+    """
+    def _get_label_sequence(df):
+        """
+        Given a unique US sequence for one patient, get the order of contiguous
+        correct/incorrect relative side labels in the sequence.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            One full US sequence for one patient.
+
+        Returns
+        -------
+        list
+            Unique label section within the sequence provided
+        """
+        # Get true/predicted (relative) side label
+        side_labels = df.sort_values(by=["seq_number"])["label"].tolist()
+        side_preds = df.sort_values(by=["seq_number"])["pred"].tolist()
+        
+        # Keep track of order of views
+        prev_label = None
+        prev_pred = None
+        seq = []
+
+        for i, side_label in enumerate(side_labels):
+            # Get prediction
+            side_pred = side_preds[i]
+
+            # If side changed
+            if side_label != prev_label:
+                if side_pred == side_label:
+                    # If side changed + correct pred., color green
+                    seq.append(f"{Fore.GREEN}{side_label}{Style.RESET_ALL}")
+                    # Reset prev. prediction (in case new error pops up)
+                    prev_pred = None
+                elif side_pred != prev_pred:
+                    # If side changed + new incorrect pred., color yellow
+                    prev_pred = side_pred
+                    seq.append(f"{Fore.YELLOW}{prev_pred}{Style.RESET_ALL}")
+            else:
+                if side_pred not in (side_label, prev_pred):
+                    # If side same + new incorrect pred., color red
+                    prev_pred = side_pred
+                    seq.append(f"{Fore.MAGENTA}{prev_pred}{Style.RESET_ALL}")
+
+            prev_label = side_label
+        return seq
+
+    df_pred = df_pred.copy()
+
+    # Extract and encode relative side labels
+    side_to_idx = {"First": "1", "Second": "2", "None": "-",}
+    df_pred.label = df_pred.label.map(
+        lambda x: side_to_idx[utils.extract_from_label(x, "side")]).astype(str)
+    df_pred.pred = df_pred.pred.map(
+        lambda x: side_to_idx[utils.extract_from_label(x, "side")]).astype(str)
+
+    # Get unique label sequences per patient
+    df_seqs = df_pred.groupby(by=["id", "visit"])
+    label_seqs = df_seqs.apply(_get_label_sequence)
+    label_seqs = label_seqs.map(lambda x: "".join(x))
+    label_seq_counts = label_seqs.value_counts().reset_index().rename(
+        columns={"index": "Label Sequence", 0: "Count"})
+
+    # Print to stdout
+    print_table(label_seq_counts, show_index=False)
+
+
+def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES[""]):
     """
     Prints confusion matrix with proportion and count
 
@@ -546,7 +650,7 @@ def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES):
         Test set predictions. Each row is a test example with a label,
         prediction, and other patient and sequence-related metadata.
     unique_labels : list, optional
-        List of unique labels, by default constants.CLASSES
+        List of unique labels, by default constants.CLASSES[""]
     """
     def get_counts_and_prop(df):
         """
@@ -873,6 +977,8 @@ if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
     CKPT_PATH = CKPT_PATH_RELATIVE
     MODEL_TYPE = MODEL_TYPES[-1]
+    # Flag for relative side encoding
+    relative_side = ("relative" in MODEL_TYPE)
 
     # Add model type to save path
     test_save_path = TEST_PRED_PATH % (MODEL_TYPE,)
@@ -890,8 +996,6 @@ if __name__ == '__main__':
         include_unlabeled = ("other" in MODEL_TYPE)
         # Shortens sequences longer than 40
         seq_number_limit = 40 if "short" in MODEL_TYPE else None
-        # Relative side label
-        relative_side = ("relative" in MODEL_TYPE)
 
         main_test_set(model_cls, CKPT_PATH, test_save_path,
                       sequential=sequential,
@@ -905,11 +1009,13 @@ if __name__ == '__main__':
     # 5-View (Not including 'Other' label)
     if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
         # Print reasons for misclassification of most confident predictions
-        check_misclassifications(df_pred)
+        check_misclassifications(df_pred, relative_side=relative_side)
 
         # Plot/Print confusion matrix
-        plot_confusion_matrix(df_pred, filter_confident=True)
-        print_confusion_matrix(df_pred, constants.CLASSES)
+        plot_confusion_matrix(df_pred, filter_confident=True,
+                              relative_side=relative_side)
+        print_confusion_matrix(
+            df_pred, constants.CLASSES["relative" if relative_side else ""])
 
         # Plot probability of predicted labels over the sequence number
         plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
@@ -919,6 +1025,10 @@ if __name__ == '__main__':
 
         # Plot number of images over sequence number
         plot_image_count_over_sequence(df_pred, update_seq_num=True)
+
+        # Relative side labels
+        if relative_side:
+            check_rel_side_pred_progression(df_pred)
 
     # Bladder vs. Other models
     if "binary" in MODEL_TYPE:
