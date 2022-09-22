@@ -24,7 +24,7 @@ class CPC(EfficientNet, pl.LightningModule):
                  n_lstm_layers=1, hidden_dim=256, bidirectional=True,
                  timesteps=5, extract_features=False, *args, **kwargs):
         """
-        Initialize EfficientNetLSTM object.
+        Initialize CPC object.
 
         Parameters
         ----------
