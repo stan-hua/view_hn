@@ -17,8 +17,9 @@ from tensorflow.keras.applications.efficientnet import EfficientNetB0
 from tqdm import tqdm
 
 # Custom libraries
-from src.data.constants import CYTO_WEIGHTS_PATH
+from src.data import constants
 from src.data_prep.dataset import UltrasoundDataModule
+from src.models.cpc import CPC
 from src.models.siamnet import load_siamnet
 
 
@@ -67,6 +68,8 @@ class ImageEmbedder:
         # Check if custom embed function present. If not, use forward pass
         if hasattr(self.model, "forward_embed"):
             features = self.model.forward_embed(img)
+        elif hasattr(self.model, "extract_embeds"):
+            features = self.model.extract_embeds(img)
         else:
             features = self.model(img)
         
@@ -113,6 +116,11 @@ class ImageEmbedder:
             img = tf.io.decode_jpeg(img, channels=3)
             return img
         
+
+        # Verify model provided
+        assert not isinstance(self.model, torch.nn.Module), \
+            "Provided model is not a Tensorflow model!"
+
         # Get file paths
         files_ds = tf.data.Dataset.list_files(dir + "/*", shuffle=False)
 
@@ -150,8 +158,8 @@ class ImageEmbedder:
             embedding columns
         """
         assert os.path.isdir(dir), "Path provided does not lead to a directory!"
-        assert self.model not in ("cytoimagenet", "imagenet"), \
-            "Do not use this function if not extracting Cyto/ImageNet features!"
+        assert isinstance(self.model, torch.nn.Module), \
+            "Provided model is not a PyTorch model!"
 
         # Load data
         data_module = UltrasoundDataModule(dir=dir, mode=3)
@@ -161,18 +169,18 @@ class ImageEmbedder:
         all_embeds = []
         file_paths = []
 
+        # Extract embeddings in batches
         for img, metadata in tqdm(train_set):
-            # Extract embeddings
             embeds = self.predict_torch(img)
 
             all_embeds.append(embeds)
             file_paths.extend(metadata["filename"])
 
-        # Save features. Each row is a feature vector
+        # Save embeddings. Each row is a feature vector
         df_features = pd.DataFrame(np.concatenate(all_embeds))
         df_features['files'] = file_paths
-        df_features.to_hdf(save_path, "embeds")
-        
+        df_features.to_hdf(save_path, "embeds", mode="a")
+
         return df_features
 
 
@@ -194,8 +202,12 @@ def get_arguments():
     parser.add_argument("--save_embed_path", type=str,
                         help="File path to save embeddings at")
     parser.add_argument("--cyto_weights_path", type=str,
-                        default=CYTO_WEIGHTS_PATH, help="Path to CytoImageNet-"
+                        default=constants.CYTO_WEIGHTS_PATH,
+                        help="Path to CytoImageNet-"
                         "trained EfficientNetB0 model weights")
+    parser.add_argument("--cpc_weights_path", type=str,
+                        default=constants.CPC_CKPT_PATH,
+                        help="Path to CPC model weights.")
 
     return parser.parse_args()
 
@@ -227,6 +239,8 @@ def instantiate_embedder(model_name, weights):
                                            pooling="avg")
     elif model_name == "hn":
         feature_extractor = load_siamnet()
+    elif model_name == "cpc":
+        feature_extractor = CPC.load_from_checkpoint(weights)
 
     embedder = ImageEmbedder(feature_extractor)
 
@@ -234,7 +248,8 @@ def instantiate_embedder(model_name, weights):
 
 
 def main(model_name, save_embed_path, img_file=None, img_dir=None,
-         cyto_weights_path=CYTO_WEIGHTS_PATH):
+         cyto_weights_path=constants.CYTO_WEIGHTS_PATH,
+         cpc_weights_path=constants.CPC_CKPT_PATH):
     """
     Instantiates embedder class with appropriate feature extractor, and extracts
     embedding to path.
@@ -254,7 +269,9 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
     img_dir : str
         Path to directory of images
     cyto_weights_path : str, optional
-        Path to cytoimagenet weights, by default CYTO_WEIGHTS_PATH
+        Path to cytoimagenet weights, by default constants.CYTO_WEIGHTS_PATH
+    cpc_weights_path : str, optional
+        Path to CPC weights, by default constants.CPC_CKPT_PATH
     """
     assert img_file or img_dir, \
         "At least one of img_file or img_dir must be given!"
@@ -262,6 +279,8 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
     weights = None
     if model_name == "cytoimagenet":
         weights = cyto_weights_path
+    elif model_name == "cpc":
+        weights = cpc_weights_path
 
     # Get feature extractor
     embedder = instantiate_embedder(model_name, weights=weights)
@@ -273,7 +292,7 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
         df_embed.to_hdf(save_embed_path)
         return
 
-    if model_name == "hn":
+    if model_name in ("hn", "cpc"):
         embedder.predict_dir_torch(img_dir, save_embed_path)
     else:
         embedder.predict_dir_tf(img_dir, save_embed_path)

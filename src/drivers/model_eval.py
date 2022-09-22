@@ -7,6 +7,7 @@ Description: Used to evaluate a trained model's performance on the testing set.
 # Standard libraries
 import logging
 import os
+import random
 from colorama import Fore, Style
 
 # Non-standard libraries
@@ -75,9 +76,11 @@ CKPT_PATH_SEQUENTIAL = constants.DIR_RESULTS + \
     "cnn_lstm_8/0/epoch=31-step=5023.ckpt"
 
 # Checkpoint for 5-view (sequential) CNN-LSTM model with relative side labels
+# CKPT_PATH_RELATIVE = constants.DIR_RESULTS + \
+#     "cnn_lstm_relative_side/0/epoch=6-step=279.ckpt"
 CKPT_PATH_RELATIVE = constants.DIR_RESULTS + \
-    "cnn_lstm_relative_side/0/epoch=6-step=279.ckpt"
-
+    "relative_side_grid_search(2022-09-21)/relative_side(2022-09-20_22-09)/" + \
+    "0/epoch=7-step=1255.ckpt"
 
 # Table to store/retrieve predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
@@ -892,6 +895,47 @@ def get_new_seq_numbers(df_pred):
     return df_pred
 
 
+def show_example_predictions(df_pred, n=5):
+    """
+    Given label sequences and their corresponding predictions (encoded as single
+    characters), print full label and prediction sequences with incorrect
+    predictions colored red.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Test set predictions. Each row is a test example with a label,
+        prediction, and other patient and sequence-related metadata.
+    n : int
+        Number of random unique sequences to show
+    """
+    side_to_idx = side_to_idx = {"First": "1", "Second": "2", "None": "-",}
+    labels = df_pred.groupby(by=["id", "visit"]).apply(
+        lambda df: "".join(df.sort_values(by=["seq_number"]).label.map(
+            lambda x: side_to_idx[utils.extract_from_label(x, "side")]).tolist()))
+    preds = df_pred.groupby(by=["id", "visit"]).apply(
+        lambda df: "".join(df.sort_values(by=["seq_number"]).pred.map(
+            lambda x: side_to_idx[utils.extract_from_label(x, "side")]).tolist()))
+
+    for _ in range(n):
+        # Choose random sequence
+        idx = random.randint(0, len(labels)-1)
+        labels_str = labels.iloc[idx]
+        preds_str = preds.iloc[idx]
+
+        # Color prediction sequence by correct/wrong
+        colored_pred_str = ""
+        for i in range(len(labels_str)):
+            pred = preds_str[i]
+            color_code = Fore.GREEN if labels_str[i] == preds_str[i] else \
+                Fore.MAGENTA
+            colored_pred_str += f"{color_code}{pred}{Style.RESET_ALL}"
+
+        print("")
+        print(labels_str)
+        print(colored_pred_str)
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -977,6 +1021,7 @@ if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
     CKPT_PATH = CKPT_PATH_RELATIVE
     MODEL_TYPE = MODEL_TYPES[-1]
+    MODEL_TYPE += "_old"
     # Flag for relative side encoding
     relative_side = ("relative" in MODEL_TYPE)
 
@@ -1029,6 +1074,9 @@ if __name__ == '__main__':
         # Relative side labels
         if relative_side:
             check_rel_side_pred_progression(df_pred)
+
+        # Show randomly chosen predictions for full sequences
+        show_example_predictions(df_pred)
 
     # Bladder vs. Other models
     if "binary" in MODEL_TYPE:

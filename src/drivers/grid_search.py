@@ -35,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 RESULTS_DIR = constants.DIR_RESULTS
 
 # Name of model (appended to folder name)
-MODEL_NAME = "cnn_lstm"
+MODEL_NAME = "relative_side"
 
 # Metric to optimize 
 METRIC = "loss"
@@ -58,6 +58,7 @@ SEARCH_SPACE = {
         "train_val_split": 0.75,
         "train_test_split": 0.75,
         "full_seq": True,
+        "relative_side": True,
         "n_lstm_layers": [1, 2, 3],
         "hidden_dim": [256, 512, 1024],
         "bidirectional": False,
@@ -142,7 +143,7 @@ class GridSearch:
         df_accum = pd.DataFrame()
         for dir_ in dirs_:
             _hyperparams = get_hyperparams(dir_)
-            row = pd.DataFrame(_hyperparams, index=[0])
+            row = pd.DataFrame([_hyperparams], index=[0])
             df_accum = pd.concat([df_accum, row])
 
         return df_accum

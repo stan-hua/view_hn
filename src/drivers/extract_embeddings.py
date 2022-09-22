@@ -3,6 +3,9 @@ extract_embeddings.py
 
 Description: Contains function to load embeddings from trained models.
 """
+# Standard libraries
+import argparse
+
 # Non-standard libraries
 import pandas as pd
 import umap
@@ -19,23 +22,67 @@ from src.models import embedders
 EMBED_SUFFIX = "_embeddings(histogram_norm).h5"
 EMBED_SUFFIX_RAW = "_embeddings(raw).h5"
 
+MODELS = ("imagenet", "cytoimagenet", "hn", "cpc")
+
 
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
-def extract_all_embeds(raw=False):
+def init(parser):
+    """
+    Initialize ArgumentParser
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        ArgumentParser object
+    """
+    arg_help = {
+        "hn" : "If flagged, extracts embeddings with HN model.",
+        "cytoimagenet" : "If flagged, extracts embeddings with CytoImageNet "
+                         "model.",
+        "imagenet" : "If flagged, extracts embeddings with ImageNet model.",
+        "cpc" : "If flagged, extracts embeddings with CPC model.",
+        "raw" : "If flagged, extracts embeddings for raw images."
+    }
+    parser.add_argument("--hn", action="store_true", help=arg_help["hn"])
+    parser.add_argument("--cytoimagenet", action="store_true",
+                        help=arg_help["cytoimagenet"])
+    parser.add_argument("--imagenet", action="store_true",
+                        help=arg_help["imagenet"])
+    parser.add_argument("--cpc", action="store_true", help=arg_help["cpc"])
+    parser.add_argument("--raw", action="store_true", help=arg_help["raw"])
+
+
+def extract_embeds(hn=False, cytoimagenet=False, imagenet=False, cpc=False,
+                   raw=False):
     """
     Extract embeddings using both ImageNet and CytoImageNet-trained models.
 
     Parameters
     ----------
+    hn : bool, optional
+        If True, extracts embeddings using HN model, by default False.
+    cytoimagenet : bool, optional
+        If True, extracts embeddings using CytoImageNet model, by default False.
+    imagenet : bool, optional
+        If True, extracts embeddings using ImageNet model, by default False.
+    cpc : bool, optional
+        If True, extracts embeddings using CPC model, by default False.
     raw : bool, optional
         If True, extracts embeddings for raw images. Otherwise, uses
         preprocessed images, by default False.
     """
     img_dir = constants.DIR_IMAGES if not raw else constants.DIR_IMAGES_RAW
 
-    for model in ("hn", "imagenet", "cytoimagenet"):
+    # Check which models to extract embeddings with
+    models = []
+    for model in MODELS:
+        if eval(model):
+            models.append(model)
+
+    # Extract embeddings
+    for model in models:
         embed_suffix = EMBED_SUFFIX_RAW if raw else EMBED_SUFFIX
         save_dir = constants.DIR_EMBEDS + f"/{model}{embed_suffix}"
         embedders.main(model, save_dir, img_dir=img_dir)
@@ -80,9 +127,6 @@ def get_embeds(model, raw=False):
 
         return df
 
-
-    MODELS = ("imagenet", "cytoimagenet", "hn")
-
     assert model in MODELS or model == "both"
 
     if model != "both":
@@ -125,4 +169,17 @@ def get_umap_embeddings(df_embeds):
 
 
 if __name__ == "__main__":
-    extract_all_embeds(raw=True)
+    # 0. Initialize ArgumentParser
+    PARSER = argparse.ArgumentParser()
+    init(PARSER)
+
+    # 1. Get arguments
+    ARGS = PARSER.parse_args()
+
+    # 2. Extract embeddings
+    extract_embeds(
+        hn=ARGS.hn,
+        cytoimagenet=ARGS.cytoimagenet,
+        imagenet=ARGS.imagenet,
+        cpc=ARGS.cpc,
+        raw=ARGS.raw)

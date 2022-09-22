@@ -181,7 +181,7 @@ def plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only,
         preprocessed images, by default False.
     """
     # Plot sequentially by US nums for 1 patient
-    patient_selected = patients.unique()[11]
+    patient_selected = patients.unique()[0]
     idx_patient = (patients == patient_selected)
     
     # Sort data points by US number. Re-extract UMAP embeddings (for 1 patient)
@@ -234,5 +234,5 @@ def main(model, raw=False):
 
 
 if __name__ == '__main__':
-    for model in ("hn", "imagenet", "cytoimagenet"):      # "both", "hn", "imagenet", "cytoimagenet", 
+    for model in ("cpc",):      # "both", "hn", "imagenet", "cytoimagenet", 
         main(model, raw=False)

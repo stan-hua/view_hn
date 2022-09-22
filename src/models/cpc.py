@@ -328,3 +328,32 @@ class CPC(EfficientNet, pl.LightningModule):
 
         loss = torch.tensor(test_step_outputs).mean()
         self.log(f'{dset}_loss', loss)
+
+    ############################################################################
+    #                          Extract Embeddings                              #
+    ############################################################################
+    @torch.no_grad()
+    def extract_embeds(self, inputs):
+        """
+        Extracts embeddings from input images.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Ultrasound images. Expected size is (B, C, H, W)
+
+        Returns
+        -------
+        numpy.array
+            Deep embeddings before final linear layer
+        """
+        # 1. CNN Encoder
+        z = self.extract_features(inputs)
+
+        # 2. Average Pooling
+        z = self._avg_pooling(z)
+
+        # Flatten
+        z = z.view(inputs.size()[0], -1)
+
+        return z.detach().cpu().numpy()
