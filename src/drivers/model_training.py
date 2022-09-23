@@ -19,9 +19,11 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 # Custom libraries
 from src.data import constants
 from src.data_prep.utils import load_metadata
-from src.data_prep.dataset import UltrasoundDataModule
+from src.data_prep.dataset import (SelfSupervisedUltrasoundDataModule,
+                                   UltrasoundDataModule)
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_pl import EfficientNetPL
+from src.models.moco import MoCo
 from src.utilities.custom_logger import FriendlyCSVLogger
 
 
@@ -49,6 +51,7 @@ def init(parser):
     # Help messages
     arg_help = {
         "exp_name": "Name of experiment",
+        "self_supervised": "If flagged, trains a MoCo model on US images.",
         "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
         "relative_side": "If flagged, relabels side Left/Right to First/Second "
                          "based on which appeared first per sequence.",
@@ -87,7 +90,10 @@ def init(parser):
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
 
     # Model and data - related arguments
-    parser.add_argument("--full_seq", action="store_true",
+    model_type_parser = parser.add_mutually_exclusive_group()
+    model_type_parser.add_argument("--self_supervised", action="store_true",
+                        help=arg_help["self_supervised"])
+    model_type_parser.add_argument("--full_seq", action="store_true",
                         help=arg_help["full_seq"])
     parser.add_argument("--relative_side", action="store_true",
                         help=arg_help["relative_side"])
@@ -210,7 +216,7 @@ def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
     trainer = Trainer(default_root_dir=experiment_dir,
                       gpus=1,
                       num_sanity_val_steps=0,
-                      # log_every_n_steps=100,
+                      log_every_n_steps=20,
                       accumulate_grad_batches=hparams["accum_batches"],
                       precision=hparams['precision'],
                       gradient_clip_val=hparams['grad_clip_norm'],
@@ -270,18 +276,29 @@ def main(args):
                                 relative_side=hparams["relative_side"])
 
     # 2. Instantiate data module
+    # 2.1 Choose appropriate class for data module
+    if args.self_supervised:
+        data_module_cls = SelfSupervisedUltrasoundDataModule
+    else:
+        data_module_cls = UltrasoundDataModule
+    # 2.2 Pass in specified dataloader parameters
     dataloader_params = {
         'batch_size': args.batch_size if not args.full_seq else 1,
         'shuffle': args.shuffle,
         'num_workers': args.num_workers,
         'pin_memory': args.pin_memory,
     }
-    dm = UltrasoundDataModule(dataloader_params, df=df_metadata,
-                              dir=constants.DIR_IMAGES, **hparams)
+    dm = data_module_cls(dataloader_params, df=df_metadata,
+                         dir=constants.DIR_IMAGES, **hparams)
     dm.setup()
 
     # 3. Specify model class
-    model_cls = EfficientNetLSTM if args.full_seq else EfficientNetPL
+    if args.self_supervised:    # For self-supervised image-based model
+        model_cls = MoCo
+    elif args.full_seq:         # For supervised full-sequence model
+        model_cls = EfficientNetLSTM
+    else:                       # For supervised image-based model
+        model_cls = EfficientNetPL
 
     # 4.1 Run experiment
     if hparams["cross_val_folds"] == 1:

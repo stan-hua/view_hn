@@ -17,7 +17,8 @@ from torch.nn import functional as F
 
 class CPC(EfficientNet, pl.LightningModule):
     """
-    EfficientNet + LSTM model for sequence-based classification.
+    EfficientNet + LSTM model, implementation of Contrastive Predictive Coding
+    (CPC).
     """
     def __init__(self, num_classes=5, img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,

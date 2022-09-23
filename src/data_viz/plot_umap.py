@@ -6,6 +6,7 @@ Description: Plots 2D UMAP embeddings
 # Standard libraries
 import logging
 import os
+import random
 
 # Non-standard libraries
 import matplotlib.pyplot as plt
@@ -18,22 +19,25 @@ from src.drivers.extract_embeddings import get_umap_embeddings, get_embeds
 
 
 ################################################################################
-#                              Configure Logging                               #
+#                                    Setup                                     #
 ################################################################################
+# Disable logging
 logging.disable()
 
-################################################################################
-#                                Plot Settings                                 #
-################################################################################
+# Plot configurations
 sns.set_style("dark")
 plt.style.use('dark_background')
 plt.rc('font', family='serif')
+
+# Set random seed
+random.seed(42)
 
 
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
 def plot_umap(embeds, labels, line=False, legend=True, title="",
+              palette="tab20",
               save=False, save_dir=DIR_FIGURES, filename="umap"):
     """
     Plot 2D U-Map of extracted image embeddings, colored by <labels>.
@@ -50,6 +54,8 @@ def plot_umap(embeds, labels, line=False, legend=True, title="",
         If True, shows legend, by default True.
     title : str, optional
         Plot title, by default "".
+    palette : str, optional
+        Seaborn color palette, by default "tab20".
     save : bool, optional
         Filename , by default False
     save_dir : str, optional
@@ -67,7 +73,7 @@ def plot_umap(embeds, labels, line=False, legend=True, title="",
                     hue=labels,
                     legend="full" if legend else legend,
                     alpha=1,
-                    palette="tab20",
+                    palette=palette,
                     s=5,
                     linewidth=0)
 
@@ -131,7 +137,8 @@ def plot_umap_all_patients(model, patients, df_embeds_only, color="patient",
               save=True)
 
 
-def plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=False):
+def plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=False,
+                      single=False):
     """
     Plots UMAP for all view-labeled patients, coloring by view.
 
@@ -148,7 +155,20 @@ def plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=False):
     raw : bool, optional
         If True, loaded embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
+    single : bool, optional
+        If True, plots UMAP for images for one unique sequence (patient-visit).
     """
+    # If specified, filter out labels for images from 1 unique sequence
+    if single:
+        patient_visit = df_labels.filename.map(
+            lambda x: "_".join(x.split("_")[:2]))
+        chosen_sequence = random.choice(patient_visit.unique())
+        df_labels = df_labels[patient_visit == chosen_sequence]
+        # Add padding for plot title
+        chosen_sequence += " "
+    else:
+        chosen_sequence = ""
+
     # Filter for image files with view labels
     filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))
     views = (filenames.map(lambda x: filename_to_label.get(x, None)))
@@ -157,14 +177,16 @@ def plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=False):
     view_labels = views[idx]
 
     # Plot all images by view
-    plot_umap(umap_embeds_views, view_labels, title="UMAP (colored by view)",
-              save=True, filename=f"{model}_umap{'_raw' if raw else ''}(views)")
+    plot_umap(umap_embeds_views, view_labels, save=True,
+              title=f"UMAP ({chosen_sequence}colored by view)",
+              filename=f"{model}_umap{'_raw' if raw else ''}"
+                       f"{'_single' if single else ''}(views)")
 
 
 def plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only,
                               raw=False):
     """
-    Plots UMAP for a single patient.
+    Plots UMAP for a single patient, colored by ultrasound number.
 
     Parameters
     ----------
@@ -192,8 +214,8 @@ def plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only,
 
     plot_umap(umap_embeds_patient, patient_us_nums, line=True, legend=False,
               title=f"UMAP (patient {patient_selected}, colored by US number)",
-              filename=f"{model}_umap{'_raw' if raw else ''}(us_num)",
-              save=True)
+              palette="Blues", save=True,
+              filename=f"{model}_umap{'_raw' if raw else ''}(us_num)")
 
 
 def main(model, raw=False):
@@ -225,14 +247,23 @@ def main(model, raw=False):
     # Isolate UMAP embeddings (all patients)
     df_embeds_only = df_embeds.drop(columns=["files", "filename"])
 
-    plot_umap_all_patients(model, patients, df_embeds_only, color="patient",
+    # 1. Plot UMAP of all patients (SickKids and Stanford)
+    plot_umap_all_patients(model, patients, df_embeds_only, color="hospital",
                            raw=raw)
-    plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only,
-                              raw=raw)
+
+    # 2. Plot UMAP of one patient, colored by number in sequence
+    plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only, raw=raw)
+
+    # 3. Plot UMAP of SickKids patients, colored by view
     plot_umap_by_view(model, df_labels, filenames, df_embeds_only,
                       raw=raw)
 
+    # 4. Plot UMAP for one unique US sequence, colored by view
+    # NOTE: Filtering df_labels alone will cause filtering when making UMAP
+    plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=raw,
+                      single=True)
+
 
 if __name__ == '__main__':
-    for model in ("cpc",):      # "both", "hn", "imagenet", "cytoimagenet", 
+    for model in ("moco",):      # must be in constants.MODELS
         main(model, raw=False)

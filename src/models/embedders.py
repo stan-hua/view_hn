@@ -20,6 +20,7 @@ from tqdm import tqdm
 from src.data import constants
 from src.data_prep.dataset import UltrasoundDataModule
 from src.models.cpc import CPC
+from src.models.moco import MoCo
 from src.models.siamnet import load_siamnet
 
 
@@ -30,6 +31,7 @@ logging.basicConfig(level=logging.DEBUG)
 ################################################################################
 VERBOSE = True
 LOGGER = logging.getLogger(__name__)
+
 
 ################################################################################
 #                                   Classes                                    #
@@ -164,13 +166,14 @@ class ImageEmbedder:
         # Load data
         data_module = UltrasoundDataModule(dir=dir, mode=3)
         data_module.setup()
-        train_set = data_module.train_dataloader()
+        # NOTE: Extracting embeds from all images in directory
+        dataset = data_module.train_dataloader()
 
         all_embeds = []
         file_paths = []
 
         # Extract embeddings in batches
-        for img, metadata in tqdm(train_set):
+        for img, metadata in tqdm(dataset):
             embeds = self.predict_torch(img)
 
             all_embeds.append(embeds)
@@ -205,9 +208,12 @@ def get_arguments():
                         default=constants.CYTO_WEIGHTS_PATH,
                         help="Path to CytoImageNet-"
                         "trained EfficientNetB0 model weights")
-    parser.add_argument("--cpc_weights_path", type=str,
+    parser.add_argument("--cpc_ckpt_path", type=str,
                         default=constants.CPC_CKPT_PATH,
-                        help="Path to CPC model weights.")
+                        help="Path to CPC model checkpoint.")
+    parser.add_argument("--moco_ckpt_path", type=str,
+                        default=constants.MOCO_CKPT_PATH,
+                        help="Path to MoCo model checkpoint.")
 
     return parser.parse_args()
 
@@ -241,6 +247,8 @@ def instantiate_embedder(model_name, weights):
         feature_extractor = load_siamnet()
     elif model_name == "cpc":
         feature_extractor = CPC.load_from_checkpoint(weights)
+    elif model_name == "moco":
+        feature_extractor = MoCo.load_from_checkpoint(weights)
 
     embedder = ImageEmbedder(feature_extractor)
 
@@ -249,7 +257,8 @@ def instantiate_embedder(model_name, weights):
 
 def main(model_name, save_embed_path, img_file=None, img_dir=None,
          cyto_weights_path=constants.CYTO_WEIGHTS_PATH,
-         cpc_weights_path=constants.CPC_CKPT_PATH):
+         cpc_ckpt_path=constants.CPC_CKPT_PATH,
+         moco_ckpt_path=constants.MOCO_CKPT_PATH):
     """
     Instantiates embedder class with appropriate feature extractor, and extracts
     embedding to path.
@@ -270,17 +279,20 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
         Path to directory of images
     cyto_weights_path : str, optional
         Path to cytoimagenet weights, by default constants.CYTO_WEIGHTS_PATH
-    cpc_weights_path : str, optional
-        Path to CPC weights, by default constants.CPC_CKPT_PATH
+    cpc_ckpt_path : str, optional
+        Path to CPC checkpoint, by default constants.CPC_CKPT_PATH
+    moco_ckpt_path : str, optional
+        Path to MoCo checkpoint, by default constants.MOCO_CKPT_PATH
     """
     assert img_file or img_dir, \
         "At least one of img_file or img_dir must be given!"
 
-    weights = None
-    if model_name == "cytoimagenet":
-        weights = cyto_weights_path
-    elif model_name == "cpc":
-        weights = cpc_weights_path
+    name_to_weights_path = {
+        "cytoimagenet": cyto_weights_path,
+        "cpc": cpc_ckpt_path,
+        "moco": moco_ckpt_path
+    }
+    weights = name_to_weights_path.get(model_name)
 
     # Get feature extractor
     embedder = instantiate_embedder(model_name, weights=weights)
@@ -292,10 +304,11 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
         df_embed.to_hdf(save_embed_path)
         return
 
-    if model_name in ("hn", "cpc"):
-        embedder.predict_dir_torch(img_dir, save_embed_path)
-    else:
+    # Separate by Tensorflow and PyTorch models
+    if model_name in ("cytoimagenet", "imagenet"):
         embedder.predict_dir_tf(img_dir, save_embed_path)
+    else:
+        embedder.predict_dir_torch(img_dir, save_embed_path)
 
 
 ################################################################################

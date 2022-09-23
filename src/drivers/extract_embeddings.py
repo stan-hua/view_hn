@@ -22,8 +22,6 @@ from src.models import embedders
 EMBED_SUFFIX = "_embeddings(histogram_norm).h5"
 EMBED_SUFFIX_RAW = "_embeddings(raw).h5"
 
-MODELS = ("imagenet", "cytoimagenet", "hn", "cpc")
-
 
 ################################################################################
 #                                  Functions                                   #
@@ -43,6 +41,7 @@ def init(parser):
                          "model.",
         "imagenet" : "If flagged, extracts embeddings with ImageNet model.",
         "cpc" : "If flagged, extracts embeddings with CPC model.",
+        "moco" : "If flagged, extracts embeddings with MoCo model.",
         "raw" : "If flagged, extracts embeddings for raw images."
     }
     parser.add_argument("--hn", action="store_true", help=arg_help["hn"])
@@ -51,35 +50,36 @@ def init(parser):
     parser.add_argument("--imagenet", action="store_true",
                         help=arg_help["imagenet"])
     parser.add_argument("--cpc", action="store_true", help=arg_help["cpc"])
+    parser.add_argument("--moco", action="store_true", help=arg_help["moco"])
     parser.add_argument("--raw", action="store_true", help=arg_help["raw"])
 
 
-def extract_embeds(hn=False, cytoimagenet=False, imagenet=False, cpc=False,
-                   raw=False):
+def extract_embeds(raw=False, **kwargs):
     """
     Extract embeddings using both ImageNet and CytoImageNet-trained models.
 
     Parameters
     ----------
-    hn : bool, optional
-        If True, extracts embeddings using HN model, by default False.
-    cytoimagenet : bool, optional
-        If True, extracts embeddings using CytoImageNet model, by default False.
-    imagenet : bool, optional
-        If True, extracts embeddings using ImageNet model, by default False.
-    cpc : bool, optional
-        If True, extracts embeddings using CPC model, by default False.
     raw : bool, optional
         If True, extracts embeddings for raw images. Otherwise, uses
         preprocessed images, by default False.
+    kwargs : keyword arguments
+        hn : bool, optional
+            If True, extracts embeddings using HN model, by default False.
+        cytoimagenet : bool, optional
+            If True, extracts embeddings using CytoImageNet model, by default
+            False.
+        imagenet : bool, optional
+            If True, extracts embeddings using ImageNet model, by default False.
+        cpc : bool, optional
+            If True, extracts embeddings using CPC model, by default False.
+        moco : bool, optional
+            If True, extracts embeddings using MoCo model, by default False.
     """
     img_dir = constants.DIR_IMAGES if not raw else constants.DIR_IMAGES_RAW
 
     # Check which models to extract embeddings with
-    models = []
-    for model in MODELS:
-        if eval(model):
-            models.append(model)
+    models = [model for model in constants.MODELS if kwargs.get(model)]
 
     # Extract embeddings
     for model in models:
@@ -127,7 +127,7 @@ def get_embeds(model, raw=False):
 
         return df
 
-    assert model in MODELS or model == "both"
+    assert model in constants.MODELS or model == "both"
 
     if model != "both":
         df_embeds = _get_embeds(model)
@@ -176,10 +176,6 @@ if __name__ == "__main__":
     # 1. Get arguments
     ARGS = PARSER.parse_args()
 
+
     # 2. Extract embeddings
-    extract_embeds(
-        hn=ARGS.hn,
-        cytoimagenet=ARGS.cytoimagenet,
-        imagenet=ARGS.imagenet,
-        cpc=ARGS.cpc,
-        raw=ARGS.raw)
+    extract_embeds(**vars(ARGS))
