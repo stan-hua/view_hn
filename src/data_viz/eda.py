@@ -15,10 +15,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from mpl_toolkits.axes_grid1 import ImageGrid
 from tabulate import tabulate
 
 # Custom libraries
 from src.data import constants
+from src.data_prep.dataset import SelfSupervisedUltrasoundDataModule
 from src.data_prep.utils import load_metadata
 
 
@@ -162,6 +164,41 @@ def patient_imgs_to_gif(df_metadata, patient_idx=0, dir=None,
         save_path = dir + f"/us_patient_{patient_id}_visit_{visit}.gif"
 
     imageio.mimsave(save_path, images, fps=2)
+
+
+def plot_example_images(ssl_dataloader):
+    """
+    Plot example images from a dataloader provided by the
+    SelfSupervisedDataModule.
+
+    Parameters
+    ----------
+    dataloader : torch.DataLoader
+        Dataloader that produces images and metadata.
+    """
+    example_imgs = None
+    # Sample 1 batch of images
+    for (x_q, _), curr_metadata in ssl_dataloader:
+        example_imgs = x_q.numpy()
+        break
+
+    # Create grid plot
+    fig = plt.figure(figsize=(8., 8.))
+    grid = ImageGrid(fig, 111,  # similar to subplot(111)
+                    nrows_ncols=(5, 5),  # creates 2x2 grid of axes
+                    axes_pad=0.01,  # pad between axes in inch.
+                    )
+
+    for ax, img_arr in zip(grid, example_imgs[:26]):
+        # Set x and y axis to be invisible
+        ax.axes.xaxis.set_visible(False)
+        ax.axes.yaxis.set_visible(False)
+        # Add image to grid plot
+        ax.imshow(np.moveaxis(img_arr, 0, -1), cmap='gray', vmin=0, vmax=255)
+
+    # Save images
+    plt.tight_layout()
+    plt.save(constants.DIR_FIGURES + "/eda/example_images.png")
 
 
 ################################################################################
@@ -414,6 +451,15 @@ def print_table(df, show_cols=True, show_index=True):
 
 
 if __name__ == '__main__':
+    ############################################################################
+    #                         Plot Example Images                              #
+    ############################################################################
+    df_metadata = load_metadata(extract=True)
+    data_module = SelfSupervisedUltrasoundDataModule(
+        df=df_metadata, dir=constants.DIR_IMAGES)
+    plot_example_images(data_module.train_dataloader())
+
+
     ############################################################################
     #                      Plot Distribution of Views                          #
     ############################################################################
