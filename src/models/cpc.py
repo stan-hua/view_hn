@@ -86,7 +86,7 @@ class CPC(EfficientNet, pl.LightningModule):
 
     def forward(self, inputs):
         """
-        Modified EfficientNet + LSTM forward pass.
+        Modified EfficientNet + LSTM forward pass with CPC loss.
 
         Parameters
         ----------

@@ -10,11 +10,9 @@ import copy
 
 # Non-standard libraries
 import lightly
-import numpy as np
 import pytorch_lightning as pl
 import torch
-import torchmetrics
-from efficientnet_pytorch import EfficientNet, get_model_params
+from efficientnet_pytorch import EfficientNet
 from lightly.models.modules.heads import MoCoProjectionHead
 from lightly.models.utils import deactivate_requires_grad
 from lightly.models.utils import update_momentum
@@ -22,14 +20,8 @@ from lightly.models.utils import batch_shuffle
 from lightly.models.utils import batch_unshuffle
 from torch.nn import functional as F
 
-
-################################################################################
-#                                  Constants                                   #
-################################################################################
-SEED = 42
-
-# Set random seed for reproducibility
-pl.seed_everything(SEED)
+# Custom libraries
+from src.data import constants
 
 
 ################################################################################
@@ -40,7 +32,7 @@ class MoCo(pl.LightningModule):
     MoCo for self-supervised learning.
     """
     def __init__(self, num_classes=5, img_size=(256, 256), adam=True, lr=0.0005,
-                 momentum=0.9, weight_decay=0.0005, max_epochs=100,
+                 momentum=0.9, weight_decay=0.0005,
                  memory_bank_size=4096, temperature=0.1,
                  extract_features=False, *args, **kwargs):
         """
@@ -63,9 +55,6 @@ class MoCo(pl.LightningModule):
         weight_decay : float, optional
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
-        max_epochs : int, optional
-            Max number of training epochs. Used in learning rate scheduler, by
-            default 100.
         memory_bank_size : int, optional
             Number of items to keep in memory bank for calculating loss (from
             MoCo), by default 4096
@@ -122,10 +111,7 @@ class MoCo(pl.LightningModule):
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
 
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, self.hparams.max_epochs
-        )
-        return [optimizer], [scheduler]
+        return optimizer
 
 
     ############################################################################

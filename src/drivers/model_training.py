@@ -23,6 +23,8 @@ from src.data_prep.dataset import (SelfSupervisedUltrasoundDataModule,
                                    UltrasoundDataModule)
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_pl import EfficientNetPL
+from src.models.linear_classifier import LinearClassifier
+from src.models.linear_lstm import LinearLSTM
 from src.models.moco import MoCo
 from src.utilities.custom_logger import FriendlyCSVLogger
 
@@ -53,6 +55,10 @@ def init(parser):
         "exp_name": "Name of experiment",
         "self_supervised": "If flagged, trains a MoCo model on US images.",
         "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
+        "ssl_eval_linear": "If flagged, trains linear classifier over pretrained "
+                           "self-supervised model.",
+        "ssl_eval_linear_lstm": "If flagged, trains linear classifier over "
+                                "pretrained self-supervised model.",
         "relative_side": "If flagged, relabels side Left/Right to First/Second "
                          "based on which appeared first per sequence.",
         "adam": "If flagged, uses Adam optimizer during training. Otherwise, "
@@ -90,11 +96,14 @@ def init(parser):
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
 
     # Model and data - related arguments
-    model_type_parser = parser.add_mutually_exclusive_group()
-    model_type_parser.add_argument("--self_supervised", action="store_true",
+    parser.add_argument("--self_supervised", action="store_true",
                         help=arg_help["self_supervised"])
-    model_type_parser.add_argument("--full_seq", action="store_true",
+    parser.add_argument("--full_seq", action="store_true",
                         help=arg_help["full_seq"])
+    parser.add_argument("--ssl_eval_linear", action="store_true",
+                        help=arg_help["ssl_eval_linear"])
+    parser.add_argument("--ssl_eval_linear_lstm", action="store_true",
+                        help=arg_help["ssl_eval_linear_lstm"])
     parser.add_argument("--relative_side", action="store_true",
                         help=arg_help["relative_side"])
 
@@ -277,7 +286,8 @@ def main(args):
 
     # 2. Instantiate data module
     # 2.1 Choose appropriate class for data module
-    if args.self_supervised:
+    if args.self_supervised and not \
+            (args.ssl_eval_linear or args.ssl_eval_linear_lstm):
         data_module_cls = SelfSupervisedUltrasoundDataModule
     else:
         data_module_cls = UltrasoundDataModule
@@ -293,11 +303,29 @@ def main(args):
     dm.setup()
 
     # 3. Specify model class
-    if args.self_supervised:    # For self-supervised image-based model
-        model_cls = MoCo
-    elif args.full_seq:         # For supervised full-sequence model
+    if args.self_supervised:    # For self-supervised (SSL) image-based model
+        # If evaluating SSL method
+        if args.ssl_eval_linear:
+            # Load pretrained conv. backbone
+            pretrained_model = MoCo.load_from_checkpoint(
+                constants.MOCO_CKPT_PATH)
+            hparams["backbone"] = pretrained_model.backbone
+
+            model_cls = LinearClassifier
+        elif args.ssl_eval_linear_lstm:
+            # Load pretrained conv. backbone
+            pretrained_model = MoCo.load_from_checkpoint(
+                constants.MOCO_CKPT_PATH)
+            hparams["backbone"] = pretrained_model.backbone
+
+            model_cls = LinearLSTM
+        else:
+            model_cls = MoCo
+    elif not args.self_supervised and args.full_seq:
+        # For supervised full-sequence model
         model_cls = EfficientNetLSTM
-    else:                       # For supervised image-based model
+    else:
+        # For supervised image-based model
         model_cls = EfficientNetPL
 
     # 4.1 Run experiment
