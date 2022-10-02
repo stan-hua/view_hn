@@ -862,7 +862,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # If returning an image
         X, metadata = super().__getitem__(index)
-        metadata["label"] = constants.CLASS_TO_IDX.get(self.labels[index])
+        metadata["label"] = constants.CLASS_TO_IDX.get(self.labels[index], -1)
 
         return X, metadata
 

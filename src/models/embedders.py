@@ -22,6 +22,7 @@ from src.data_prep.dataset import UltrasoundDataModule
 from src.models.cpc import CPC
 from src.models.moco import MoCo
 from src.models.siamnet import load_siamnet
+from src.models.efficientnet_pl import EfficientNetPL
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -67,13 +68,17 @@ class ImageEmbedder:
         """
         assert isinstance(self.model, torch.nn.Module)
 
+        # Set model to evaluation mode
+        self.model.eval()
+
         # Check if custom embed function present. If not, use forward pass
-        if hasattr(self.model, "forward_embed"):
-            features = self.model.forward_embed(img)
-        elif hasattr(self.model, "extract_embeds"):
-            features = self.model.extract_embeds(img)
-        else:
-            features = self.model(img)
+        with torch.no_grad():
+            if hasattr(self.model, "forward_embed"):
+                features = self.model.forward_embed(img)
+            elif hasattr(self.model, "extract_embeds"):
+                features = self.model.extract_embeds(img)
+            else:
+                features = self.model(img)
         
         # If more than 1 image, attempt to flatten extra 3rd dimension
         if features.shape[0] > 1:
@@ -197,7 +202,7 @@ def get_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--model_name", type=str, default="imagenet",
-                        help="cytoimagenet or imagenet")
+                        help="Type of model", choices=constants.MODELS)
     parser.add_argument("--img_file", type=str, default=None,
                          help="Path to an image file")
     parser.add_argument("--img_dir", type=str, default=None,
@@ -249,7 +254,11 @@ def instantiate_embedder(model_name, weights):
         feature_extractor = CPC.load_from_checkpoint(weights)
     elif model_name == "moco":
         feature_extractor = MoCo.load_from_checkpoint(weights)
+    elif model_name == "random":
+        # Randomly initialized EfficientNet model
+        feature_extractor = EfficientNetPL()
 
+    # Wrap model in ImageEmbedder
     embedder = ImageEmbedder(feature_extractor)
 
     return embedder

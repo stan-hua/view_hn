@@ -36,14 +36,18 @@ def init(parser):
         ArgumentParser object
     """
     arg_help = {
+        "random" : "If flagged, extracts embeddings from a randomly initialized"
+                   " EfficientNet model",
         "hn" : "If flagged, extracts embeddings with HN model.",
         "cytoimagenet" : "If flagged, extracts embeddings with CytoImageNet "
                          "model.",
         "imagenet" : "If flagged, extracts embeddings with ImageNet model.",
         "cpc" : "If flagged, extracts embeddings with CPC model.",
         "moco" : "If flagged, extracts embeddings with MoCo model.",
-        "raw" : "If flagged, extracts embeddings for raw images."
+        "raw" : "If flagged, extracts embeddings for raw images.",
     }
+    parser.add_argument("--random", action="store_true",
+                        help=arg_help["random"])
     parser.add_argument("--hn", action="store_true", help=arg_help["hn"])
     parser.add_argument("--cytoimagenet", action="store_true",
                         help=arg_help["cytoimagenet"])
@@ -175,7 +179,6 @@ if __name__ == "__main__":
 
     # 1. Get arguments
     ARGS = PARSER.parse_args()
-
 
     # 2. Extract embeddings
     extract_embeds(**vars(ARGS))

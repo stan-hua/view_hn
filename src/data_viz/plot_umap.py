@@ -9,13 +9,17 @@ import os
 import random
 
 # Non-standard libraries
+import cv2
+import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from sklearn.cluster import DBSCAN
 
 # Custom libraries
-from src.data.constants import DIR_FIGURES, METADATA_FILE
+from src.data import constants
 from src.drivers.extract_embeddings import get_umap_embeddings, get_embeds
+from src.data_viz.eda import gridplot_images
 
 
 ################################################################################
@@ -32,13 +36,17 @@ plt.rc('font', family='serif')
 # Set random seed
 random.seed(42)
 
+# Order of labels in plot
+VIEW_LABEL_ORDER = ["Saggital_Right", "Transverse_Right", "Saggital_Left",
+               "Transverse_Left", "Bladder"]
+
 
 ################################################################################
-#                                  Functions                                   #
+#                           UMAP Plotting Functions                            #
 ################################################################################
-def plot_umap(embeds, labels, line=False, legend=True, title="",
-              palette="tab20",
-              save=False, save_dir=DIR_FIGURES, filename="umap"):
+def plot_umap(embeds, labels, label_order=None,
+              line=False, legend=True, title="", palette="tab20",
+              save=False, save_dir=constants.DIR_FIGURES, filename="umap"):
     """
     Plot 2D U-Map of extracted image embeddings, colored by <labels>.
 
@@ -48,6 +56,8 @@ def plot_umap(embeds, labels, line=False, legend=True, title="",
         A 2-dimensional array of N samples.
     labels : list
         Labels to color embeddings by. Must match number of samples (N).
+    label_order : list
+        Order of unique label values in legend, by default None.
     line : bool, optional
         Connects points in scatterplot sequentially, by default False
     legend : bool, optional
@@ -71,6 +81,7 @@ def plot_umap(embeds, labels, line=False, legend=True, title="",
 
     sns.scatterplot(x=embeds[:, 0], y=embeds[:, 1],
                     hue=labels,
+                    hue_order=label_order,
                     legend="full" if legend else legend,
                     alpha=1,
                     palette=palette,
@@ -137,8 +148,7 @@ def plot_umap_all_patients(model, patients, df_embeds_only, color="patient",
               save=True)
 
 
-def plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=False,
-                      single=False):
+def plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=False):
     """
     Plots UMAP for all view-labeled patients, coloring by view.
 
@@ -146,8 +156,9 @@ def plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=False,
     ----------
     model : str
         Name of model, or pretraining dataset used to pretrain model
-    df_labels : pd.DataFrame
-        Contains file paths and view labels
+    view_labels : numpy.array
+        Contains view labels, corresponding to embeddings extracted. Images
+        without label (null value) will be excluded
     filenames : pd.Series
         Contains file name of image whose features were extracted
     df_embeds_only : pd.DataFrame
@@ -155,36 +166,27 @@ def plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=False,
     raw : bool, optional
         If True, loaded embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
-    single : bool, optional
-        If True, plots UMAP for images for one unique sequence (patient-visit).
     """
-    # If specified, filter out labels for images from 1 unique sequence
-    if single:
-        patient_visit = df_labels.filename.map(
-            lambda x: "_".join(x.split("_")[:2]))
-        chosen_sequence = random.choice(patient_visit.unique())
-        df_labels = df_labels[patient_visit == chosen_sequence]
-        # Add padding for plot title
-        chosen_sequence += " "
-    else:
-        chosen_sequence = ""
+    # Filter out image files w/o labels
+    idx_unlabeled = ~pd.isnull(view_labels)
+    view_labels = view_labels[idx_unlabeled]
+    filenames = filenames[idx_unlabeled]
+    df_embeds_only = df_embeds_only[idx_unlabeled]
 
-    # Filter for image files with view labels
-    filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))
-    views = (filenames.map(lambda x: filename_to_label.get(x, None)))
-    idx = views.notna()
-    umap_embeds_views = get_umap_embeddings(df_embeds_only[idx])
-    view_labels = views[idx]
+    # Extract UMAP embeddings
+    umap_embeds_views = get_umap_embeddings(df_embeds_only)
 
     # Plot all images by view
-    plot_umap(umap_embeds_views, view_labels, save=True,
-              title=f"UMAP ({chosen_sequence}colored by view)",
-              filename=f"{model}_umap{'_raw' if raw else ''}"
-                       f"{'_single' if single else ''}(views)")
+    plot_umap(umap_embeds_views, view_labels,
+              label_order=VIEW_LABEL_ORDER,
+              save=True,
+              title=f"UMAP (colored by view)",
+              filename=f"{model}_umap{'_raw' if raw else ''}(views)")
 
 
-def plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only,
-                              raw=False):
+def plot_umap_for_one_patient_seq(model, view_labels, patient_visit,
+                                  us_nums, df_embeds_only, color="us_nums",
+                                  raw=False):
     """
     Plots UMAP for a single patient, colored by ultrasound number.
 
@@ -192,32 +194,207 @@ def plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only,
     ----------
     model : str
         Name of model, or pretraining dataset used to pretrain model
-    patients : pd.Series
-        Contains all patient IDs
+    view_labels : numpy.array
+        Contains view labels, corresponding to embeddings extracted. Images
+        without label (null value) will be excluded
+    patient_visit : pd.Series
+        Contains string of (patient ID)_(visit number), which forms a unique
+        sequence identifier
     us_nums : pd.Series
         Contains number in ultrasound sequence capture
+    df_embeds_only : pd.DataFrame
+        Extracted deep embeddings. Does not have file paths in any column.
+    color : str
+        Option to color by US sequence number or view label. One of "us_nums"
+        or "views", by default "us_nums".
+    raw : bool, optional
+        If True, loaded embeddings extracted from raw images. Otherwise, uses
+        preprocessed images, by default False.
+    """
+    assert color in ("us_nums", "views")
+
+    # If coloring by label, filter out unlabeled
+    if color != "us_nums":
+        idx_unlabeled = ~pd.isnull(view_labels)
+        view_labels = view_labels[idx_unlabeled]
+        patient_visit = patient_visit[idx_unlabeled]
+        us_nums = us_nums[idx_unlabeled]
+        df_embeds_only = df_embeds_only[idx_unlabeled]
+
+    # Select a unique sequence (patient-visit)
+    patient_selected = patient_visit.unique()[0]
+    idx_patient = (patient_visit == patient_selected)
+    view_labels = view_labels[idx_patient]
+    us_nums = us_nums[idx_patient].reset_index(drop=True)
+    df_embeds_only = df_embeds_only[idx_patient].reset_index(drop=True)
+    
+    # Sort data points by US number
+    patient_us_nums = us_nums.sort_values()
+    idx_sorted = patient_us_nums.index.tolist()
+    df_embeds_only = df_embeds_only[idx_sorted]
+    view_labels = view_labels[idx_sorted]
+
+    # Extract UMAP embeddings (for 1 patient)
+    umap_embeds_patient = get_umap_embeddings(df_embeds_only)
+
+    plot_umap(umap_embeds_patient,
+              patient_us_nums if color == "us_nums" else view_labels,
+              line=True,
+              legend=False if color == "us_nums" else True,
+              title=f"UMAP (patient {patient_selected}, colored by US number)",
+              palette="Blues" if color == "us_nums" else "tab20",
+              save=True,
+              filename=f"{model}_umap_single{'_raw' if raw else ''}"
+                       f"({color})")
+
+
+def plot_umap_for_n_patient(model, patients, df_embeds_only, n=3,
+                            raw=False):
+    """
+    Plots UMAP for images from N chosen patient, colored by patient.
+
+    Parameters
+    ----------
+    model : str
+        Name of model, or pretraining dataset used to pretrain model
+    patients : pd.Series
+        Contains all patient IDs
+    df_embeds_only : pd.DataFrame
+        Extracted deep embeddings. Does not have file paths in any column.
+    n : int
+        Number of patients to choose, by default 3
+    raw : bool, optional
+        If True, loaded embeddings extracted from raw images. Otherwise, uses
+        preprocessed images, by default False.
+    """
+    # NOTE: Extract UMAP embeddings for ALL patients
+    umap_embeds_all = get_umap_embeddings(df_embeds_only)
+
+    # Choose N patient
+    patients_selected = patients.unique()[:n]
+    
+    # Filter UMAP embeddings for the chosen patients
+    idx_patients = patients.isin(patients_selected)
+    umap_embeds_patients = umap_embeds_all[idx_patients]
+    patient_ids = patients[idx_patients]
+
+    plot_umap(umap_embeds_patients, patient_ids,
+              legend=True,
+              title=f"UMAP (patients {patients_selected}, "
+                    "colored by patient ID)",
+              save=True,
+              filename=f"{model}_umap{'_raw' if raw else ''}(patient_id)")
+
+
+def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
+    """
+    Plots images in UMAP clusters
+
+    Parameters
+    ----------
+    model : str
+        Name of model, or pretraining dataset used to pretrain model
+    filenames : pd.Series
+        Contains file name of image whose features were extracted
     df_embeds_only : pd.DataFrame
         Extracted deep embeddings. Does not have file paths in any column.
     raw : bool, optional
         If True, loaded embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
     """
-    # Plot sequentially by US nums for 1 patient
-    patient_selected = patients.unique()[0]
-    idx_patient = (patients == patient_selected)
-    
-    # Sort data points by US number. Re-extract UMAP embeddings (for 1 patient)
-    patient_us_nums = us_nums[idx_patient].reset_index(drop=True).sort_values()
-    idx_sorted = patient_us_nums.index.tolist()
-    umap_embeds_patient = get_umap_embeddings(
-        df_embeds_only[idx_patient][idx_sorted])
+    # Get UMAP embeddings
+    umap_embeds_all = get_umap_embeddings(df_embeds_only)
 
-    plot_umap(umap_embeds_patient, patient_us_nums, line=True, legend=False,
-              title=f"UMAP (patient {patient_selected}, colored by US number)",
-              palette="Blues", save=True,
-              filename=f"{model}_umap{'_raw' if raw else ''}(us_num)")
+    # Get cluster embeddings
+    cluster_labels = cluster_by_density(umap_embeds_all)
+
+    # Plot example images in each cluster 
+    for cluster in np.unique(cluster_labels):
+        # Filter by cluster, and sample 25 images
+        idx_cluster = (cluster_labels == cluster)
+        cluster_filenames = filenames[idx_cluster][:25]
+
+        print(f"""
+################################################################################
+#                              Cluster {cluster}                               #
+################################################################################
+        """)
+
+        # Add directory to image paths
+        cluster_img_paths = [constants.DIR_IMAGES + filename \
+            for filename in cluster_filenames]
+        
+        print("\n".join(cluster_img_paths))
+
+        # Load images
+        imgs = np.array([cv2.imread(path) for path in cluster_img_paths])
+
+        # Grid plot cluster images
+        gridplot_images(
+            imgs,
+            filename=f"{model}_cluster_{cluster}{'_raw' if raw else ''}",
+            title=f"Cluster {cluster}"
+            )
+
+    # Plot UMAP with cluster labels
+    plot_umap(umap_embeds_all, cluster_labels,
+              label_order=sorted(np.unique(cluster_labels)),
+              save=True,
+              title=f"UMAP (colored by cluster label)",
+              filename=f"{model}_umap{'_raw' if raw else ''}(clusted_labels)")
 
 
+
+################################################################################
+#                               Helper Functions                               #
+################################################################################
+def get_views_for_filenames(filenames, metadata_path=constants.METADATA_FILE):
+    """
+    Attempt to get view labels for all filenames given, using metadata file
+
+    Parameters
+    ----------
+    filenames : list or array-like or pandas.Series
+        List of filenames
+    metadata_path : str, optional
+        Path to metadata file, by default constants.METADATA_FILE
+
+    Returns
+    -------
+    numpy.array
+        List of view labels. For filenames not found, label will None.
+    """
+    df_labels = pd.read_csv(metadata_path).rename(
+        columns={"IMG_FILE": "filename", "revised_labels": "label"})
+
+    # Get mapping of filename to labels
+    filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))
+    view_labels = np.array([*map(filename_to_label.get, filenames)])
+
+    return view_labels
+
+
+def cluster_by_density(embeds):
+    """
+    Cluster embeddings by density.
+
+    Parameters
+    ----------
+    embeds : pd.Series or np.array
+        Extracted embeddings of the shape: (num_samples, num_features)
+
+    Returns
+    -------
+    np.array
+        Assigned cluster labels
+    """
+    clusters = DBSCAN().fit(embeds)
+    return clusters.labels_
+
+
+################################################################################
+#                                 Main Method                                  #
+################################################################################
 def main(model, raw=False):
     """
     Retrieves embeddings from specified pretrained model. Then plot UMAPs.
@@ -230,10 +407,6 @@ def main(model, raw=False):
         If True, loads embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
     """
-    # Load view labels
-    df_labels = pd.read_csv(METADATA_FILE).rename(
-        columns={"IMG_FILE": "filename", "revised_labels": "label"})
-
     # Load embeddings
     df_embeds = get_embeds(model, raw=raw)
     df_embeds = df_embeds.rename(columns={"paths": "files"})
@@ -242,28 +415,40 @@ def main(model, raw=False):
     df_embeds["filename"] = df_embeds["files"].map(lambda x: os.path.basename(x))
     filenames = df_embeds["filename"]
     patients = filenames.map(lambda x: x.split("_")[0])
+    patient_visits = filenames.map(lambda x: "_".join(x.split("_")[:2]))
     us_nums = filenames.map(lambda x: int(x.split("_")[-1].split(".jpg")[0]))
+
+    # Get view labels (if any) for all extracted images
+    view_labels = get_views_for_filenames(filenames)
 
     # Isolate UMAP embeddings (all patients)
     df_embeds_only = df_embeds.drop(columns=["files", "filename"])
 
-    # 1. Plot UMAP of all patients (SickKids and Stanford)
+    # 1. Plot UMAP of all patients, colored by hospital (SickKids / Stanford)
     plot_umap_all_patients(model, patients, df_embeds_only, color="hospital",
                            raw=raw)
 
     # 2. Plot UMAP of one patient, colored by number in sequence
-    plot_umap_for_one_patient(model, patients, us_nums, df_embeds_only, raw=raw)
+    plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
+                              df_embeds_only, color="us_nums", raw=raw)
+    plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
+                              df_embeds_only, color="views", raw=raw)
 
     # 3. Plot UMAP of SickKids patients, colored by view
-    plot_umap_by_view(model, df_labels, filenames, df_embeds_only,
-                      raw=raw)
+    plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw)
 
     # 4. Plot UMAP for one unique US sequence, colored by view
-    # NOTE: Filtering df_labels alone will cause filtering when making UMAP
-    plot_umap_by_view(model, df_labels, filenames, df_embeds_only, raw=raw,
+    # NOTE: Only keeps images with labels in provided df_labels
+    plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw,
                       single=True)
+
+    # 5. Plot UMAP for N patients, colored by patient ID
+    plot_umap_for_n_patient(model, patients, df_embeds_only, n=3, raw=raw)
+
+    # 6. Plot example images from UMAP clusters
+    plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False)
 
 
 if __name__ == '__main__':
-    for model in ("moco",):      # must be in constants.MODELS
+    for model in ("moco", "random"):      # must be in constants.MODELS
         main(model, raw=False)

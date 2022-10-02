@@ -166,39 +166,49 @@ def patient_imgs_to_gif(df_metadata, patient_idx=0, dir=None,
     imageio.mimsave(save_path, images, fps=2)
 
 
-def plot_example_images(ssl_dataloader):
+def gridplot_images(imgs, filename, title=None):
     """
-    Plot example images from a dataloader provided by the
-    SelfSupervisedDataModule.
+    Plot example images on a grid plot
 
     Parameters
     ----------
-    dataloader : torch.DataLoader
-        Dataloader that produces images and metadata.
+    example_imgs : np.array
+        Images to visualize
+    filename : str
+        Path to save figure to
+    title : str
+        Plot title, by default None
     """
-    example_imgs = None
-    # Sample 1 batch of images
-    for (x_q, _), curr_metadata in ssl_dataloader:
-        example_imgs = x_q.numpy()
-        break
+    # Determine number of images to plot
+    num_imgs_sqrt = int(np.sqrt(len(imgs)))
+    num_imgs = num_imgs_sqrt ** 2
 
     # Create grid plot
     fig = plt.figure(figsize=(8., 8.))
-    grid = ImageGrid(fig, 111,  # similar to subplot(111)
-                    nrows_ncols=(5, 5),  # creates 2x2 grid of axes
-                    axes_pad=0.01,  # pad between axes in inch.
-                    )
+    grid = ImageGrid(
+        fig, 111,
+        nrows_ncols=(num_imgs_sqrt, num_imgs_sqrt),
+        axes_pad=0.01,      # padding between axes
+    )
 
-    for ax, img_arr in zip(grid, example_imgs[:26]):
+    for ax, img_arr in zip(grid, imgs[:num_imgs]):
         # Set x and y axis to be invisible
         ax.axes.xaxis.set_visible(False)
         ax.axes.yaxis.set_visible(False)
+
+        # If first dimension is the channels, move to end
+        if img_arr.shape[0] in (1, 3):
+            img_arr = np.moveaxis(img_arr, 0, -1)
+
         # Add image to grid plot
-        ax.imshow(np.moveaxis(img_arr, 0, -1), cmap='gray', vmin=0, vmax=255)
+        ax.imshow(img_arr, cmap='gray', vmin=0, vmax=255)
+
+    # Set title
+    fig.suptitle(title)
 
     # Save images
     plt.tight_layout()
-    plt.save(constants.DIR_FIGURES + "/eda/example_images.png")
+    plt.savefig(constants.DIR_FIGURES + "/eda/" + filename)
 
 
 ################################################################################
@@ -366,6 +376,7 @@ def get_transition_matrix(df_metadata):
 
     return trans_matrix
 
+
 ################################################################################
 #                              One-Time Questions                              #
 ################################################################################
@@ -429,6 +440,25 @@ def are_labels_strictly_ordered(df_metadata):
     return not crossed_back.any()
 
 
+def plot_ssl_augmentations():
+    """
+    Plot example images of data augmented during self-supervised model training.
+    """
+    # Instantiate data module
+    df_metadata = load_metadata(extract=True)
+    data_module = SelfSupervisedUltrasoundDataModule(
+        df=df_metadata, dir=constants.DIR_IMAGES)
+
+    # Sample 1 batch of images
+    example_imgs = None
+    for (x_q, _), _ in data_module.train_dataloader():
+        example_imgs = x_q.numpy()
+        break
+
+    # Plot example images
+    gridplot_images(example_imgs, filename="example_ssl_augmentations.png")
+
+
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
@@ -454,11 +484,7 @@ if __name__ == '__main__':
     ############################################################################
     #                         Plot Example Images                              #
     ############################################################################
-    df_metadata = load_metadata(extract=True)
-    data_module = SelfSupervisedUltrasoundDataModule(
-        df=df_metadata, dir=constants.DIR_IMAGES)
-    plot_example_images(data_module.train_dataloader())
-
+    plot_ssl_augmentations()
 
     ############################################################################
     #                      Plot Distribution of Views                          #
