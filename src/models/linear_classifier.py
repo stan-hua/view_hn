@@ -50,7 +50,8 @@ class LinearClassifier(pl.LightningModule):
 
         # Save hyperparameters (now in self.hparams)
         self.save_hyperparameters("num_classes", "lr", "adam", "weight_decay", 
-                                  "momentum", "img_size", "backbone_output_dim")
+                                  "momentum", "img_size", "backbone_output_dim",
+                                  *list(kwargs.keys()))
 
         # Store convolutional backbone, and freeze its weights
         self.backbone = backbone

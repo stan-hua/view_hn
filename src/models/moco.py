@@ -67,8 +67,8 @@ class MoCo(pl.LightningModule):
 
         # Instantiate EfficientNet
         self.model_name = "efficientnet-b0"
-        self.backbone = torch.nn.Sequential(EfficientNet.from_name(
-            self.model_name, image_size=img_size, include_top=False))
+        self.backbone = EfficientNet.from_name(
+            self.model_name, image_size=img_size, include_top=False)
         self.feature_dim = 1280      # expected feature size from EfficientNetB0
 
         # Save hyperparameters (now in self.hparams)

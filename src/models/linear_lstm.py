@@ -62,7 +62,8 @@ class LinearLSTM(pl.LightningModule):
         self.save_hyperparameters("num_classes", "lr", "adam", "weight_decay", 
                                   "momentum", "img_size", "backbone_output_dim",
                                   "n_lstm_layers", "hidden_dim",
-                                  "bidirectional", "extract_features")
+                                  "bidirectional", "extract_features",
+                                  *list(kwargs.keys()))
 
         # Store convolutional backbone, and freeze its weights
         self.backbone = backbone

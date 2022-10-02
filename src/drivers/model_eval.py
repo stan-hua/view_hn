@@ -18,6 +18,7 @@ import seaborn as sns
 import torch
 import torchvision.transforms as T
 import yaml
+from efficientnet_pytorch import EfficientNet
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from torchvision.io import read_image, ImageReadMode
 from tqdm import tqdm
@@ -29,6 +30,8 @@ from src.data_prep import utils
 from src.data_viz.eda import print_table
 from src.models.efficientnet_pl import EfficientNetPL
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
+from src.models.linear_classifier import LinearClassifier
+from src.models.linear_lstm import LinearLSTM
 
 
 # Configure logging
@@ -55,32 +58,24 @@ IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 # Type of models
 MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other",
-               "five_view_seq_short", "five_view_seq_relative")
+               "five_view_seq_relative",
+               "five_view_moco", "five_view_moco_seq")
 
 ################################################################################
 #                               Paths Constants                                #
 ################################################################################
-# Checkpoint for a trained 5-view model
-CKPT_PATH_MULTI= constants.DIR_RESULTS + "/five_view/0/epoch=6-step=1392.ckpt"
-
-# Checkpoint for a trained binary-classifier model
-CKPT_PATH_BINARY = constants.DIR_RESULTS + \
-    "/binary_classifier/0/epoch=12-step=2586.ckpt"
-
-# Checkpoint for binary-classifier model trained with weighted loss
-CKPT_PATH_BINARY_WEIGHTED = constants.DIR_RESULTS + \
-    "/binary_classifier_weighted/0/epoch=11-step=2387.ckpt"
-
-# Checkpoint for 5-view (sequential) CNN-LSTM model
-CKPT_PATH_SEQUENTIAL = constants.DIR_RESULTS + \
-    "cnn_lstm_8/0/epoch=31-step=5023.ckpt"
-
-# Checkpoint for 5-view (sequential) CNN-LSTM model with relative side labels
-# CKPT_PATH_RELATIVE = constants.DIR_RESULTS + \
-#     "cnn_lstm_relative_side/0/epoch=6-step=279.ckpt"
-CKPT_PATH_RELATIVE = constants.DIR_RESULTS + \
-    "relative_side_grid_search(2022-09-21)/relative_side(2022-09-20_22-09)/" + \
-    "0/epoch=7-step=1255.ckpt"
+# Model type to checkpoint file
+MODEL_TYPE_TO_CKPT = {
+    "five_view": "/five_view/0/epoch=6-step=1392.ckpt",
+    "five_view_seq": "cnn_lstm_8/0/epoch=31-step=5023.ckpt",
+    "five_view_seq_w_other": "/five_view/0/epoch=6-step=1392.ckpt",
+    "five_view_seq_relative": "relative_side_grid_search(2022-09-21)/relative_side(2022-09-20_22-09)/0/epoch=7-step=1255.ckpt",
+    "binary" : "/binary_classifier/0/epoch=12-step=2586.ckpt",
+    # Checkpoint of MoCo Linear Classifier
+    "five_view_moco": "moco_linear_eval_4/0/last.ckpt",
+    # Checkpoint of MoCo LinearLSTM Classifier
+    "five_view_moco_seq": "moco_linear_lstm_eval_0/0/epoch=12-step=129.ckpt",
+}
 
 # Table to store/retrieve predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
@@ -108,6 +103,11 @@ def get_test_set_metadata(df_metadata, hparams, dir=constants.DIR_IMAGES):
     pandas.DataFrame
         Metadata of each image in the test set
     """
+    # NOTE: If data splitting parameters are not given, assume defaults
+    for split_params in ("train_val_split", "train_test_split"):
+        if split_params not in hparams:
+            hparams[split_params] = 0.75
+
     # Set up data
     dm = UltrasoundDataModule(df=df_metadata, dir=dir, **hparams)
     dm.setup()
@@ -895,10 +895,10 @@ def get_new_seq_numbers(df_pred):
     return df_pred
 
 
-def show_example_predictions(df_pred, n=5):
+def show_example_side_predictions(df_pred, n=5, relative_side=False):
     """
-    Given label sequences and their corresponding predictions (encoded as single
-    characters), print full label and prediction sequences with incorrect
+    Given label sequences and their corresponding side predictions (encoded as
+    single characters), print full label and prediction sequences with incorrect
     predictions colored red.
 
     Parameters
@@ -908,8 +908,13 @@ def show_example_predictions(df_pred, n=5):
         prediction, and other patient and sequence-related metadata.
     n : int
         Number of random unique sequences to show
+    relative_side : bool
+        If True, predicted labels must be relative side (e.g., Transverse_First)
     """
-    side_to_idx = side_to_idx = {"First": "1", "Second": "2", "None": "-",}
+    if relative_side:
+        side_to_idx = side_to_idx = {"First": "1", "Second": "2", "None": "-",}
+    else:
+        side_to_idx = side_to_idx = {"Left": "1", "Right": "2", "None": "-",}
     labels = df_pred.groupby(by=["id", "visit"]).apply(
         lambda df: "".join(df.sort_values(by=["seq_number"]).label.map(
             lambda x: side_to_idx[utils.extract_from_label(x, "side")]).tolist()))
@@ -936,10 +941,54 @@ def show_example_predictions(df_pred, n=5):
         print(colored_pred_str)
 
 
+def get_model_class(model_type):
+    """
+    Return model class and parameters, needed to load model class from
+    checkpoint.
+
+    Parameters
+    ----------
+    model_type : str
+        Name of model. Must be in MODEL_TYPES
+
+    Returns
+    -------
+    tuple of (cls, dict)
+        The first is reference to a class. Can be used to instantiate a model.
+        The second is a dict of parameters needed in cls.load_from_checkpoint.
+    """
+    assert model_type in MODEL_TYPES
+
+    # Parameters to pass into load_from_checkpoint
+    load_from_ckpt_params = {}
+
+    # Flags based on model name
+    moco = ("moco" in model_type)
+    sequential = ("seq" in model_type)
+
+    # Choose model class
+    if moco:
+        if sequential:
+            model_cls = LinearLSTM
+        else:
+            model_cls = LinearClassifier
+
+        # Backbone used in MoCo pretraining
+        load_from_ckpt_params["backbone"] = torch.nn.Sequential(
+            EfficientNet.from_name("efficientnet-b0", include_top=False))
+    elif sequential:
+        model_cls = EfficientNetLSTM
+    else:
+        model_cls = EfficientNetPL
+
+    return model_cls, load_from_ckpt_params
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
-def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
+def main_test_set(model_cls, checkpoint_path,
+                  load_from_ckpt_params=None,
                   save_path=TEST_PRED_PATH, sequential=False,
                   include_unlabeled=False, seq_number_limit=None,
                   relative_side=False):
@@ -950,9 +999,10 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
     ----------
     model_cls : class reference
         Used to load specific model from checkpoint path
-    checkpoint_path : str, optional
-        Path to file containing EfficientNetPL model checkpoint, by default
-        CKPT_PATH_MULTI
+    checkpoint_path : str
+        Path to file containing EfficientNetPL model checkpoint
+    load_from_ckpt_params : dict, optional
+        Additional keyword parameters to pass into load_from_checkpoint
     save_path : str, optional
         Path to file to save test results to, by default TEST_PRED_PATH
     sequential : bool, optional
@@ -990,7 +1040,9 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
                                                     ignore_index=True)
 
     # 3. Load existing model and send to device
-    model = model_cls.load_from_checkpoint(checkpoint_path)
+    model = model_cls.load_from_checkpoint(
+        checkpoint_path,
+        **(load_from_ckpt_params if load_from_ckpt_params else {}))
     model = model.to(DEVICE)
 
     # 4. Get predictions on test set
@@ -1019,9 +1071,9 @@ def main_test_set(model_cls, checkpoint_path=CKPT_PATH_MULTI,
 
 if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
-    CKPT_PATH = CKPT_PATH_RELATIVE
     MODEL_TYPE = MODEL_TYPES[-1]
-    MODEL_TYPE += "_old"
+    ckpt_path = constants.DIR_RESULTS + MODEL_TYPE_TO_CKPT[MODEL_TYPE]
+
     # Flag for relative side encoding
     relative_side = ("relative" in MODEL_TYPE)
 
@@ -1031,21 +1083,14 @@ if __name__ == '__main__':
     # Inference on test set
     if not os.path.exists(test_save_path):
         # Get model class based on model type
-        sequential = ("seq" in MODEL_TYPE)
-        if sequential:
-            model_cls = EfficientNetLSTM
-        else:
-            model_cls = EfficientNetPL
-        
-        # Includes other
-        include_unlabeled = ("other" in MODEL_TYPE)
-        # Shortens sequences longer than 40
-        seq_number_limit = 40 if "short" in MODEL_TYPE else None
+        model_cls, load_ckpt_params = get_model_class(MODEL_TYPE)
 
-        main_test_set(model_cls, CKPT_PATH, test_save_path,
-                      sequential=sequential,
-                      include_unlabeled=include_unlabeled,
-                      seq_number_limit=seq_number_limit,
+        # Perform inference
+        main_test_set(model_cls, ckpt_path, load_ckpt_params,
+                      save_path=test_save_path,
+                      sequential=("seq" in MODEL_TYPE),
+                      include_unlabeled=("other" in MODEL_TYPE),
+                      seq_number_limit=40 if "short" in MODEL_TYPE else None,
                       relative_side=relative_side)
 
     # Load test metadata
@@ -1056,9 +1101,13 @@ if __name__ == '__main__':
         # Print reasons for misclassification of most confident predictions
         check_misclassifications(df_pred, relative_side=relative_side)
 
-        # Plot/Print confusion matrix
+        # Plot confusion matrix for most confident predictions
         plot_confusion_matrix(df_pred, filter_confident=True,
                               relative_side=relative_side)
+        # Plot confusion matrix for all predictions
+        plot_confusion_matrix(df_pred, filter_confident=False,
+                              relative_side=relative_side)
+        # Print confusion matrix for all predictions
         print_confusion_matrix(
             df_pred, constants.CLASSES["relative" if relative_side else ""])
 
@@ -1075,8 +1124,8 @@ if __name__ == '__main__':
         if relative_side:
             check_rel_side_pred_progression(df_pred)
 
-        # Show randomly chosen predictions for full sequences
-        show_example_predictions(df_pred)
+        # Show randomly chosen side predictions for full sequences
+        show_example_side_predictions(df_pred, relative_side=relative_side)
 
     # Bladder vs. Other models
     if "binary" in MODEL_TYPE:
