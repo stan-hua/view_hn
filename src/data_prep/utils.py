@@ -24,13 +24,13 @@ from src.data import constants
 #                               Metadata Related                               #
 ################################################################################
 def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
-                  include_unlabeled=False, relative_side=False, dir=None):
+                  include_unlabeled=False, relative_side=False, img_dir=None):
     """
     Load SickKids metadata table with filenames and view labels.
 
     Note
     ----
-    If <include_unlabeled> specified, <dir> must be provided.
+    If <include_unlabeled> specified, <img_dir> must be provided.
 
     If <relative_side> is True, the following examples happens:
         - [Saggital_Left, Transverse_Right, Bladder] ->
@@ -49,8 +49,8 @@ def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
         If True, converts side (Left/Right) to order in which side appeared
         (First/Second/None). Requires <extract> to be True, by default False.
     include_unlabeled : bool, optional
-        If True, include all unlabeled images in <dir>, by default False.
-    dir : str, optional
+        If True, include all unlabeled images in <img_dir>, by default False.
+    img_dir : str, optional
         Directory containing unlabeled (and labeled) images.
 
     Returns
@@ -65,10 +65,10 @@ def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
 
     # If specified, include unlabeled images in directory provided
     if include_unlabeled:
-        assert dir is not None, "Please provide `dir` as an argument!"
+        assert img_dir is not None, "Please provide `img_dir` as an argument!"
 
         # Get all image paths
-        all_img_paths = glob.glob(os.path.join(dir, "*"))
+        all_img_paths = glob.glob(os.path.join(img_dir, "*"))
         df_others = pd.DataFrame({"filename": all_img_paths})
         df_others.filename = df_others.filename.map(os.path.basename)
         
@@ -102,13 +102,13 @@ def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
 
 def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
                            include_unlabeled=False, relative_side=False,
-                           dir=None):
+                           img_dir=None):
     """
     Load Stanford metadata table with filenames and view labels.
 
     Note
     ----
-    If <include_unlabeled> specified, <dir> must be provided.
+    If <include_unlabeled> specified, <img_dir> must be provided.
 
     If <relative_side> is True, the following examples happens:
         - [Saggital_Left, Transverse_Right, Bladder] ->
@@ -127,8 +127,8 @@ def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
         If True, converts side (Left/Right) to order in which side appeared
         (First/Second/None). Requires <extract> to be True, by default False.
     include_unlabeled : bool, optional
-        If True, include all unlabeled images in <dir>, by default False.
-    dir : str, optional
+        If True, include all unlabeled images in <img_dir>, by default False.
+    img_dir : str, optional
         Directory containing unlabeled (and labeled) images.
 
     Returns
@@ -141,10 +141,10 @@ def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
 
     # If specified, include unlabeled images in directory provided
     if include_unlabeled:
-        assert dir is not None, "Please provide `dir` as an argument!"
+        assert img_dir is not None, "Please provide `img_dir` as an argument!"
 
         # Get all image paths
-        all_img_paths = glob.glob(os.path.join(dir, "*"))
+        all_img_paths = glob.glob(os.path.join(img_dir, "*"))
         df_others = pd.DataFrame({"filename": all_img_paths})
         df_others.filename = df_others.filename.map(os.path.basename)
         

@@ -78,7 +78,7 @@ def plot_hist_of_view_labels(df_metadata):
     return ax
 
 
-def patient_imgs_to_gif(df_metadata, patient_idx=0, dir=None,
+def patient_imgs_to_gif(df_metadata, patient_idx=0, img_dir=None,
                         save_path=None):
     """
     Saves a patient's US sequence to GIF. Patient is specified by their
@@ -97,15 +97,15 @@ def patient_imgs_to_gif(df_metadata, patient_idx=0, dir=None,
     patient_idx : int
         Relative positional index of unique patient-visit in df_metadata, by
         default 0
-    dir : str, optional
+    img_dir : str, optional
         Path to directory containing images, by default None
     save_path : str, optional
         Path and filename to save gif as, by default
         constants.DIR_FIGURES+"/predictions/us_patient_{id}_visit_{visit}.gif"
     """
     # Adds directory if specified
-    if dir:
-        df_metadata["filename"] = dir + "/" + df_metadata["filename"]
+    if img_dir:
+        df_metadata["filename"] = img_dir + "/" + df_metadata["filename"]
 
     # Get unique patient-visit sequences
     unique_seqs = np.unique(df_metadata[["id", "visit"]].to_numpy(), axis=0)
@@ -156,12 +156,12 @@ def patient_imgs_to_gif(df_metadata, patient_idx=0, dir=None,
         images.append(img)
 
     if save_path is None:
-        # Make dir if not exists
-        dir = constants.DIR_FIGURES + "/predictions/"
-        if not os.path.exists(dir):
-            os.mkdir(dir)
+        # Make img_dir if not exists
+        img_dir = constants.DIR_FIGURES + "/predictions/"
+        if not os.path.exists(img_dir):
+            os.mkdir(img_dir)
 
-        save_path = dir + f"/us_patient_{patient_id}_visit_{visit}.gif"
+        save_path = img_dir + f"/us_patient_{patient_id}_visit_{visit}.gif"
 
     imageio.mimsave(save_path, images, fps=2)
 
@@ -447,7 +447,7 @@ def plot_ssl_augmentations():
     # Instantiate data module
     df_metadata = load_metadata(extract=True)
     data_module = SelfSupervisedUltrasoundDataModule(
-        df=df_metadata, dir=constants.DIR_IMAGES)
+        df=df_metadata, img_dir=constants.DIR_IMAGES)
 
     # Sample 1 batch of images
     example_imgs = None
@@ -490,7 +490,7 @@ if __name__ == '__main__':
     #                      Plot Distribution of Views                          #
     ############################################################################
     df_metadata = load_metadata(extract=True, include_unlabeled=True,
-                                dir=constants.DIR_IMAGES)
+                                img_dir=constants.DIR_IMAGES)
     plot_hist_of_view_labels(df_metadata)
     plt.tight_layout()
     plt.show()
@@ -513,5 +513,5 @@ if __name__ == '__main__':
     #                          Transition Matrix                               #
     ############################################################################
     df_metadata = load_metadata(extract=True, include_unlabeled=True,
-                                dir=constants.DIR_IMAGES)
+                                img_dir=constants.DIR_IMAGES)
     get_transition_matrix(df_metadata)

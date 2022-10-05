@@ -37,13 +37,13 @@ IMAGE_MODES = {1: ImageReadMode.GRAY, 3: ImageReadMode.RGB}
 ################################################################################
 #                                Main Functions                                #
 ################################################################################
-def load_dataset_from_dir(dir, full_seq=True):
+def load_dataset_from_dir(img_dir, full_seq=True):
     """
     Loads image dataset from directory of images.
 
     Parameters
     ----------
-    dir : str
+    img_dir : str
         Path to directory containing ultrasound images.
     full_seq : str
         If True, groups ultrasound images by unique patient-visits, by default
@@ -54,10 +54,10 @@ def load_dataset_from_dir(dir, full_seq=True):
     torch.utils.data.Dataset
         Contains images and metadata from filename
     """
-    return UltrasoundDatasetDir(dir, img_size=None, full_seq=full_seq)
+    return UltrasoundDatasetDir(img_dir, img_size=None, full_seq=full_seq)
 
 
-def load_dataset_from_dataframe(df, dir=None, full_seq=True):
+def load_dataset_from_dataframe(df, img_dir=None, full_seq=True):
     """
     Loads image dataset from dataframe of image paths and labels.
 
@@ -65,7 +65,7 @@ def load_dataset_from_dataframe(df, dir=None, full_seq=True):
     ----------
     df : pd.DataFrame
         Contains column with absolute/relative path to images, and labels
-    dir : str, optional
+    img_dir : str, optional
         Path to directory containing ultrasound images, by default None.
     full_seq : str
         If True, groups ultrasound images by unique patient-visits, by default
@@ -76,7 +76,7 @@ def load_dataset_from_dataframe(df, dir=None, full_seq=True):
     torch.utils.data.Dataset
         Contains images, metadata from filename, and labels from dataframe
     """
-    return UltrasoundDatasetDataFrame(df, dir=dir, full_seq=full_seq)
+    return UltrasoundDatasetDataFrame(df, img_dir=img_dir, full_seq=full_seq)
 
 
 ################################################################################
@@ -87,14 +87,14 @@ class UltrasoundDataModule(pl.LightningDataModule):
     Top-level object used to access all data preparation and loading
     functionalities.
     """
-    def __init__(self, dataloader_params=None, df=None, dir=None,
+    def __init__(self, dataloader_params=None, df=None, img_dir=None,
                  full_seq=False, mode=3, **kwargs):
         """
         Initialize UltrasoundDataModule object.
 
         Note
         ----
-        Either df or dir must be exclusively specified to load in data.
+        Either df or img_dir must be exclusively specified to load in data.
 
         By default, does not split data.
 
@@ -105,7 +105,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         df : pd.DataFrame, optional
             Contains paths to image files and labels for each image, by default
             None
-        dir : str, optional
+        img_dir : str, optional
             Path to directory containing ultrasound images, by default None
         full_seq : bool, optional
             If True, each item has all ordered images for one full
@@ -133,7 +133,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
 
         # Used to instantiate UltrasoundDataset
         self.df = df
-        self.dir = dir
+        self.img_dir = img_dir
         self.dataset = None
         self.full_seq = full_seq
         self.mode = mode
@@ -142,14 +142,14 @@ class UltrasoundDataModule(pl.LightningDataModule):
 
         # Get image paths, patient IDs, and labels (and visit)
         if self.df is not None:
-            if dir:
+            if img_dir:
                 df["filename"] = df["filename"].map(
-                    lambda x: os.path.join(dir, x))
+                    lambda x: os.path.join(img_dir, x))
             self.img_paths = df["filename"].to_numpy()
             self.labels = df["label"].to_numpy()
             self.patient_ids = utils.get_from_paths(self.img_paths)
         else:
-            self.img_paths = np.array(glob.glob(os.path.join(dir, "*")))
+            self.img_paths = np.array(glob.glob(os.path.join(img_dir, "*")))
             self.labels = np.array([None] * len(self.img_paths))
             self.patient_ids = utils.get_from_paths(self.img_paths)
 
@@ -250,7 +250,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         utils.extract_data_from_filename(df_train)
 
         # Instantiate UltrasoundDatasetDataFrame
-        train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir,
+        train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
                                                    self.full_seq,
                                                    img_size=self.img_size,
                                                    mode=self.mode)
@@ -277,7 +277,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         # Add metadata for patient ID, visit number and sequence number
         utils.extract_data_from_filename(df_val)
 
-        val_dataset = UltrasoundDatasetDataFrame(df_val, self.dir,
+        val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
                                                  self.full_seq,
                                                  img_size=self.img_size,
                                                  mode=self.mode)
@@ -304,7 +304,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         # Add metadata for patient ID, visit number and sequence number
         utils.extract_data_from_filename(df_test)
 
-        test_dataset = UltrasoundDatasetDataFrame(df_test, self.dir,
+        test_dataset = UltrasoundDatasetDataFrame(df_test, self.img_dir,
                                                   self.full_seq,
                                                   img_size=self.img_size,
                                                   mode=self.mode)
@@ -386,14 +386,14 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
     Top-level object used to access all data preparation and loading
     functionalities in the self-supervised setting.
     """
-    def __init__(self, dataloader_params=None, df=None, dir=None,
+    def __init__(self, dataloader_params=None, df=None, img_dir=None,
                  full_seq=False, mode=3, **kwargs):
         """
         Initialize SelfSupervisedUltrasoundDataModule object.
 
         Note
         ----
-        Either df or dir must be exclusively specified to load in data.
+        Either df or img_dir must be exclusively specified to load in data.
 
         By default, does not split data.
 
@@ -404,7 +404,7 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
         df : pd.DataFrame, optional
             Contains paths to image files and labels for each image, by default
             None
-        dir : str, optional
+        img_dir : str, optional
             Path to directory containing ultrasound images, by default None
         full_seq : bool, optional
             If True, each item has all ordered images for one full
@@ -436,7 +436,7 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
             default_dataloader_params.update(dataloader_params)
 
         # Pass UltrasoundDataModule arguments
-        super().__init__(default_dataloader_params, df, dir, full_seq, mode,
+        super().__init__(default_dataloader_params, df, img_dir, full_seq, mode,
                          **kwargs)
         self.val_dataloader_params['batch_size'] = \
             default_dataloader_params["batch_size"]
@@ -460,7 +460,7 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
         utils.extract_data_from_filename(df_train)
 
         # Instantiate UltrasoundDatasetDataFrame
-        train_dataset = UltrasoundDatasetDataFrame(df_train, self.dir,
+        train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
                                                    self.full_seq,
                                                    img_size=self.img_size,
                                                    mode=self.mode)
@@ -503,7 +503,7 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
         # Add metadata for patient ID, visit number and sequence number
         utils.extract_data_from_filename(df_val)
 
-        val_dataset = UltrasoundDatasetDataFrame(df_val, self.dir,
+        val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
                                                  self.full_seq,
                                                  img_size=self.img_size,
                                                  mode=self.mode)
@@ -607,13 +607,13 @@ class UltrasoundDatasetDir(UltrasoundDataset):
     """
     Dataset to load images from a directory.
     """
-    def __init__(self, dir, full_seq=False, img_size=None, mode=3):
+    def __init__(self, img_dir, full_seq=False, img_size=None, mode=3):
         """
         Initialize KidneyDatasetDir object.
 
         Parameters
         ----------
-        dir : str
+        img_dir : str
             Path to flat directory containing ultrasound images.
         full_seq : bool, optional
             If True, each item returned is a full ultrasound sequence with shape
@@ -631,7 +631,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         self.mode = IMAGE_MODES[mode]
 
         # Get all images in flat directory
-        self.paths = np.array(glob.glob(os.path.join(dir, "*")))
+        self.paths = np.array(glob.glob(os.path.join(img_dir, "*")))
 
         # Get all patient IDs
         self.ids = np.array(utils.get_from_paths(self.paths))
@@ -760,7 +760,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     """
     Dataset to load images and labels from a DataFrame.
     """
-    def __init__(self, df, dir=None, full_seq=False, img_size=None, mode=3):
+    def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3):
         """
         Initialize KidneyDatasetDataFrame object.
 
@@ -772,7 +772,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         ----------
         df : pd.DataFrame
             Contains path to images and labels.
-        dir : str, optional
+        img_dir : str, optional
             If provided, uses paths in dataframe as relative paths find
             ultrasound images, by default None.
         full_seq : bool, optional
@@ -792,10 +792,10 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         self.mode = IMAGE_MODES[mode]
 
         # Get paths to images. Add directory to path, if not already in.
-        if dir:
-            has_path = df.filename.map(lambda x: dir in x)
+        if img_dir:
+            has_path = df.filename.map(lambda x: img_dir in x)
             df.loc[~has_path, "filename"] = df.loc[~has_path, "filename"].map(
-                lambda x: os.path.join(dir, x))
+                lambda x: os.path.join(img_dir, x))
         self.paths = df["filename"].to_numpy()
 
         # Get labels

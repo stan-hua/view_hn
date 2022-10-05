@@ -138,11 +138,11 @@ class GridSearch:
         pandas.DataFrame
             Contains hyperparameters on each row
         """
-        dirs_ = self.get_training_dirs()
+        result_directories = self.get_training_dirs()
 
         df_accum = pd.DataFrame()
-        for dir_ in dirs_:
-            _hyperparams = get_hyperparams(dir_)
+        for result_dir in result_directories:
+            _hyperparams = get_hyperparams(result_dir)
             row = pd.DataFrame([_hyperparams], index=[0])
             df_accum = pd.concat([df_accum, row])
 
@@ -165,20 +165,21 @@ class GridSearch:
             Absolute paths to each directory in the grid search directory
         """
         temp_folders = []
-        for dir in glob(f"{RESULTS_DIR}/*"):
-            if ("grid_search" not in dir) and (self.model_name in dir):
-                temp_folders.append(dir)
+        for result_dir in glob(f"{RESULTS_DIR}/*"):
+            if ("grid_search" not in result_dir) and \
+                    (self.model_name in result_dir):
+                temp_folders.append(result_dir)
 
         # Move folders to grid search directory
-        for dir in temp_folders:
-            shutil.move(dir, self.grid_search_dir)
+        for result_dir in temp_folders:
+            shutil.move(result_dir, self.grid_search_dir)
 
         # Get list of model directory names
         model_dirs = []
-        for dir in glob(f"{self.grid_search_dir}/*"):
-            if "." in dir or "csv" in dir or "json" in dir:
+        for result_dir in glob(f"{self.grid_search_dir}/*"):
+            if "." in result_dir or "csv" in result_dir or "json" in result_dir:
                 continue
-            model_dirs.append(dir)
+            model_dirs.append(result_dir)
 
         return model_dirs
 
@@ -197,20 +198,20 @@ class GridSearch:
         result_directories = self.get_training_dirs()
 
         df_accum = pd.DataFrame()
-        for dir_ in result_directories:
-            df = aggregate_fold_histories(dir_)
+        for result_dir in result_directories:
+            df = aggregate_fold_histories(result_dir)
 
             best_score = min(df[f"val_{self.metric}"]) if self.metric == 'loss' else max(df[f"val_{self.metric}"])
             df_best_epoch = df[df[f"val_{self.metric}"] == best_score]
 
             # Add in parameters
-            params = get_hyperparams(dir_)
+            params = get_hyperparams(result_dir)
             for key in params:
-                if key == "insert_where" and datetime.strptime(dir_.split('_')[-2], "%Y-%m-%d").day < 8:
+                if key == "insert_where" and datetime.strptime(result_dir.split('_')[-2], "%Y-%m-%d").day < 8:
                     params[key] = 0
                 df_best_epoch[key] = params[key]
 
-            df_best_epoch["dir"] = dir_
+            df_best_epoch["dir"] = result_dir
             df_accum = pd.concat([df_accum, df_best_epoch])
 
         return df_accum
@@ -296,13 +297,13 @@ class GridSearch:
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
-def aggregate_fold_histories(dir: str):
+def aggregate_fold_histories(result_dir: str):
     """
     Averages the metric of interest for each epoch, across folds.
 
     Parameters
     ----------
-    dir : str
+    result_dir : str
         Path to model training directory
 
     Returns
@@ -310,7 +311,7 @@ def aggregate_fold_histories(dir: str):
     pandas.DataFrame
         Contains the averaged values per epoch
     """
-    histories = glob(f"{dir}/*/history.csv")
+    histories = glob(f"{result_dir}/*/history.csv")
 
     df = pd.DataFrame()
     for history in histories:
@@ -333,7 +334,7 @@ def aggregate_fold_histories(dir: str):
     return df
 
 
-def get_hyperparams(dir: str):
+def get_hyperparams(result_dir: str):
     """
     Get hyperparameters from a training directory.
 
@@ -342,7 +343,7 @@ def get_hyperparams(dir: str):
     dict
         Contains hyperparameters from run
     """
-    hparam_paths = list(Path(dir).rglob("hparams.yaml"))
+    hparam_paths = list(Path(result_dir).rglob("hparams.yaml"))
 
     if not hparam_paths:
         return None

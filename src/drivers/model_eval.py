@@ -84,7 +84,7 @@ TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
 ################################################################################
 #                             Inference - Related                              #
 ################################################################################
-def get_test_set_metadata(df_metadata, hparams, dir=constants.DIR_IMAGES):
+def get_test_set_metadata(df_metadata, hparams, img_dir=constants.DIR_IMAGES):
     """
     Get metadata table containing (filename, label) for each image in the test
     set.
@@ -95,7 +95,7 @@ def get_test_set_metadata(df_metadata, hparams, dir=constants.DIR_IMAGES):
         Each row contains metadata for an ultrasound image.
     hparams : dict
         Hyperparameters used in model training run, used to load exact test set.
-    dir : str, optional
+    img_dir : str, optional
         Path to directory containing metadata, by default constants.DIR_IMAGES
 
     Returns
@@ -109,7 +109,7 @@ def get_test_set_metadata(df_metadata, hparams, dir=constants.DIR_IMAGES):
             hparams[split_params] = 0.75
 
     # Set up data
-    dm = UltrasoundDataModule(df=df_metadata, dir=dir, **hparams)
+    dm = UltrasoundDataModule(df=df_metadata, img_dir=img_dir, **hparams)
     dm.setup()
 
     # Get filename and label of test set data from data module
@@ -125,7 +125,7 @@ def get_test_set_metadata(df_metadata, hparams, dir=constants.DIR_IMAGES):
     return df_test
 
 
-def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
+def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES):
     """
     Performs inference on images specified. Returns predictions, probabilities
     and raw model output.
@@ -136,7 +136,7 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
         A trained PyTorch model.
     filenames : np.array or array-like
         Filenames (or full paths) to images to infer on.
-    dir : str, optional
+    img_dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
 
     Returns
@@ -155,7 +155,7 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
         outs = []
 
         for filename in tqdm(filenames):
-            img_path = filename if dir is None else f"{dir}/{filename}"
+            img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
             # Load image as expected by model
             img = read_image(img_path, ImageReadMode.RGB)
@@ -187,7 +187,7 @@ def predict_on_images(model, filenames, dir=constants.DIR_IMAGES):
     return np.array(preds), np.array(probs), np.array(outs)
 
 
-def predict_on_sequences(model, filenames, dir=constants.DIR_IMAGES):
+def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES):
     """
     Performs inference on a full ultrasound sequence specified. Returns
     predictions, probabilities and raw model output.
@@ -198,7 +198,7 @@ def predict_on_sequences(model, filenames, dir=constants.DIR_IMAGES):
         A trained PyTorch model.
     filenames : np.array or array-like
         Filenames (or full paths) to images from one unique sequence to infer.
-    dir : str, optional
+    img_dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
 
     Returns
@@ -214,7 +214,7 @@ def predict_on_sequences(model, filenames, dir=constants.DIR_IMAGES):
     with torch.no_grad():
         imgs = []
         for filename in filenames:
-            img_path = filename if dir is None else f"{dir}/{filename}"
+            img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
             # Load image as expected by model
             img = read_image(img_path, ImageReadMode.RGB)
@@ -1020,7 +1020,7 @@ def main_test_set(model_cls, checkpoint_path,
     # 2.0 Get image filenames and labels
     df_metadata = utils.load_metadata(
         extract=True,
-        include_unlabeled=include_unlabeled, dir=constants.DIR_IMAGES,
+        include_unlabeled=include_unlabeled, img_dir=constants.DIR_IMAGES,
         relative_side=relative_side)
 
     # 2.1 Get hyperparameters for run
@@ -1049,12 +1049,12 @@ def main_test_set(model_cls, checkpoint_path,
     if not sequential:
         filenames = df_test_metadata.filename.tolist()
         preds, probs, outs = predict_on_images(model=model, filenames=filenames,
-                                               dir=None)
+                                               img_dir=None)
     else:
         # Perform inference one sequence at a time
         ret = df_test_metadata.groupby(by=["id", "visit"]).progress_apply(
             lambda df: predict_on_sequences(
-                model=model, filenames=df.filename.tolist(), dir=None)
+                model=model, filenames=df.filename.tolist(), img_dir=None)
         )
 
         # Flatten predictions, probs and model outputs from all sequences

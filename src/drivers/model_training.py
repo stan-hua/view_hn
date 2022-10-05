@@ -299,7 +299,7 @@ def main(args):
         'pin_memory': args.pin_memory,
     }
     dm = data_module_cls(dataloader_params, df=df_metadata,
-                         dir=constants.DIR_IMAGES, **hparams)
+                         img_dir=constants.DIR_IMAGES, **hparams)
     dm.setup()
 
     # 3. Specify model class

@@ -86,14 +86,14 @@ class ImageEmbedder:
 
         return features
 
-    def predict_dir_tf(self, dir, save_path):
+    def predict_dir_tf(self, img_dir, save_path):
         """
         Extract embeddings for all images in the directory, using Tensorflow
         data loading libraries.
 
         Parameters
         ----------
-        dir : str
+        img_dir : str
             Path to directory containing images
         save_path : str
             File path to save embeddings at. Saved as h5 file.
@@ -129,7 +129,8 @@ class ImageEmbedder:
             "Provided model is not a Tensorflow model!"
 
         # Get file paths
-        files_ds = tf.data.Dataset.list_files(dir + "/*", shuffle=False)
+        files_ds = tf.data.Dataset.list_files(
+            os.path.join(img_dir, "*"), shuffle=False)
 
         # Get images from file paths
         img_ds = files_ds.map(process_path, num_parallel_calls=tf.data.AUTOTUNE)
@@ -146,14 +147,14 @@ class ImageEmbedder:
         df_features["files"] = df_features["files"].str.decode("utf-8")
         df_features.to_hdf(save_path, "embeds")
 
-    def predict_dir_torch(self, dir, save_path):
+    def predict_dir_torch(self, img_dir, save_path):
         """
         Extract embeddings for all images in the directory, using PyTorch
         libraries.
 
         Parameters
         ----------
-        dir : str
+        img_dir : str
             Path to directory containing images
         save_path : str
             File path to save embeddings at. Saved as h5 file.
@@ -164,12 +165,12 @@ class ImageEmbedder:
             Contains a column for the path to the image file. Other columns are
             embedding columns
         """
-        assert os.path.isdir(dir), "Path provided does not lead to a directory!"
+        assert os.path.isdir(img_dir), "Path provided does not lead to a directory!"
         assert isinstance(self.model, torch.nn.Module), \
             "Provided model is not a PyTorch model!"
 
         # Load data
-        data_module = UltrasoundDataModule(dir=dir, mode=3)
+        data_module = UltrasoundDataModule(img_dir=img_dir, mode=3)
         data_module.setup()
         # NOTE: Extracting embeds from all images in directory
         dataset = data_module.train_dataloader()
