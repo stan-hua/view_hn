@@ -348,7 +348,7 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
-def get_views_for_filenames(filenames, metadata_path=constants.METADATA_FILE):
+def get_views_for_filenames(filenames, metadata_path=constants.SK_METADATA_FILE):
     """
     Attempt to get view labels for all filenames given, using metadata file
 
@@ -430,17 +430,14 @@ def main(model, raw=False):
 
     # 2. Plot UMAP of one patient, colored by number in sequence
     plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
-                              df_embeds_only, color="us_nums", raw=raw)
-    plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
-                              df_embeds_only, color="views", raw=raw)
-
-    # 3. Plot UMAP of SickKids patients, colored by view
-    plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw)
-
-    # 4. Plot UMAP for one unique US sequence, colored by view
+                                  df_embeds_only, color="us_nums", raw=raw)
+    # 3. Plot UMAP for one unique US sequence, colored by view
     # NOTE: Only keeps images with labels in provided df_labels
-    plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw,
-                      single=True)
+    plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
+                                  df_embeds_only, color="views", raw=raw)
+
+    # 4. Plot UMAP of SickKids patients, colored by view
+    plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw)
 
     # 5. Plot UMAP for N patients, colored by patient ID
     plot_umap_for_n_patient(model, patients, df_embeds_only, n=3, raw=raw)
@@ -450,5 +447,5 @@ def main(model, raw=False):
 
 
 if __name__ == '__main__':
-    for model in ("moco", "random"):      # must be in constants.MODELS
+    for model in ("random",):      # must be in constants.MODELS
         main(model, raw=False)

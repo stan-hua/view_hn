@@ -10,9 +10,11 @@ import glob
 import os
 
 # Non-standard libraries
+import cv2
 import numpy as np
 import pandas as pd
 from sklearn.utils import shuffle
+from skimage.exposure import equalize_hist
 
 # Custom libraries
 from src.data import constants
@@ -21,10 +23,10 @@ from src.data import constants
 ################################################################################
 #                               Metadata Related                               #
 ################################################################################
-def load_metadata(path=constants.METADATA_FILE, extract=False,
+def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
                   include_unlabeled=False, relative_side=False, dir=None):
     """
-    Load metadata table with filenames and view labels.
+    Load SickKids metadata table with filenames and view labels.
 
     Note
     ----
@@ -39,7 +41,7 @@ def load_metadata(path=constants.METADATA_FILE, extract=False,
     Parameters
     ----------
     path : str, optional
-        Path to CSV metadata file, by default constants.METADATA_FILE
+        Path to CSV metadata file, by default constants.SK_METADATA_FILE
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -74,8 +76,84 @@ def load_metadata(path=constants.METADATA_FILE, extract=False,
         labeled_img_paths = set(df_metadata.filename.tolist())
         df_others = df_others[~df_others.filename.isin(labeled_img_paths)]
 
-        # Remove external data
+        # Exclude Stanford data
         df_others = df_others[~df_others.filename.str.startswith("SU2")]
+
+        # NOTE: Unlabeled images have label "Other"
+        df_others["label"] = "Other"
+        
+        # Merge labeled and unlabeled data
+        df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
+
+    if extract:
+        extract_data_from_filename(df_metadata)
+
+        # Convert side (in label) to order of relative appearance (First/Second)
+        if relative_side:
+            df_metadata = df_metadata.sort_values(
+                by=["id", "visit", "seq_number"])
+            relative_labels = df_metadata.groupby(by=["id", "visit"])\
+                .apply(lambda df: pd.Series(make_side_label_relative(
+                    df.label.tolist()))).to_numpy()
+            df_metadata["label"] = relative_labels
+
+    return df_metadata
+
+
+def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
+                           include_unlabeled=False, relative_side=False,
+                           dir=None):
+    """
+    Load Stanford metadata table with filenames and view labels.
+
+    Note
+    ----
+    If <include_unlabeled> specified, <dir> must be provided.
+
+    If <relative_side> is True, the following examples happens:
+        - [Saggital_Left, Transverse_Right, Bladder] ->
+                [Saggital_First, Transverse_Second, Bladder]
+        - [Saggital_Right, Transverse_Left, Bladder] ->
+                [Saggital_First, Transverse_Second, Bladder]
+
+    Parameters
+    ----------
+    path : str, optional
+        Path to CSV metadata file, by default constants.STANFORD_METADATA_FILE
+    extract : bool, optional
+        If True, extracts patient ID, US visit, and sequence number from the
+        filename, by default False.
+    relative_side : bool, optional
+        If True, converts side (Left/Right) to order in which side appeared
+        (First/Second/None). Requires <extract> to be True, by default False.
+    include_unlabeled : bool, optional
+        If True, include all unlabeled images in <dir>, by default False.
+    dir : str, optional
+        Directory containing unlabeled (and labeled) images.
+
+    Returns
+    -------
+    pandas.DataFrame
+        May contain metadata (filename, view label, patient id, visit, sequence
+        number).
+    """
+    df_metadata = pd.read_csv(path)
+
+    # If specified, include unlabeled images in directory provided
+    if include_unlabeled:
+        assert dir is not None, "Please provide `dir` as an argument!"
+
+        # Get all image paths
+        all_img_paths = glob.glob(os.path.join(dir, "*"))
+        df_others = pd.DataFrame({"filename": all_img_paths})
+        df_others.filename = df_others.filename.map(os.path.basename)
+        
+        # Remove found paths to already labeled images
+        labeled_img_paths = set(df_metadata.filename.tolist())
+        df_others = df_others[~df_others.filename.isin(labeled_img_paths)]
+
+        # Only include Stanford data
+        df_others = df_others[df_others.filename.str.startswith("SU2")]
 
         # NOTE: Unlabeled images have label "Other"
         df_others["label"] = "Other"
@@ -405,3 +483,79 @@ def cross_validation_by_patient(patient_ids, num_folds=5):
         folds.append((train_idx, val_idx))
 
     return folds
+
+
+################################################################################
+#                             Image Preprocessing                              #
+################################################################################
+def preprocess_image_dir(image_dir, save_dir, file_regex="*.*"):
+    """
+    Perform image preprocessing on images in <image_dir> directory with filename
+    possibly matching regex. Save preprocessed images to save_dir.
+
+    Parameters
+    ----------
+    image_dir : str
+        Path to directory of unprocessed images
+    save_dir : str
+        Path to directory to save processed images
+    file_regex : str, optional
+        Regex for image filename. Only preprocesses these images, by default
+        "*.*".
+    """
+    for img_path in glob.glob(os.path.join(image_dir, file_regex)):
+        # Read and preprocess image
+        img = cv2.imread(img_path)
+        processed_img = preprocess_image(img, (100, 100), (256, 256))
+
+        # Save image to specified directory
+        filename = os.path.basename(img_path)
+        new_path = os.path.join(save_dir, filename)
+        cv2.imwrite(new_path, processed_img)
+
+
+def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256)):
+    """
+    Perform preprocessing on image array:
+        (1) Center crop 150 x 150 (by default)
+        (2) Resize to 256 x 256 (by default)
+        (3) Histogram normalize image
+
+    Parameters
+    ----------
+    img : np.array
+        Input image to crop
+    crop_dims : tuple, optional
+        Dimensions (height, width) of image crop, by default (150, 150).
+    resize_dims : tuple, optional
+        Dimensions (height, width) of final image, by default (256, 256).
+
+    Returns
+    -------
+    np.array
+        Preprocessed image.
+    """
+    height, width = img.shape[0], img.shape[1]
+
+    # Sanitize input to be less than or equal to max width/height
+    crop_height = min(crop_dims[0], height)
+    crop_width = min(crop_dims[1], img.shape[1])
+
+    # Get midpoints and necessary distance from midpoints
+    mid_x, mid_y = int(width/2), int(height/2)
+    half_crop_height, half_crop_width = int(crop_width/2), int(crop_height/2)
+
+    # Crop image
+    crop_img = img[mid_y-half_crop_width:mid_y+half_crop_width,
+                   mid_x-half_crop_height:mid_x+half_crop_height]
+
+    # Resize cropped image
+    resized_img = cv2.resize(crop_img, resize_dims)
+
+    # Histogram normalize images
+    equalized_img = equalize_hist(resized_img)
+
+    # Scale back to 255
+    processed_img = 255 * equalized_img
+
+    return processed_img

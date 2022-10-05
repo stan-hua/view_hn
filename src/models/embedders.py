@@ -187,7 +187,7 @@ class ImageEmbedder:
         # Save embeddings. Each row is a feature vector
         df_features = pd.DataFrame(np.concatenate(all_embeds))
         df_features['files'] = file_paths
-        df_features.to_hdf(save_path, "embeds", mode="a")
+        df_features.to_hdf(save_path, "embeds", mode="w")
 
         return df_features
 
