@@ -477,7 +477,10 @@ def main(model, raw=False):
     # 6. Plot example images from UMAP clusters
     plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False)
 
+    # Close all figures
+    plt.close("all")
+
 
 if __name__ == '__main__':
-    for model in ("random", "moco", "imagenet", "cytoimagenet"):      # must be in constants.MODELS
+    for model in ("hn",):      # must be in constants.MODELS
         main(model, raw=False)
