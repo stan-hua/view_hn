@@ -24,7 +24,11 @@ from src.data import constants
 #                               Metadata Related                               #
 ################################################################################
 def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
-                  include_unlabeled=False, relative_side=False, img_dir=None):
+                  relative_side=False,
+                  include_unlabeled=False,
+                  img_dir=None,
+                  include_test_set=False,
+                  test_path=constants.SK_TEST_METADATA_FILE):
     """
     Load SickKids metadata table with filenames and view labels.
 
@@ -52,6 +56,12 @@ def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
         If True, include all unlabeled images in <img_dir>, by default False.
     img_dir : str, optional
         Directory containing unlabeled (and labeled) images.
+    include_test_set : bool, optional
+        If True and path to test metadata file specified, include test set
+        labels in loaded metadata, by default False.
+    test_path : bool, optional
+        If <include_test_set>, this path points to the metadata file for the
+        internal test data, by default constants.SK_TEST_METADATA.
 
     Returns
     -------
@@ -60,6 +70,14 @@ def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
         number).
     """
     df_metadata = pd.read_csv(path)
+
+    # If specified, include internal test set labels
+    if include_test_set:
+        df_test_metadata = pd.read_csv(test_path)
+        df_metadata = pd.concat([df_metadata, df_test_metadata],
+                                ignore_index=True)
+
+    # Rename columns
     df_metadata = df_metadata.rename(columns={"IMG_FILE": "filename",
                                               "revised_labels": "label"})
 
@@ -194,7 +212,7 @@ def extract_data_from_filename(df_metadata, col="filename"):
         lambda x: x.split("_")[1])
     df_metadata["seq_number"] = df_metadata["basename"].map(
         lambda x: int(x.split("_")[2].replace(".jpg", "")))
-    df_metadata = df_metadata.drop(columns=["basename"])
+    df_metadata.drop(columns=["basename"], inplace=True)
 
 
 def get_from_paths(paths, item="id"):
@@ -514,7 +532,8 @@ def preprocess_image_dir(image_dir, save_dir, file_regex="*.*"):
         cv2.imwrite(new_path, processed_img)
 
 
-def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256)):
+def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
+                     ignore_crop=False):
     """
     Perform preprocessing on image array:
         (1) Center crop 150 x 150 (by default)
@@ -529,28 +548,33 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256)):
         Dimensions (height, width) of image crop, by default (150, 150).
     resize_dims : tuple, optional
         Dimensions (height, width) of final image, by default (256, 256).
+    ignore_crop : bool, optional
+        If True, do not crop image during preprocessing, by default False.
 
     Returns
     -------
     np.array
         Preprocessed image.
     """
-    height, width = img.shape[0], img.shape[1]
+    if not ignore_crop:
+        height, width = img.shape[0], img.shape[1]
 
-    # Sanitize input to be less than or equal to max width/height
-    crop_height = min(crop_dims[0], height)
-    crop_width = min(crop_dims[1], img.shape[1])
+        # Sanitize input to be less than or equal to max width/height
+        crop_height = min(crop_dims[0], height)
+        crop_width = min(crop_dims[1], img.shape[1])
 
-    # Get midpoints and necessary distance from midpoints
-    mid_x, mid_y = int(width/2), int(height/2)
-    half_crop_height, half_crop_width = int(crop_width/2), int(crop_height/2)
+        # Get midpoints and necessary distance from midpoints
+        mid_x, mid_y = int(width/2), int(height/2)
+        half_crop_height, half_crop_width = int(crop_width/2), int(crop_height/2)
 
-    # Crop image
-    crop_img = img[mid_y-half_crop_width:mid_y+half_crop_width,
-                   mid_x-half_crop_height:mid_x+half_crop_height]
+        # Crop image
+        crop_img = img[mid_y-half_crop_width:mid_y+half_crop_width,
+                    mid_x-half_crop_height:mid_x+half_crop_height]
 
-    # Resize cropped image
-    resized_img = cv2.resize(crop_img, resize_dims)
+        # Resize cropped image
+        resized_img = cv2.resize(crop_img, resize_dims)
+    else:
+        resized_img = img
 
     # Histogram normalize images
     equalized_img = equalize_hist(resized_img)

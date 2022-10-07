@@ -355,7 +355,6 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
               filename=f"{model}_umap{'_raw' if raw else ''}(cluster_labels)")
 
 
-
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################

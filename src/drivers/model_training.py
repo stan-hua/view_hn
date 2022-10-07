@@ -55,8 +55,8 @@ def init(parser):
         "exp_name": "Name of experiment",
         "self_supervised": "If flagged, trains a MoCo model on US images.",
         "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
-        "ssl_eval_linear": "If flagged, trains linear classifier over pretrained "
-                           "self-supervised model.",
+        "ssl_eval_linear": "If flagged, trains linear classifier over "
+                           "pretrained self-supervised model.",
         "ssl_eval_linear_lstm": "If flagged, trains linear classifier over "
                                 "pretrained self-supervised model.",
         "relative_side": "If flagged, relabels side Left/Right to First/Second "
@@ -66,9 +66,15 @@ def init(parser):
         "lr": "Learning rate of optimizer",
         "momentum": "Optimizer momentum",
         "weight_decay": "Weight decay during training",
+
+        "memory_bank_size": "Size of MoCo memory bank. Defaults to 4096.",
+        "temperature": "Temperature parameter for NT-Xent loss. Defaults "
+                       "to 0.1",
+
         "n_lstm_layers": "Number of LSTM layers",
         "hidden_dim": "Number of nodes in each LSTM hidden layer",
         "bidirectional": "If flagged, LSTM will be bidirectional",
+
         "train": "If flagged, run experiment to train model.",
         "test": "If flagged, run experiment to evaluate a trained model.",
         "train_test_split" : "Prop. of total data to leave for training (rest "
@@ -113,7 +119,13 @@ def init(parser):
     parser.add_argument("--momentum", default=0.9, type=float,
                         help=arg_help["momentum"])
     parser.add_argument("--weight_decay", default=0.0005, type=float,
-                        help=arg_help["weight_decay"]) 
+                        help=arg_help["weight_decay"])
+    # Self-supervised model arguments
+    parser.add_argument("--memory_bank_size", default=4096, type=int,
+                        help=arg_help["memory_bank_size"])
+    parser.add_argument("--temperature", default=0.1, type=float,
+                        help=arg_help["temperature"])
+    # LSTM-specific model arguments
     parser.add_argument("--n_lstm_layers", default=1, type=int,
                         help=arg_help["n_lstm_layers"])
     parser.add_argument("--hidden_dim", default=512, type=int, 
