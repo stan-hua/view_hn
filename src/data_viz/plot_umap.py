@@ -449,8 +449,8 @@ def main(model, raw=False):
     df_embeds_only = df_embeds.drop(columns=["files"])
 
     # 1. Plot UMAP of all patients, colored by hospital (SickKids / Stanford)
-    # plot_umap_all_patients(model, patients, df_embeds_only, color="hospital",
-    #                        raw=raw)
+    plot_umap_all_patients(model, patients, df_embeds_only, color="hospital",
+                           raw=raw)
 
     # 2. Plot UMAP of one patient, colored by number in sequence
     plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
@@ -460,29 +460,29 @@ def main(model, raw=False):
     plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
                                   df_embeds_only, color="views", raw=raw)
 
-    # # 4. Plot UMAP of patients, colored by view
-    # # 4.1 Both SickKids and Stanford Data
-    # plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw,
-    #                   hospital="Both")
-    # # 4.2 Only SickKids Data
-    # sk_view_labels = get_views_for_filenames(filenames, True, False)
-    # plot_umap_by_view(model, sk_view_labels, filenames, df_embeds_only, raw=raw,
-    #                   hospital="SickKids")
-    # # 4.3 Only Stanford Data
-    # su_view_labels = get_views_for_filenames(filenames, False, True)
-    # plot_umap_by_view(model, sk_view_labels, filenames, df_embeds_only, raw=raw,
-    #                   hospital="Stanford")
+    # 4. Plot UMAP of patients, colored by view
+    # 4.1 Both SickKids and Stanford Data
+    plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw,
+                      hospital="Both")
+    # 4.2 Only SickKids Data
+    sk_view_labels = get_views_for_filenames(filenames, True, False)
+    plot_umap_by_view(model, sk_view_labels, filenames, df_embeds_only, raw=raw,
+                      hospital="SickKids")
+    # 4.3 Only Stanford Data
+    su_view_labels = get_views_for_filenames(filenames, False, True)
+    plot_umap_by_view(model, su_view_labels, filenames, df_embeds_only, raw=raw,
+                      hospital="Stanford")
 
-    # # 5. Plot UMAP for N patients, colored by patient ID
-    # plot_umap_for_n_patient(model, patients, df_embeds_only, n=3, raw=raw)
+    # 5. Plot UMAP for N patients, colored by patient ID
+    plot_umap_for_n_patient(model, patients, df_embeds_only, n=3, raw=raw)
 
-    # # 6. Plot example images from UMAP clusters
-    # plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False)
+    # 6. Plot example images from UMAP clusters
+    plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False)
 
     # Close all figures
     plt.close("all")
 
 
 if __name__ == '__main__':
-    for model in ("imagenet", "random", "hn", "moco",):      # must be in constants.MODELS
+    for model in ("moco",):      # must be in constants.MODELS
         main(model, raw=False)
