@@ -201,7 +201,8 @@ def gridplot_images(imgs, filename, title=None):
             img_arr = np.moveaxis(img_arr, 0, -1)
 
         # Add image to grid plot
-        ax.imshow(img_arr, cmap='gray', vmin=0, vmax=255)
+        vmin, vmax = (0, 255) if img_arr.max() > 1 else (None, None)
+        ax.imshow(img_arr, cmap='gray', vmin=vmin, vmax=vmax)
 
     # Set title
     fig.suptitle(title)
@@ -446,17 +447,20 @@ def plot_ssl_augmentations():
     """
     # Instantiate data module
     df_metadata = load_metadata(extract=True)
+    dataloader_params = {"batch_size": 9}
     data_module = SelfSupervisedUltrasoundDataModule(
+        dataloader_params,
         df=df_metadata, img_dir=constants.DIR_IMAGES)
 
     # Sample 1 batch of images
-    example_imgs = None
-    for (x_q, _), _ in data_module.train_dataloader():
-        example_imgs = x_q.numpy()
+    for (x_q, x_k), _ in data_module.train_dataloader():
+        src_imgs = x_q.numpy()
+        augmented_imgs = x_k.numpy()
         break
 
     # Plot example images
-    gridplot_images(example_imgs, filename="example_ssl_augmentations.png")
+    gridplot_images(src_imgs, filename="before_ssl_augmentations.png")
+    gridplot_images(augmented_imgs, filename="after_ssl_augmentations.png")
 
 
 ################################################################################
