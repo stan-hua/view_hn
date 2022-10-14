@@ -59,7 +59,7 @@ IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 # Type of models
 MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other",
                "five_view_seq_relative",
-               "five_view_moco", "five_view_moco_seq")
+               "five_view_moco", "five_view_moco_seq",)
 
 ################################################################################
 #                               Paths Constants                                #
@@ -1018,7 +1018,7 @@ def main_test_set(model_cls, checkpoint_path,
     """
     # 2. Get metadata, specifically for the test set
     # 2.0 Get image filenames and labels
-    df_metadata = utils.load_metadata(
+    df_metadata = utils.load_sickkids_metadata(
         extract=True,
         include_unlabeled=include_unlabeled, img_dir=constants.DIR_IMAGES,
         relative_side=relative_side)

@@ -145,6 +145,15 @@ class UltrasoundDataModule(pl.LightningDataModule):
             if img_dir:
                 df["filename"] = df["filename"].map(
                     lambda x: os.path.join(img_dir, x))
+
+            # Filter for existing images
+            exists_mask = df.filename.map(os.path.exists)
+            if not all(exists_mask):
+                num_missing = len(~exists_mask[~exists_mask])
+                LOGGER.warning(f"{num_missing} image files in table don't exist "
+                               "at path! Skipping...")
+                df = df[exists_mask]
+
             self.img_paths = df["filename"].to_numpy()
             self.labels = df["label"].to_numpy()
             self.patient_ids = utils.get_from_paths(self.img_paths)

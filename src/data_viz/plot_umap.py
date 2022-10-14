@@ -380,7 +380,7 @@ def get_views_for_filenames(filenames, sickkids=True, stanford=True):
 
     # Get SickKids metadata
     if sickkids:
-        df_labels = pd.concat([df_labels, utils.load_metadata()],
+        df_labels = pd.concat([df_labels, utils.load_sickkids_metadata()],
                               ignore_index=True)
 
     # Get Stanford metadata

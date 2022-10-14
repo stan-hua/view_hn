@@ -18,7 +18,7 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 # Custom libraries
 from src.data import constants
-from src.data_prep.utils import load_metadata
+from src.data_prep.utils import load_sickkids_metadata, load_stanford_metadata
 from src.data_prep.dataset import (SelfSupervisedUltrasoundDataModule,
                                    UltrasoundDataModule)
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
@@ -75,6 +75,7 @@ def init(parser):
         "hidden_dim": "Number of nodes in each LSTM hidden layer",
         "bidirectional": "If flagged, LSTM will be bidirectional",
 
+        "hospital": "Which hospital's data to use",
         "train": "If flagged, run experiment to train model.",
         "test": "If flagged, run experiment to evaluate a trained model.",
         "train_test_split" : "Prop. of total data to leave for training (rest "
@@ -134,6 +135,9 @@ def init(parser):
                         help=arg_help["bidirectional"])
 
     # Data arguments
+    parser.add_argument("--hospital", default="sickkids",
+                        choices=constants.HOSPITALS,
+                        help=arg_help["train"], )
     parser.add_argument("--train", action="store_true", help=arg_help["train"])
     parser.add_argument("--test", action="store_true", help=arg_help["test"])
     parser.add_argument("--train_test_split", default=1.0, type=float,
@@ -293,8 +297,12 @@ def main(args):
     hparams["accum_batches"] = args.batch_size if args.full_seq else None
 
     # 1. Get image filenames and labels
-    df_metadata = load_metadata(extract=True,
-                                relative_side=hparams["relative_side"])
+    if args.hospital == "sickkids":
+        df_metadata = load_sickkids_metadata(
+            extract=True, relative_side=hparams["relative_side"])
+    elif args.hospital == "stanford":
+        df_metadata = load_stanford_metadata(
+            extract=True, relative_side=hparams["relative_side"])
 
     # 2. Instantiate data module
     # 2.1 Choose appropriate class for data module

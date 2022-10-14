@@ -21,7 +21,7 @@ from tabulate import tabulate
 # Custom libraries
 from src.data import constants
 from src.data_prep.dataset import SelfSupervisedUltrasoundDataModule
-from src.data_prep.utils import load_metadata
+from src.data_prep.utils import load_sickkids_metadata
 
 
 ################################################################################
@@ -446,7 +446,7 @@ def plot_ssl_augmentations():
     Plot example images of data augmented during self-supervised model training.
     """
     # Instantiate data module
-    df_metadata = load_metadata(extract=True)
+    df_metadata = load_sickkids_metadata(extract=True)
     dataloader_params = {"batch_size": 9}
     data_module = SelfSupervisedUltrasoundDataModule(
         dataloader_params,
@@ -493,7 +493,7 @@ if __name__ == '__main__':
     ############################################################################
     #                      Plot Distribution of Views                          #
     ############################################################################
-    df_metadata = load_metadata(extract=True, include_unlabeled=True,
+    df_metadata = load_sickkids_metadata(extract=True, include_unlabeled=True,
                                 img_dir=constants.DIR_IMAGES)
     plot_hist_of_view_labels(df_metadata)
     plt.tight_layout()
@@ -510,12 +510,12 @@ if __name__ == '__main__':
     ############################################################################
     #                 Print Examples of Label Progression                      #
     ############################################################################
-    df_metadata = load_metadata(extract=True)
+    df_metadata = load_sickkids_metadata(extract=True)
     get_unique_label_sequences(df_metadata)
 
     ############################################################################
     #                          Transition Matrix                               #
     ############################################################################
-    df_metadata = load_metadata(extract=True, include_unlabeled=True,
+    df_metadata = load_sickkids_metadata(extract=True, include_unlabeled=True,
                                 img_dir=constants.DIR_IMAGES)
     get_transition_matrix(df_metadata)

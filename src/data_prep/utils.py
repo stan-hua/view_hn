@@ -23,7 +23,7 @@ from src.data import constants
 ################################################################################
 #                               Metadata Related                               #
 ################################################################################
-def load_metadata(path=constants.SK_METADATA_FILE, extract=False,
+def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
                   relative_side=False,
                   include_unlabeled=False,
                   img_dir=None,
