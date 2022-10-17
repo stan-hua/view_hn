@@ -41,6 +41,7 @@ class ImageEmbedder:
     """
     Class used to create image embeddings
     """
+
     def __init__(self, model):
         """
         Initialize ImageEmbedder with feature extractor model
@@ -51,6 +52,7 @@ class ImageEmbedder:
             Image feature extractor containing "predict" method.
         """
         self.model = model
+
 
     def predict_torch(self, img):
         """
@@ -86,17 +88,21 @@ class ImageEmbedder:
 
         return features
 
-    def predict_dir_tf(self, img_dir, save_path):
+
+    def predict_dir_tf(self, save_path, img_dir=None, img_dataloader=None):
         """
         Extract embeddings for all images in the directory, using Tensorflow
         data loading libraries.
 
         Parameters
         ----------
-        img_dir : str
-            Path to directory containing images
         save_path : str
             File path to save embeddings at. Saved as h5 file.
+        img_dir : str, optional
+            Path to directory containing images, by default None.
+        img_dataloader : torch.utils.data.DataLoader
+            Image dataloader with metadata dictionary containing `filename`, by
+            default None
 
         Returns
         -------
@@ -122,42 +128,70 @@ class ImageEmbedder:
             img = tf.io.read_file(file_path)
             img = tf.io.decode_jpeg(img, channels=3)
             return img
-        
 
+        # Input sanitization
+        assert img_dir or img_dataloader, "Must specify at least image "\
+                                          "directory or image dataloader"
         # Verify model provided
         assert not isinstance(self.model, torch.nn.Module), \
             "Provided model is not a Tensorflow model!"
 
-        # Get file paths
-        files_ds = tf.data.Dataset.list_files(
-            os.path.join(img_dir, "*"), shuffle=False)
+        if img_dir:
+            assert os.path.isdir(img_dir), "Path provided does not lead to a "\
+                                           "directory!"
+            # Get file paths
+            files_ds = tf.data.Dataset.list_files(
+                os.path.join(img_dir, "*"), shuffle=False)
+            file_paths = list(files_ds.as_numpy_iterator())
 
-        # Get images from file paths
-        img_ds = files_ds.map(process_path, num_parallel_calls=tf.data.AUTOTUNE)
+            # Get images from file paths
+            img_ds = files_ds.map(process_path,
+                                  num_parallel_calls=tf.data.AUTOTUNE)
 
-        # Make image generator efficient via prefetching
-        img_ds = img_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+            # Make image generator efficient via prefetching
+            img_ds = img_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
 
-        # Extract embeddings in batches of 32
-        all_embeds = self.model.predict(img_ds)
+            # Extract embeddings in batches of 32
+            all_embeds = self.model.predict(img_ds)
+        else:   # DataLoader
+            all_embeds = []
+            file_paths = []
+
+            # Extract embeddings in batches
+            for img, metadata in tqdm(img_dataloader):
+                embeds = self.model.predict(img.detach().cpu())
+
+                all_embeds.append(embeds)
+                file_paths.extend(metadata["filename"])
+
+            # Concatenate batched embeddings
+            all_embeds = np.concatenate(all_embeds)
 
         # Save embeddings
         df_features = pd.DataFrame(np.array(all_embeds))
-        df_features["files"] = list(files_ds.as_numpy_iterator())
+        df_features["files"] = file_paths
         df_features["files"] = df_features["files"].str.decode("utf-8")
         df_features.to_hdf(save_path, "embeds")
 
-    def predict_dir_torch(self, img_dir, save_path):
+
+    def predict_dir_torch(self, save_path, img_dir=None, img_dataloader=None):
         """
         Extract embeddings for all images in the directory, using PyTorch
         libraries.
 
+        Note
+        ----
+        One of (img_dir, img_dataloader) must be specified!
+
         Parameters
         ----------
-        img_dir : str
-            Path to directory containing images
         save_path : str
             File path to save embeddings at. Saved as h5 file.
+        img_dir : str, optional
+            Path to directory containing images, by default None.
+        img_dataloader : torch.utils.data.DataLoader
+            Image dataloader with metadata dictionary containing `filename`, by
+            default None
 
         Returns
         -------
@@ -165,21 +199,29 @@ class ImageEmbedder:
             Contains a column for the path to the image file. Other columns are
             embedding columns
         """
-        assert os.path.isdir(img_dir), "Path provided does not lead to a directory!"
+        # Input sanitization
+        assert img_dir or img_dataloader, "Must specify at least image "\
+                                          "directory or image dataloader"
         assert isinstance(self.model, torch.nn.Module), \
             "Provided model is not a PyTorch model!"
 
-        # Load data
-        data_module = UltrasoundDataModule(img_dir=img_dir, mode=3)
-        data_module.setup()
-        # NOTE: Extracting embeds from all images in directory
-        dataset = data_module.train_dataloader()
+        # Get data loader
+        if img_dir:               # by directory
+            assert os.path.isdir(img_dir), "Path provided does not lead to a "\
+                                           "directory!"
+            # Prepare to load data
+            data_module = UltrasoundDataModule(img_dir=img_dir, mode=3)
+            data_module.setup()
+            # NOTE: Extracts embeddings from all images in directory
+            dataloader = data_module.train_dataloader()
+        else:
+            dataloader = img_dataloader
 
         all_embeds = []
         file_paths = []
 
         # Extract embeddings in batches
-        for img, metadata in tqdm(dataset):
+        for img, metadata in tqdm(dataloader):
             embeds = self.predict_torch(img)
 
             all_embeds.append(embeds)
@@ -265,7 +307,8 @@ def instantiate_embedder(model_name, weights):
     return embedder
 
 
-def main(model_name, save_embed_path, img_file=None, img_dir=None,
+def main(model_name, save_embed_path,
+         img_file=None, img_dir=None, img_dataloader=None,
          cyto_weights_path=constants.CYTO_WEIGHTS_PATH,
          cpc_ckpt_path=constants.CPC_CKPT_PATH,
          moco_ckpt_path=constants.MOCO_CKPT_PATH):
@@ -275,7 +318,7 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
 
     Note
     ----
-    img_file and img_dir cannot both be empty.
+    img_file, img_dir and img_dataloader cannot both be empty.
 
     Parameters
     ----------
@@ -287,6 +330,8 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
         Path to image file
     img_dir : str
         Path to directory of images
+    img_dataloader : torch.utils.data.DataLoader
+        Image dataloader with metadata dictionary containing `filename`
     cyto_weights_path : str, optional
         Path to cytoimagenet weights, by default constants.CYTO_WEIGHTS_PATH
     cpc_ckpt_path : str, optional
@@ -294,8 +339,8 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
     moco_ckpt_path : str, optional
         Path to MoCo checkpoint, by default constants.MOCO_CKPT_PATH
     """
-    assert img_file or img_dir, \
-        "At least one of img_file or img_dir must be given!"
+    assert img_file or img_dir or img_dataloader, \
+        "At least one of (img_file, img_dir, img_dataloader) must be given!"
 
     name_to_weights_path = {
         "cytoimagenet": cyto_weights_path,
@@ -316,9 +361,13 @@ def main(model_name, save_embed_path, img_file=None, img_dir=None,
 
     # Separate by Tensorflow and PyTorch models
     if model_name in ("cytoimagenet", "imagenet"):
-        embedder.predict_dir_tf(img_dir, save_embed_path)
+        embedder.predict_dir_tf(save_embed_path,
+                                img_dir=img_dir,
+                                img_dataloader=img_dataloader)
     else:
-        embedder.predict_dir_torch(img_dir, save_embed_path)
+        embedder.predict_dir_torch(save_embed_path,
+                                   img_dir=img_dir,
+                                   img_dataloader=img_dataloader)
 
 
 ################################################################################
