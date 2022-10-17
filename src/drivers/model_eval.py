@@ -19,6 +19,7 @@ import torch
 import torchvision.transforms as T
 import yaml
 from efficientnet_pytorch import EfficientNet
+from scipy.stats import pearsonr
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from torchvision.io import read_image, ImageReadMode
 from tqdm import tqdm
@@ -691,6 +692,31 @@ def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES[""]):
     df_cm = df_cm.loc[:, unique_labels].reindex(unique_labels)
 
     print_table(df_cm)
+
+
+def compare_prediction_similarity(df_pred_1, df_pred_2):
+    """
+    For each label, print Pearson correlation for correctness of test set
+    predictions with model 1 vs model 2.
+
+    Parameters
+    ----------
+    df_pred_1 : pandas.DataFrame
+        Inference on the same test set by model 1
+    df_pred_2 : pandas.DataFrame
+        Inference on the same test set by model 2
+    """
+    # Check which predictions are correct
+    correct_pred_1 = (df_pred_1.label == df_pred_1.pred)
+    correct_pred_2 = (df_pred_2.label == df_pred_2.pred)
+
+    for label in df_pred_1.label.unique():
+        print(f"""
+################################################################################
+                                    {label}                                   
+################################################################################""")
+        label_mask = (df_pred_1.label == label)
+        print(pearsonr(correct_pred_1[label_mask], correct_pred_2[label_mask]))
 
 
 ################################################################################
