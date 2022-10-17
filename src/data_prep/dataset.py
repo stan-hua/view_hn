@@ -101,7 +101,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         Parameters
         ----------
         dataloader_params : dict, optional
-            Used to overrite default parameters for DataLoaders, by default None
+            Used to override default parameters for DataLoaders, by default None
         df : pd.DataFrame, optional
             Contains paths to image files and labels for each image, by default
             None
@@ -409,7 +409,7 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
         Parameters
         ----------
         dataloader_params : dict, optional
-            Used to overrite default parameters for DataLoaders, by default None
+            Used to override default parameters for DataLoaders, by default None
         df : pd.DataFrame, optional
             Contains paths to image files and labels for each image, by default
             None
@@ -739,10 +739,10 @@ class UltrasoundDatasetDir(UltrasoundDataset):
             X = torch.unsqueeze(X, 0)
 
         # 5. Metadata
-        filename = os.path.basename(path)
-        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
+        filenames = [os.path.basename(path) for path in paths]
+        hospital = "Stanford" if filenames[0].startswith("SU2") else "SickKids"
 
-        metadata = {"filename": filename, "id": patient_id,
+        metadata = {"filename": filenames, "id": patient_id,
                     "visit": visit, "seq_number": seq_numbers,
                     "hospital": hospital}
 
