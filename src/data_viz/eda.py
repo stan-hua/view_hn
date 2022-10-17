@@ -212,6 +212,23 @@ def gridplot_images(imgs, filename, title=None):
     plt.savefig(constants.DIR_FIGURES + "/eda/" + filename)
 
 
+def gridplot_images_from_paths(paths, filename, title=None):
+    """
+    Create grid plot from provided list of image paths
+
+    Parameters
+    ----------
+    paths : list
+        List of full paths to images
+    filename : str
+        Path to save figure to
+    title : str
+        Plot title, by default None
+    """
+    imgs = np.stack([cv2.imread(path) for path in paths])
+    gridplot_images(imgs, filename, title)
+
+
 ################################################################################
 #                                    Tables                                    #
 ################################################################################
