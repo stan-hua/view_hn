@@ -60,22 +60,31 @@ IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 # Type of models
 MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other",
                "five_view_seq_relative",
-               "five_view_moco", "five_view_moco_seq",)
+               "five_view_moco", "five_view_moco_seq",
+               "five_view_moco_su", "five_view_moco_seq_su")
 
 ################################################################################
 #                               Paths Constants                                #
 ################################################################################
 # Model type to checkpoint file
 MODEL_TYPE_TO_CKPT = {
+    "binary" : "/binary_classifier/0/epoch=12-step=2586.ckpt",
+
     "five_view": "/five_view/0/epoch=6-step=1392.ckpt",
     "five_view_seq": "cnn_lstm_8/0/epoch=31-step=5023.ckpt",
     "five_view_seq_w_other": "/five_view/0/epoch=6-step=1392.ckpt",
     "five_view_seq_relative": "relative_side_grid_search(2022-09-21)/relative_side(2022-09-20_22-09)/0/epoch=7-step=1255.ckpt",
-    "binary" : "/binary_classifier/0/epoch=12-step=2586.ckpt",
+
     # Checkpoint of MoCo Linear Classifier
     "five_view_moco": "moco_linear_eval_4/0/last.ckpt",
     # Checkpoint of MoCo LinearLSTM Classifier
     "five_view_moco_seq": "moco_linear_lstm_eval_0/0/epoch=12-step=129.ckpt",
+
+    # Checkpoint of MoCo (Stanford train) Linear Classifier
+    "five_view_moco_su": "moco_linear_eval_su_to_sk_1/0/epoch=0-step=396.ckpt",
+    # Checkpoint of MoCo (Stanford train) LinearLSTM Classifier
+    "five_view_moco_seq_su": "moco_linear_lstm_eval_su_to_sk_1/0/"
+                             "epoch=9-step=99.ckpt",
 }
 
 # Table to store/retrieve predictions and labels for test set
@@ -1000,8 +1009,8 @@ def get_model_class(model_type):
             model_cls = LinearClassifier
 
         # Backbone used in MoCo pretraining
-        load_from_ckpt_params["backbone"] = torch.nn.Sequential(
-            EfficientNet.from_name("efficientnet-b0", include_top=False))
+        load_from_ckpt_params["backbone"] = EfficientNet.from_name(
+            "efficientnet-b0", include_top=False)
     elif sequential:
         model_cls = EfficientNetLSTM
     else:
@@ -1097,7 +1106,7 @@ def main_test_set(model_cls, checkpoint_path,
 
 if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
-    MODEL_TYPE = MODEL_TYPES[-1]
+    MODEL_TYPE = MODEL_TYPES[-2]
     ckpt_path = constants.DIR_RESULTS + MODEL_TYPE_TO_CKPT[MODEL_TYPE]
 
     # Flag for relative side encoding
