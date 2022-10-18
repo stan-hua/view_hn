@@ -53,6 +53,7 @@ def init(parser):
     # Help messages
     arg_help = {
         "exp_name": "Name of experiment",
+
         "self_supervised": "If flagged, trains a MoCo model on US images.",
         "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
         "ssl_eval_linear": "If flagged, trains linear classifier over "
@@ -61,6 +62,7 @@ def init(parser):
                                 "pretrained self-supervised model.",
         "relative_side": "If flagged, relabels side Left/Right to First/Second "
                          "based on which appeared first per sequence.",
+
         "adam": "If flagged, uses Adam optimizer during training. Otherwise, "
                 "uses Stochastic Gradient Descent (SGD).",
         "lr": "Learning rate of optimizer",
@@ -76,6 +78,7 @@ def init(parser):
         "bidirectional": "If flagged, LSTM will be bidirectional",
 
         "hospital": "Which hospital's data to use",
+        "include_unlabeled": "Include unlabeled data for hospital specified.",
         "train": "If flagged, run experiment to train model.",
         "test": "If flagged, run experiment to evaluate a trained model.",
         "train_test_split" : "Prop. of total data to leave for training (rest "
@@ -137,7 +140,9 @@ def init(parser):
     # Data arguments
     parser.add_argument("--hospital", default="sickkids",
                         choices=constants.HOSPITALS,
-                        help=arg_help["train"], )
+                        help=arg_help["train"])
+    parser.add_argument("--include_unlabeled", action="store_true",
+                        help=arg_help["include_unlabeled"])
     parser.add_argument("--train", action="store_true", help=arg_help["train"])
     parser.add_argument("--test", action="store_true", help=arg_help["test"])
     parser.add_argument("--train_test_split", default=1.0, type=float,
@@ -299,10 +304,14 @@ def main(args):
     # 1. Get image filenames and labels
     if args.hospital == "sickkids":
         df_metadata = load_sickkids_metadata(
-            extract=True, relative_side=hparams["relative_side"])
+            extract=True,
+            relative_side=hparams["relative_side"],
+            include_unlabeled=hparams["include_unlabeled"])
     elif args.hospital == "stanford":
         df_metadata = load_stanford_metadata(
-            extract=True, relative_side=hparams["relative_side"])
+            extract=True,
+            relative_side=hparams["relative_side"],
+            include_unlabeled=hparams["include_unlabeled"])
 
     # 2. Instantiate data module
     # 2.1 Choose appropriate class for data module
