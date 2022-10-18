@@ -26,7 +26,7 @@ from src.data import constants
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
                   relative_side=False,
                   include_unlabeled=False,
-                  img_dir=None,
+                  img_dir=constants.DIR_IMAGES,
                   include_test_set=False,
                   test_path=constants.SK_TEST_METADATA_FILE):
     """
@@ -34,8 +34,6 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
 
     Note
     ----
-    If <include_unlabeled> specified, <img_dir> must be provided.
-
     If <relative_side> is True, the following examples happens:
         - [Saggital_Left, Transverse_Right, Bladder] ->
                 [Saggital_First, Transverse_Second, Bladder]
@@ -55,7 +53,8 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
     include_unlabeled : bool, optional
         If True, include all unlabeled images in <img_dir>, by default False.
     img_dir : str, optional
-        Directory containing unlabeled (and labeled) images.
+        Directory containing unlabeled (and labeled) images, by default
+        constants.DIR_IMAGES
     include_test_set : bool, optional
         If True and path to test metadata file specified, include test set
         labels in loaded metadata, by default False.
@@ -120,14 +119,12 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
 
 def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
                            include_unlabeled=False, relative_side=False,
-                           img_dir=None):
+                           img_dir=constants.DIR_IMAGES):
     """
     Load Stanford metadata table with filenames and view labels.
 
     Note
     ----
-    If <include_unlabeled> specified, <img_dir> must be provided.
-
     If <relative_side> is True, the following examples happens:
         - [Saggital_Left, Transverse_Right, Bladder] ->
                 [Saggital_First, Transverse_Second, Bladder]
@@ -147,7 +144,8 @@ def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
     include_unlabeled : bool, optional
         If True, include all unlabeled images in <img_dir>, by default False.
     img_dir : str, optional
-        Directory containing unlabeled (and labeled) images.
+        Directory containing unlabeled (and labeled) images, by default
+        constants.DIR_IMAGES
 
     Returns
     -------
