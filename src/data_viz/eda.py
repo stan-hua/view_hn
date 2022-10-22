@@ -30,8 +30,8 @@ from src.data_prep.utils import load_sickkids_metadata
 LOGGER = logging.getLogger(__name__)
 
 # Map label to encoded integer
-CLASS_TO_IDX = {"Saggital_Left": 0, "Transverse_Left": 1, "Bladder": 2,
-                "Transverse_Right": 3, "Saggital_Right": 4, "Other": 5}
+CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
+                "Transverse_Right": 3, "Sagittal_Right": 4, "Other": 5}
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 

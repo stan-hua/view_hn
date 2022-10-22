@@ -139,6 +139,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         self.mode = mode
         self.img_size = kwargs.get("img_size", 258)
         self.no_label = (self.df is None)   # flag to use UltrasoundDatasetDir
+        self.label_part = kwargs.get("label_part")
 
         # Get image paths, patient IDs, and labels (and visit)
         if self.df is not None:
@@ -262,7 +263,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
         train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
                                                    self.full_seq,
                                                    img_size=self.img_size,
-                                                   mode=self.mode)
+                                                   mode=self.mode,
+                                                   label_part=self.label_part)
 
         # Create DataLoader with parameters specified
         return DataLoader(train_dataset, **self.train_dataloader_params)
@@ -289,7 +291,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
         val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
                                                  self.full_seq,
                                                  img_size=self.img_size,
-                                                 mode=self.mode)
+                                                 mode=self.mode,
+                                                 label_part=self.label_part)
 
         # Create DataLoader with parameters specified
         return DataLoader(val_dataset, **self.val_dataloader_params)
@@ -316,7 +319,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
         test_dataset = UltrasoundDatasetDataFrame(df_test, self.img_dir,
                                                   self.full_seq,
                                                   img_size=self.img_size,
-                                                  mode=self.mode)
+                                                  mode=self.mode,
+                                                  label_part=self.label_part)
 
         # Create DataLoader with parameters specified
         return DataLoader(test_dataset, **self.val_dataloader_params)
@@ -472,7 +476,8 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
         train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
                                                    self.full_seq,
                                                    img_size=self.img_size,
-                                                   mode=self.mode)
+                                                   mode=self.mode,
+                                                   label_part=self.label_part)
 
         # Add random transformations
         transforms = T.Compose([
@@ -515,7 +520,8 @@ class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
         val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
                                                  self.full_seq,
                                                  img_size=self.img_size,
-                                                 mode=self.mode)
+                                                 mode=self.mode,
+                                                 label_part=self.label_part)
 
         # Add random transformations
         transforms = T.Compose([
@@ -769,7 +775,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     """
     Dataset to load images and labels from a DataFrame.
     """
-    def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3):
+    def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
+                 label_part=None):
         """
         Initialize KidneyDatasetDataFrame object.
 
@@ -793,9 +800,12 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             If int provided, resizes found images to (img_size x img_size). If
             tuple provided, resizes images to (img_height, img_width), by
             default None.
-        mode : int
+        mode : int, optional
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
+        label_part : str, optional
+            Label type. One of ("side", "plane", None). Used to get the correct
+            classes and indices, by default None.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
@@ -809,6 +819,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # Get labels
         self.labels = df["label"].to_numpy()
+        self.label_part = label_part
 
         # Get all patient IDs
         self.ids = np.array(utils.get_from_paths(self.paths))
@@ -871,7 +882,11 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # If returning an image
         X, metadata = super().__getitem__(index)
-        metadata["label"] = constants.CLASS_TO_IDX.get(self.labels[index], -1)
+
+        # Encode label to integer (-1, if not found)
+        class_to_idx = \
+            constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
+        metadata["label"] = class_to_idx.get(self.labels[index], -1)
 
         return X, metadata
 
@@ -923,9 +938,11 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # 5. Get metadata (hospital)
         hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
 
-        # 6. Encode labels
+        # 6. Encode labels to integers (-1, if not found)
+        class_to_idx = \
+            constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
         labels = torch.LongTensor(
-            [constants.CLASS_TO_IDX[label] for label in labels])
+            [class_to_idx.get(label, -1) for label in labels])
 
         metadata = {"filename": filenames, "label": labels,
                     "id": patient_id, "visit": visit, "seq_number": seq_numbers,

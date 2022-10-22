@@ -9,6 +9,7 @@ import logging
 import os
 import random
 from colorama import Fore, Style
+from collections import OrderedDict
 
 # Non-standard libraries
 import pandas as pd
@@ -53,27 +54,22 @@ LOGGER = logging.getLogger(__name__)
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Map label to encoded integer (for visualization)
-CLASS_TO_IDX = {"Saggital_Left": 0, "Transverse_Left": 1, "Bladder": 2,
-                "Transverse_Right": 3, "Saggital_Right": 4, "Other": 5}
+CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
+                "Transverse_Right": 3, "Sagittal_Right": 4, "Other": 5}
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
-
-# Type of models
-MODEL_TYPES = ("five_view", "binary", "five_view_seq", "five_view_seq_w_other",
-               "five_view_seq_relative",
-               "five_view_moco", "five_view_moco_seq",
-               "five_view_moco_su", "five_view_moco_seq_su")
 
 ################################################################################
 #                               Paths Constants                                #
 ################################################################################
 # Model type to checkpoint file
-MODEL_TYPE_TO_CKPT = {
+MODEL_TYPE_TO_CKPT = OrderedDict({
     "binary" : "/binary_classifier/0/epoch=12-step=2586.ckpt",
 
     "five_view": "/five_view/0/epoch=6-step=1392.ckpt",
     "five_view_seq": "cnn_lstm_8/0/epoch=31-step=5023.ckpt",
     "five_view_seq_w_other": "/five_view/0/epoch=6-step=1392.ckpt",
-    "five_view_seq_relative": "relative_side_grid_search(2022-09-21)/relative_side(2022-09-20_22-09)/0/epoch=7-step=1255.ckpt",
+    "five_view_seq_relative": "relative_side_grid_search(2022-09-21)/relative_side"
+                              "(2022-09-20_22-09)/0/epoch=7-step=1255.ckpt",
 
     # Checkpoint of MoCo Linear Classifier
     "five_view_moco": "moco_linear_eval_4/0/last.ckpt",
@@ -85,7 +81,17 @@ MODEL_TYPE_TO_CKPT = {
     # Checkpoint of MoCo (Stanford train) LinearLSTM Classifier
     "five_view_moco_seq_su": "moco_linear_lstm_eval_su_to_sk_1/0/"
                              "epoch=9-step=99.ckpt",
-}
+
+    # Checkpoint of MoCo (SickKids All) Linear Classifier
+    "five_view_moco_sk_all": "moco_linear_eval_sk_all/0/"
+                             "epoch=24-step=9924.ckpt",
+    # Checkpoint MoCo (SickKids All) LinearLSTM
+    "five_view_moco_seq_sk_all": "moco_linear_lstm_eval_sk_all/0/"
+                                 "epoch=22-step=229.ckpt",
+})
+
+# Type of models
+MODEL_TYPES = list(MODEL_TYPE_TO_CKPT.keys())
 
 # Table to store/retrieve predictions and labels for test set
 TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
@@ -705,8 +711,10 @@ def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES[""]):
 
 def compare_prediction_similarity(df_pred_1, df_pred_2):
     """
-    For each label, print Pearson correlation for correctness of test set
-    predictions with model 1 vs model 2.
+    For each label, print Pearson correlation of:
+        (1) test set predicted label with model 1 vs model 2
+        (2) side predicted
+        (3) view predicted
 
     Parameters
     ----------
@@ -715,17 +723,44 @@ def compare_prediction_similarity(df_pred_1, df_pred_2):
     df_pred_2 : pandas.DataFrame
         Inference on the same test set by model 2
     """
-    # Check which predictions are correct
-    correct_pred_1 = (df_pred_1.label == df_pred_1.pred)
-    correct_pred_2 = (df_pred_2.label == df_pred_2.pred)
-
-    for label in df_pred_1.label.unique():
-        print(f"""
+    # Correlation of exact label
+    print("""
 ################################################################################
-                                    {label}                                   
-################################################################################""")
-        label_mask = (df_pred_1.label == label)
-        print(pearsonr(correct_pred_1[label_mask], correct_pred_2[label_mask]))
+#                         Exact Prediction Correlation                         #
+################################################################################
+    """)
+    for label in df_pred_1.label.unique():
+        pred_mask_1 = (df_pred_1.pred == label)
+        pred_mask_2 = (df_pred_2.pred == label)
+        print(f"{label}: {pearsonr(pred_mask_1, pred_mask_2)}")
+
+    # Extract side and plane (view) from predicted label
+    extract_from_label(df_pred_1, col="pred", extract="side")
+    extract_from_label(df_pred_1, col="pred", extract="plane")
+    extract_from_label(df_pred_2, col="pred", extract="side")
+    extract_from_label(df_pred_2, col="pred", extract="plane")
+
+    # Correlation of side
+    print("""
+################################################################################
+#                          Side Predicted Correlation                          #
+################################################################################
+    """)
+    for side in ("Left", "Right", "None"):
+        pred_mask_1 = (df_pred_1.pred_side == side)
+        pred_mask_2 = (df_pred_2.pred_side == side)
+        print(f"{side}: {pearsonr(pred_mask_1, pred_mask_2)}")
+
+    # Correlation of view
+    print("""
+################################################################################
+#                         Plane Predicted Correlation                          #
+################################################################################
+    """)
+    for plane in ("Saggital", "Transverse", "Bladder"):
+        pred_mask_1 = (df_pred_1.pred_plane == plane)
+        pred_mask_2 = (df_pred_2.pred_plane == plane)
+        print(f"{plane}: {pearsonr(pred_mask_1, pred_mask_2)}")
 
 
 ################################################################################
@@ -892,13 +927,8 @@ def extract_from_label(df, col="label", extract="plane"):
     extract : str, optional
         What to extract. One of "plane" or "side", by default "plane"
     """
-    def _extract_str(x, extract="plane"):
-        parts = x.split("_")
-        if extract == "side" and len(parts) > 1:
-            return parts[1]
-        return parts[0]
-
-    df[f"{col}_{extract}"] = df[col].map(lambda x: _extract_str(x, extract))
+    df[f"{col}_{extract}"] = df[col].map(
+        lambda x: utils.extract_from_label(x, extract))
 
 
 def get_new_seq_numbers(df_pred):
@@ -947,9 +977,9 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False):
         If True, predicted labels must be relative side (e.g., Transverse_First)
     """
     if relative_side:
-        side_to_idx = side_to_idx = {"First": "1", "Second": "2", "None": "-",}
+        side_to_idx = {"First": "1", "Second": "2", "None": "-",}
     else:
-        side_to_idx = side_to_idx = {"Left": "1", "Right": "2", "None": "-",}
+        side_to_idx = {"Left": "1", "Right": "2", "None": "-",}
     labels = df_pred.groupby(by=["id", "visit"]).apply(
         lambda df: "".join(df.sort_values(by=["seq_number"]).label.map(
             lambda x: side_to_idx[utils.extract_from_label(x, "side")]).tolist()))
@@ -1106,7 +1136,8 @@ def main_test_set(model_cls, checkpoint_path,
 
 if __name__ == '__main__':
     # NOTE: Chosen checkpoint and model type
-    MODEL_TYPE = MODEL_TYPES[-2]
+    MODEL_TYPE = MODEL_TYPES[-1]
+    LOGGER.info(MODEL_TYPE)
     ckpt_path = constants.DIR_RESULTS + MODEL_TYPE_TO_CKPT[MODEL_TYPE]
 
     # Flag for relative side encoding

@@ -23,27 +23,32 @@ from src.data import constants
 ################################################################################
 #                               Metadata Related                               #
 ################################################################################
-def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
-                  relative_side=False,
-                  include_unlabeled=False,
-                  img_dir=constants.DIR_IMAGES,
-                  include_test_set=False,
-                  test_path=constants.SK_TEST_METADATA_FILE):
+def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
+                           label_part=None,
+                           extract=False,
+                           relative_side=False,
+                           include_unlabeled=False,
+                           img_dir=constants.DIR_IMAGES,
+                           include_test_set=False,
+                           test_path=constants.SK_TEST_METADATA_FILE):
     """
     Load SickKids metadata table with filenames and view labels.
 
     Note
     ----
     If <relative_side> is True, the following examples happens:
-        - [Saggital_Left, Transverse_Right, Bladder] ->
-                [Saggital_First, Transverse_Second, Bladder]
-        - [Saggital_Right, Transverse_Left, Bladder] ->
-                [Saggital_First, Transverse_Second, Bladder]
+        - [Sagittal_Left, Transverse_Right, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
+        - [Sagittal_Right, Transverse_Left, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
 
     Parameters
     ----------
     path : str, optional
         Path to CSV metadata file, by default constants.SK_METADATA_FILE
+    label_part : str, optional
+        If specified, either `side` or `plane` is extracted from each label
+        and used as the given label, by default None.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -79,6 +84,17 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
     # Rename columns
     df_metadata = df_metadata.rename(columns={"IMG_FILE": "filename",
                                               "revised_labels": "label"})
+
+    # Fix mislabel saggital --> sagittal
+    fix_label_map = {"Saggital_Left": "Sagittal_Left",
+                     "Saggital_Right": "Sagittal_Right"}
+    df_metadata.label = df_metadata.label.map(lambda x: fix_label_map.get(x, x))
+
+    # Change label to side/plane, if specified
+    if label_part:
+        assert label_part in ("side", "plane")
+        df_metadata["label"] = df_metadata["label"].map(
+            lambda x: extract_from_label(x, extract=label_part))
 
     # If specified, include unlabeled images in directory provided
     if include_unlabeled:
@@ -117,8 +133,11 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE, extract=False,
     return df_metadata
 
 
-def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
-                           include_unlabeled=False, relative_side=False,
+def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE,
+                           label_part=None,
+                           extract=False,
+                           relative_side=False,
+                           include_unlabeled=False,
                            img_dir=constants.DIR_IMAGES):
     """
     Load Stanford metadata table with filenames and view labels.
@@ -126,15 +145,18 @@ def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
     Note
     ----
     If <relative_side> is True, the following examples happens:
-        - [Saggital_Left, Transverse_Right, Bladder] ->
-                [Saggital_First, Transverse_Second, Bladder]
-        - [Saggital_Right, Transverse_Left, Bladder] ->
-                [Saggital_First, Transverse_Second, Bladder]
+        - [Sagittal_Left, Transverse_Right, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
+        - [Sagittal_Right, Transverse_Left, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
 
     Parameters
     ----------
     path : str, optional
         Path to CSV metadata file, by default constants.STANFORD_METADATA_FILE
+    label_part : str, optional
+        If specified, either `side` or `plane` is extracted from each label
+        and used as the given label, by default None.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -154,6 +176,17 @@ def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE, extract=False,
         number).
     """
     df_metadata = pd.read_csv(path)
+
+    # Fix mislabel saggital --> sagittal
+    fix_label_map = {"Saggital_Left": "Sagittal_Left",
+                     "Saggital_Right": "Sagittal_Right"}
+    df_metadata.label = df_metadata.label.map(lambda x: fix_label_map.get(x, x))
+
+    # Change label to side/plane, if specified
+    if label_part:
+        assert label_part in ("side", "plane")
+        df_metadata["label"] = df_metadata["label"].map(
+            lambda x: extract_from_label(x, extract=label_part))
 
     # If specified, include unlabeled images in directory provided
     if include_unlabeled:
@@ -310,17 +343,20 @@ def remove_only_unlabeled_seqs(df_metadata):
 def extract_from_label(label, extract="plane"):
     """
     Extract data from label string.
+
     Parameters
     ----------
     label : str
         Label of the form <plane>_<side> or "Bladder"
     extract : str, optional
         One of "plane" or "side", by default "plane"
+
     Returns
     -------
     str
         Extracted item from label
     """
+    assert extract in ("plane", "side")
     label_parts = label.split("_")
     if extract == "side":
         return label_parts[1] if len(label_parts) > 1 else "None"

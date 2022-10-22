@@ -56,6 +56,7 @@ def init(parser):
 
         "self_supervised": "If flagged, trains a MoCo model on US images.",
         "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
+        "ssl_ckpt_path": "If evaluating SSL method, path to trained SSL model.",
         "ssl_eval_linear": "If flagged, trains linear classifier over "
                            "pretrained self-supervised model.",
         "ssl_eval_linear_lstm": "If flagged, trains linear classifier over "
@@ -77,6 +78,8 @@ def init(parser):
         "hidden_dim": "Number of nodes in each LSTM hidden layer",
         "bidirectional": "If flagged, LSTM will be bidirectional",
 
+        "label_part": "Which part of label to use (side/plane). By default, "
+                      "uses raw label.",
         "hospital": "Which hospital's data to use",
         "include_unlabeled": "Include unlabeled data for hospital specified.",
         "train": "If flagged, run experiment to train model.",
@@ -110,6 +113,8 @@ def init(parser):
                         help=arg_help["self_supervised"])
     parser.add_argument("--full_seq", action="store_true",
                         help=arg_help["full_seq"])
+    parser.add_argument("--ssl_ckpt_path", default=constants.MOCO_CKPT_PATH,
+                        help=arg_help["ssl_ckpt_path"])
     parser.add_argument("--ssl_eval_linear", action="store_true",
                         help=arg_help["ssl_eval_linear"])
     parser.add_argument("--ssl_eval_linear_lstm", action="store_true",
@@ -138,9 +143,12 @@ def init(parser):
                         help=arg_help["bidirectional"])
 
     # Data arguments
+    parser.add_argument("--label_part", default=None,
+                        choices=("side", "plane"),
+                        help=arg_help["label_part"])
     parser.add_argument("--hospital", default="sickkids",
                         choices=constants.HOSPITALS,
-                        help=arg_help["train"])
+                        help=arg_help["hospital"])
     parser.add_argument("--include_unlabeled", action="store_true",
                         help=arg_help["include_unlabeled"])
     parser.add_argument("--train", action="store_true", help=arg_help["train"])
@@ -287,8 +295,9 @@ def main(args):
         Contains arguments needed to run experiments
     """
     # 0. Set up hyperparameters
-    hparams = {"img_size": constants.IMG_SIZE,
-               "num_classes": constants.NUM_CLASSES}
+    hparams = {
+        "img_size": constants.IMG_SIZE,
+        "num_classes": len(constants.LABEL_PART_TO_CLASSES[args.label_part])}
     hparams.update(vars(args))
 
     # 0. Arguments for experiment
@@ -304,11 +313,13 @@ def main(args):
     # 1. Get image filenames and labels
     if args.hospital == "sickkids":
         df_metadata = load_sickkids_metadata(
+            label_part=args.label_part,
             extract=True,
             relative_side=hparams["relative_side"],
             include_unlabeled=hparams["include_unlabeled"])
     elif args.hospital == "stanford":
         df_metadata = load_stanford_metadata(
+            label_part=args.label_part,
             extract=True,
             relative_side=hparams["relative_side"],
             include_unlabeled=hparams["include_unlabeled"])
@@ -333,23 +344,17 @@ def main(args):
 
     # 3. Specify model class
     if args.self_supervised:    # For self-supervised (SSL) image-based model
-        # If evaluating SSL method
-        if args.ssl_eval_linear:
-            # Load pretrained conv. backbone
-            pretrained_model = MoCo.load_from_checkpoint(
-                constants.MOCO_CKPT_PATH)
-            hparams["backbone"] = pretrained_model.backbone
-
-            model_cls = LinearClassifier
-        elif args.ssl_eval_linear_lstm:
-            # Load pretrained conv. backbone
-            pretrained_model = MoCo.load_from_checkpoint(
-                constants.MOCO_CKPT_PATH)
-            hparams["backbone"] = pretrained_model.backbone
-
-            model_cls = LinearLSTM
-        else:
+        # If training SSL
+        if not (args.ssl_eval_linear or args.ssl_eval_linear_lstm):
             model_cls = MoCo
+        # If evaluating SSL method
+        else:
+            # Load pretrained conv. backbone
+            pretrained_model = MoCo.load_from_checkpoint(args.ssl_ckpt_path)
+            hparams["backbone"] = pretrained_model.backbone
+
+            model_cls = LinearClassifier if args.ssl_eval_linear \
+                else LinearLSTM
     elif not args.self_supervised and args.full_seq:
         # For supervised full-sequence model
         model_cls = EfficientNetLSTM
