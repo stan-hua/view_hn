@@ -35,11 +35,11 @@ plt.style.use('dark_background')
 plt.rc('font', family='serif')
 
 # Set random seed
-random.seed(42)
+random.seed(constants.SEED)
 
 # Order of labels in plot
-VIEW_LABEL_ORDER = ["Saggital_Right", "Transverse_Right", "Saggital_Left",
-               "Transverse_Left", "Bladder"]
+VIEW_LABEL_ORDER = ["Sagittal_Right", "Transverse_Right", "Sagittal_Left",
+                    "Transverse_Left", "Bladder"]
 
 
 ################################################################################
@@ -334,7 +334,7 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
         # Add directory to image paths
         cluster_img_paths = [constants.DIR_IMAGES + filename \
             for filename in cluster_filenames]
-        
+
         print("\n".join(cluster_img_paths))
 
         # Load images
@@ -416,7 +416,7 @@ def cluster_by_density(embeds):
 ################################################################################
 #                                 Main Method                                  #
 ################################################################################
-def main(model, raw=False):
+def main(model, raw=False, segmented=False, reverse_mask=False):
     """
     Retrieves embeddings from specified pretrained model. Then plot UMAPs.
 
@@ -427,9 +427,16 @@ def main(model, raw=False):
     raw : bool, optional
         If True, loads embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
+    segmented : bool, optional
+        If True, loads embeddings extracted from segmented images, by default
+        False.
+    reverse_mask : bool, optional
+        If True, loads embeddings extracted from segmented images where the mask
+        is reversed, by default False.
     """
     # Load embeddings
-    df_embeds = get_embeds(model, raw=raw)
+    df_embeds = get_embeds(model, raw=raw, segmented=segmented,
+                           reverse_mask=reverse_mask)
     df_embeds = df_embeds.rename(columns={"paths": "files"})    # legacy name
 
     # Extract metadata from image file paths
@@ -484,5 +491,5 @@ def main(model, raw=False):
 
 
 if __name__ == '__main__':
-    for model in ("moco",):      # must be in constants.MODELS
-        main(model, raw=False)
+    for model in ("imagenet",):      # must be in constants.MODELS
+        main(model, raw=False, segmented=True, reverse_mask=False)
