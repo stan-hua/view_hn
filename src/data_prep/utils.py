@@ -23,6 +23,32 @@ from src.data import constants
 ################################################################################
 #                               Metadata Related                               #
 ################################################################################
+def load_metadata(hospital, **kwargs):
+    """
+    Loads metadata for a specific hospital
+
+    Parameters
+    ----------
+    hospital : str
+        One of ("sickkids", "stanford")
+
+    Returns
+    -------
+    pd.DataFrame
+        May contain metadata (filename, view label, patient id, visit, sequence
+        number).
+    """
+    assert hospital in ("sickkids", "stanford")
+
+    # Mapping of hospital to metadata loading function
+    hospital_to_func = {
+        "sickkids": load_sickkids_metadata,
+        "stanford": load_stanford_metadata,
+    }
+
+    return hospital_to_func[hospital](**kwargs)
+
+
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            extract=False,

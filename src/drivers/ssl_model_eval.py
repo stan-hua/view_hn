@@ -150,6 +150,26 @@ def train_eval_models(exp_name):
                 **{f"ssl_eval_{model_type}": True})
 
 
+def analyze_preds(exp_name):
+    """
+    Perform test prediction analysis from `model_eval` on trained evaluations
+    models
+
+    Parameters
+    ----------
+    exp_name : str
+        Base SSL experiment name
+    """
+    # Evaluate each model separately
+    for model_type in MODEL_TYPES:
+        for label_part in LABEL_PARTS:
+            exp_eval_name = EVAL_EXP_NAME.format(
+                exp_name=exp_name, model_type=model_type, label_part=label_part)
+
+            model_eval.infer_test_set(exp_eval_name)
+            model_eval.analyze_test_set_preds(exp_eval_name)
+
+
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
@@ -206,6 +226,9 @@ def main(args):
 
     # Train all evaluation models for pretrained SSL model
     train_eval_models(args.exp_name)
+
+    # Analyze results of evaluation models
+    analyze_preds(args.exp_name)
 
 
 if __name__ == '__main__':

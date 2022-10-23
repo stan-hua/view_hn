@@ -18,7 +18,7 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 
 # Custom libraries
 from src.data import constants
-from src.data_prep.utils import load_sickkids_metadata, load_stanford_metadata
+from src.data_prep import utils 
 from src.data_prep.dataset import (SelfSupervisedUltrasoundDataModule,
                                    UltrasoundDataModule)
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
@@ -180,6 +180,91 @@ def init(parser):
     parser.add_argument("--debug", action="store_true", help=arg_help["debug"])
 
 
+def setup_data_module(hparams):
+    """
+    Set up data module
+
+    Parameters
+    ----------
+    hparams : dict
+        Experiment hyperparameters
+
+    Returns
+    -------
+    pytorch_lightning.LightningDataModule
+    """
+    # 1. Load metadata
+    df_metadata = utils.load_metadata(
+        hospital=hparams["hospital"],
+        extract=True,
+        label_part=hparams["label_part"],
+        relative_side=hparams["relative_side"],
+        include_unlabeled=hparams["include_unlabeled"])
+
+    # 2. Instantiate data module
+    # 2.1 Choose appropriate class for data module
+    if hparams["self_supervised"] and not \
+            (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
+        data_module_cls = SelfSupervisedUltrasoundDataModule
+    else:
+        data_module_cls = UltrasoundDataModule
+    # 2.2 Pass in specified dataloader parameters
+    dataloader_params = {
+        'batch_size': hparams["batch_size"] if not hparams["full_seq"] else 1,
+        'shuffle': hparams["shuffle"],
+        'num_workers': hparams["num_workers"],
+        'pin_memory': hparams["pin_memory"],
+    }
+    dm = data_module_cls(dataloader_params, df=df_metadata,
+                         img_dir=constants.DIR_IMAGES, **hparams)
+    dm.setup()
+
+    return dm
+
+
+def get_model_cls(hparams):
+    """
+    Given experiment hyperparameters, get appropriate model class.
+
+    Note
+    ----
+    Adds `backbone` to hparams, if needed.
+
+    Parameters
+    ----------
+    hparams : dict
+        Experiment parameters
+
+    Returns
+    -------
+    class
+        Model class
+    """
+    # For self-supervised (SSL) image-based model
+    if hparams["self_supervised"]:
+        # If training SSL
+        if not (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
+            model_cls = MoCo
+        # If evaluating SSL method
+        else:
+            # Load pretrained conv. backbone
+            # NOTE: Updates hparams with backbone
+            pretrained_model = MoCo.load_from_checkpoint(
+                hparams["ssl_ckpt_path"])
+            hparams["backbone"] = pretrained_model.backbone
+
+            model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
+                else LinearLSTM
+    # For supervised full-sequence model
+    elif not hparams["self_supervised"] and hparams["full_seq"]:
+        model_cls = EfficientNetLSTM
+    # For supervised image-based model
+    else:
+        model_cls = EfficientNetPL
+
+    return model_cls
+
+
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
@@ -310,62 +395,16 @@ def main(args):
 
     hparams["accum_batches"] = args.batch_size if args.full_seq else None
 
-    # 1. Get image filenames and labels
-    if args.hospital == "sickkids":
-        df_metadata = load_sickkids_metadata(
-            label_part=args.label_part,
-            extract=True,
-            relative_side=hparams["relative_side"],
-            include_unlabeled=hparams["include_unlabeled"])
-    elif args.hospital == "stanford":
-        df_metadata = load_stanford_metadata(
-            label_part=args.label_part,
-            extract=True,
-            relative_side=hparams["relative_side"],
-            include_unlabeled=hparams["include_unlabeled"])
+    # 1. Set up data module
+    dm = setup_data_module(hparams)
 
-    # 2. Instantiate data module
-    # 2.1 Choose appropriate class for data module
-    if args.self_supervised and not \
-            (args.ssl_eval_linear or args.ssl_eval_linear_lstm):
-        data_module_cls = SelfSupervisedUltrasoundDataModule
-    else:
-        data_module_cls = UltrasoundDataModule
-    # 2.2 Pass in specified dataloader parameters
-    dataloader_params = {
-        'batch_size': args.batch_size if not args.full_seq else 1,
-        'shuffle': args.shuffle,
-        'num_workers': args.num_workers,
-        'pin_memory': args.pin_memory,
-    }
-    dm = data_module_cls(dataloader_params, df=df_metadata,
-                         img_dir=constants.DIR_IMAGES, **hparams)
-    dm.setup()
+    # 2. Specify model class
+    model_cls = get_model_cls(hparams)
 
-    # 3. Specify model class
-    if args.self_supervised:    # For self-supervised (SSL) image-based model
-        # If training SSL
-        if not (args.ssl_eval_linear or args.ssl_eval_linear_lstm):
-            model_cls = MoCo
-        # If evaluating SSL method
-        else:
-            # Load pretrained conv. backbone
-            pretrained_model = MoCo.load_from_checkpoint(args.ssl_ckpt_path)
-            hparams["backbone"] = pretrained_model.backbone
-
-            model_cls = LinearClassifier if args.ssl_eval_linear \
-                else LinearLSTM
-    elif not args.self_supervised and args.full_seq:
-        # For supervised full-sequence model
-        model_cls = EfficientNetLSTM
-    else:
-        # For supervised image-based model
-        model_cls = EfficientNetPL
-
-    # 4.1 Run experiment
+    # 3.1 Run experiment
     if hparams["cross_val_folds"] == 1:
         run(hparams, dm, model_cls, constants.DIR_RESULTS, **experiment_hparams)
-    # 4.2 Run experiment  w/ kfold cross-validation)
+    # 3.2 Run experiment  w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)

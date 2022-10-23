@@ -5,11 +5,14 @@ Description: Used to evaluate a trained model's performance on the testing set.
 """
 
 # Standard libraries
+import argparse
 import logging
 import os
 import random
 from colorama import Fore, Style
 from collections import OrderedDict
+from pathlib import Path
+
 
 # Non-standard libraries
 import pandas as pd
@@ -30,6 +33,7 @@ from src.data import constants
 from src.data_prep.dataset import UltrasoundDataModule
 from src.data_prep import utils
 from src.data_viz.eda import print_table
+from src.drivers.model_training import get_model_cls
 from src.models.efficientnet_pl import EfficientNetPL
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.linear_classifier import LinearClassifier
@@ -93,22 +97,35 @@ MODEL_TYPE_TO_CKPT = OrderedDict({
 # Type of models
 MODEL_TYPES = list(MODEL_TYPE_TO_CKPT.keys())
 
-# Table to store/retrieve predictions and labels for test set
-TEST_PRED_PATH = constants.DIR_RESULTS + "/test_set_results(%s).csv"
+
+################################################################################
+#                                Initialization                                #
+################################################################################
+def init(parser):
+    """
+    Initialize ArgumentParser
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        ArgumentParser object
+    """
+    arg_help = {
+        "exp_name": "Name of experiment (to evaluate)"
+    }
+    parser.add_argument("--exp_name", help=arg_help["exp_name"])
 
 
 ################################################################################
 #                             Inference - Related                              #
 ################################################################################
-def get_test_set_metadata(df_metadata, hparams, img_dir=constants.DIR_IMAGES):
+def get_test_set_metadata(hparams, img_dir=constants.DIR_IMAGES):
     """
     Get metadata table containing (filename, label) for each image in the test
     set.
 
     Parameters
     ----------
-    df_metadata : pandas.DataFrame
-        Each row contains metadata for an ultrasound image.
     hparams : dict
         Hyperparameters used in model training run, used to load exact test set.
     img_dir : str, optional
@@ -123,6 +140,15 @@ def get_test_set_metadata(df_metadata, hparams, img_dir=constants.DIR_IMAGES):
     for split_params in ("train_val_split", "train_test_split"):
         if split_params not in hparams:
             hparams[split_params] = 0.75
+
+    # Load metadata
+    df_metadata = utils.load_metadata(
+        hospital="sickkids",
+        extract=True,
+        img_dir=constants.DIR_IMAGES,
+        label_part=hparams.get("label_part"),
+        include_unlabeled=hparams.get("include_unlabeled", False),
+        relative_side=hparams["relative_side"])
 
     # Set up data
     dm = UltrasoundDataModule(df=df_metadata, img_dir=img_dir, **hparams)
@@ -141,7 +167,8 @@ def get_test_set_metadata(df_metadata, hparams, img_dir=constants.DIR_IMAGES):
     return df_test
 
 
-def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES):
+def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
+                      **hparams):
     """
     Performs inference on images specified. Returns predictions, probabilities
     and raw model output.
@@ -154,6 +181,8 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES):
         Filenames (or full paths) to images to infer on.
     img_dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
+    hparams : dict, optional
+        Keyword arguments for experiment hyperparameters
 
     Returns
     -------
@@ -161,6 +190,10 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES):
         (prediction for each image, probability of each prediction,
          raw model output)
     """
+    # Get mapping of index to class
+    label_part = hparams.get("label_part")
+    idx_to_class = constants.LABEL_PART_TO_CLASSES[label_part]["idx_to_class"]
+
     # Set to evaluation mode
     model.eval()
 
@@ -197,13 +230,14 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES):
             outs.append(out)
 
             # Convert from encoded label to label name
-            pred_label = constants.IDX_TO_CLASS[pred]
+            pred_label = idx_to_class[pred]
             preds.append(pred_label)
 
     return np.array(preds), np.array(probs), np.array(outs)
 
 
-def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES):
+def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
+                         **hparams):
     """
     Performs inference on a full ultrasound sequence specified. Returns
     predictions, probabilities and raw model output.
@@ -216,6 +250,8 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES):
         Filenames (or full paths) to images from one unique sequence to infer.
     img_dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
+    hparams : dict, optional
+        Keyword arguments for experiment hyperparameters
 
     Returns
     -------
@@ -223,6 +259,10 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES):
         (prediction for each image, probability of each prediction,
          raw model output)
     """
+    # Get mapping of index to class
+    label_part = hparams.get("label_part")
+    idx_to_class = constants.LABEL_PART_TO_CLASSES[label_part]["idx_to_class"]
+
     # Set to evaluation mode
     model.eval()
 
@@ -256,7 +296,7 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES):
         outs = torch.max(outs, dim=1).values.numpy()
 
         # Convert from encoded label to label name
-        preds = np.vectorize(constants.IDX_TO_CLASS.__getitem__)(preds)
+        preds = np.vectorize(idx_to_class.__getitem__)(preds)
 
     return preds, probs, outs
 
@@ -264,7 +304,7 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES):
 ################################################################################
 #                            Analysis of Inference                             #
 ################################################################################
-def plot_confusion_matrix(df_pred, filter_confident=False, relative_side=False):
+def plot_confusion_matrix(df_pred, filter_confident=False, ax=None, **hparams):
     """
     Plot confusion matrix based on model predictions.
 
@@ -276,24 +316,90 @@ def plot_confusion_matrix(df_pred, filter_confident=False, relative_side=False):
     filter_confident : bool, optional
         If True, filters for most confident prediction in each view label for
         each unique sequence, before creating the confusion matrix.
-    relative_side : bool, optional
-        If True, assumes predicted labels are encoded for relative sides, by
-        default False.
+    ax : matplotlib.Axis, optional
+        Axis to plot confusion matrix on
+    hparams : dict, optional
+        Keyword arguments for experiment hyperparameters
     """
     # If flagged, get for most confident pred. for each view label per seq.
     if filter_confident:
         df_pred = filter_most_confident(df_pred)
 
-    # Gets all labels based on side encoding
-    all_labels = constants.CLASSES["relative" if relative_side else ""]
+    # Gets all labels
+    if hparams.get("relative_side"):
+        all_labels = constants.CLASSES["relative"]
+    else:
+        label_part = hparams.get("label_part")
+        all_labels = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
 
     # Plots confusion matrix
     cm = confusion_matrix(df_pred["label"], df_pred["pred"],
                           labels=all_labels)
     disp = ConfusionMatrixDisplay(cm, display_labels=all_labels)
-    disp.plot()
-    plt.tight_layout()
-    plt.show()
+    disp.plot(ax=ax)
+
+    # Set title
+    if ax:
+        title = "Confusion Matrix (%s)" % \
+            ("Most Confident" if filter_confident else "All")
+        ax.set_title(title)
+
+
+def print_confusion_matrix(df_pred, **hparams):
+    """
+    Prints confusion matrix with proportion and count
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Test set predictions. Each row is a test example with a label,
+        prediction, and other patient and sequence-related metadata.
+    hparams : dict, optional
+        Keyword arguments for experiment hyperparameters
+    """
+    def get_counts_and_prop(df):
+        """
+        Given all instances for one label, get the proportions and counts for
+        each of the predicted labels.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Test set prediction for 1 label.
+        """
+        df_counts = df["pred"].value_counts()
+        num_samples = len(df)
+
+        return df_counts.map(lambda x: f"{round(x/num_samples, 2)} ({x})")
+
+    # Gets all labels
+    if hparams.get("relative_side"):
+        all_labels = constants.CLASSES["relative"]
+    else:
+        label_part = hparams.get("label_part")
+        all_labels = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
+
+    # Check that test labels include all labels
+    assert set(df_pred["label"].unique()) == set(all_labels), \
+        "Not all given labels are present!"
+
+    # Accumulate counts and proportion of predicted labels for each label
+    df_labels = df_pred.groupby(by=["label"]).apply(get_counts_and_prop)
+
+    # Rename columns
+    df_labels = df_labels.reset_index().rename(
+        columns={"pred": "proportion", "level_1": "pred"})
+
+    # Reformat table to become a confusion matrix
+    df_cm = df_labels.pivot(index="label", columns="pred", values="proportion")
+
+    # Remove axis names
+    df_cm = df_cm.rename_axis(None).rename_axis(None, axis=1)
+
+    # Reorder column and index by given labels
+    df_cm = df_cm.loc[:, all_labels].reindex(all_labels)
+
+    print_table(df_cm)
 
 
 def plot_pred_probability_by_views(df_pred, relative_side=False):
@@ -659,56 +765,6 @@ def check_rel_side_pred_progression(df_pred):
     print_table(label_seq_counts, show_index=False)
 
 
-def print_confusion_matrix(df_pred, unique_labels=constants.CLASSES[""]):
-    """
-    Prints confusion matrix with proportion and count
-
-    Parameters
-    ----------
-    df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
-        prediction, and other patient and sequence-related metadata.
-    unique_labels : list, optional
-        List of unique labels, by default constants.CLASSES[""]
-    """
-    def get_counts_and_prop(df):
-        """
-        Given all instances for one label, get the proportions and counts for
-        each of the predicted labels.
-
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            Test set prediction for 1 label.
-        """
-        df_counts = df["pred"].value_counts()
-        num_samples = len(df)
-
-        return df_counts.map(lambda x: f"{round(x/num_samples, 2)} ({x})")
-
-    # Check that test labels include all labels
-    assert set(df_pred["label"].unique()) == set(unique_labels), \
-        "Not all given labels are present!"
-
-    # Accumulate counts and proportion of predicted labels for each label
-    df_labels = df_pred.groupby(by=["label"]).apply(get_counts_and_prop)
-
-    # Rename columns
-    df_labels = df_labels.reset_index().rename(
-        columns={"pred": "proportion", "level_1": "pred"})
-
-    # Reformat table to become a confusion matrix
-    df_cm = df_labels.pivot(index="label", columns="pred", values="proportion")
-
-    # Remove axis names
-    df_cm = df_cm.rename_axis(None).rename_axis(None, axis=1)
-
-    # Reorder column and index by given labels
-    df_cm = df_cm.loc[:, unique_labels].reindex(unique_labels)
-
-    print_table(df_cm)
-
-
 def compare_prediction_similarity(df_pred_1, df_pred_2):
     """
     For each label, print Pearson correlation of:
@@ -810,7 +866,13 @@ def get_hyperparameters(hparam_dir=None, filename="hparams.yaml"):
         Hyperparameters
     """
     if hparam_dir:
-        with open(os.path.join(hparam_dir, filename), "r") as stream:
+        file_path = None
+        # Recursively find hyperparameter file
+        for path in Path(hparam_dir).rglob(filename):
+            file_path = str(path)
+
+        # Load hyperparameter file
+        with open(file_path, "r") as stream:
             try:
                 hparams = yaml.full_load(stream)
                 return hparams
@@ -1049,77 +1111,151 @@ def get_model_class(model_type):
     return model_cls, load_from_ckpt_params
 
 
-################################################################################
-#                                  Main Flows                                  #
-################################################################################
-def main_test_set(model_cls, checkpoint_path,
-                  load_from_ckpt_params=None,
-                  save_path=TEST_PRED_PATH, sequential=False,
-                  include_unlabeled=False, seq_number_limit=None,
-                  relative_side=False):
+def find_best_ckpt_path(path_exp_dir):
     """
-    Performs inference on test set, and saves results
+    Finds the path to the best model checkpoint.
 
     Parameters
     ----------
-    model_cls : class reference
-        Used to load specific model from checkpoint path
-    checkpoint_path : str
-        Path to file containing EfficientNetPL model checkpoint
-    load_from_ckpt_params : dict, optional
-        Additional keyword parameters to pass into load_from_checkpoint
-    save_path : str, optional
-        Path to file to save test results to, by default TEST_PRED_PATH
-    sequential : bool, optional
-        If True, feed full image sequences into model, by default False.
-    include_unlabeled : bool, optional
-        If True, include unlabeled images in test set, by default False.
-    relative_side : bool, optional
-        If True, converts side (Left/Right) to order in which side appeared
-        (First/Second/None). Requires <extract> to be True, by default False.
+    path_exp_dir : str
+        Path to a trained model directory
+
+    Returns
+    -------
+    str
+        Path to PyTorch Lightning best model checkpoint
+
+    Raises
+    ------
+    RuntimeError
+        If no valid ckpt files found
+    """
+    # Look for checkpoint files
+    ckpt_paths = [str(path) for path in Path(path_exp_dir).rglob("*.ckpt")]
+
+    # Remove last checkpoint. NOTE: The other checkpoint is for the best epoch
+    ckpt_paths = [path for path in ckpt_paths if "last.ckpt" not in path]
+
+    if not ckpt_paths:
+        raise RuntimeError("No best epoch model checkpoint (.ckpt) found!")
+
+    if len(ckpt_paths) > 1:
+        LOGGER.warning("More than 1 checkpoint file (.ckpt) found besides "
+                       "last.ckpt!")
+
+    return ckpt_paths[0]
+
+
+def create_save_path(exp_name, **extra_flags):
+    """
+    Create file path to test predictions, based on experiment name and keyword
+    arguments
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    **extra_flags : dict, optional
+        Keyword arguments, specifying extra flags used during test set
+        inference
+
+    Returns
+    -------
+    str
+        Expected path to test predictions
+    """
+    for flag, val in extra_flags.items():
+        if val:
+            exp_name += f"__{flag}"
+
+    # Create test results directory, if not exists
+    test_dir = os.path.join(constants.DIR_TEST_RESULTS, exp_name)
+    if not os.path.exists(test_dir):
+        os.mkdir(test_dir)
+
+    # Expected path to test set results
+    save_path = os.path.join(test_dir, f"test_set_results({exp_name}).csv")
+
+    return save_path
+
+
+################################################################################
+#                                  Main Flows                                  #
+################################################################################
+def infer_test_set(exp_name, seq_number_limit=None, **overwrite_hparams):
+    """
+    Perform inference on test set, and saves results
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+        experiment name
     seq_number_limit : int, optional
         If provided, filters out test set samples with sequence numbers higher
         than this value, by default None.
+    overwrite_hparams : dict, optional
+        Keyword arguments to overwrite experiment hyperparameters
+
+    Raises
+    ------
+    RuntimeError
+        If `exp_name` does not lead to a valid training directory
     """
-    # 2. Get metadata, specifically for the test set
-    # 2.0 Get image filenames and labels
-    df_metadata = utils.load_sickkids_metadata(
-        extract=True,
-        include_unlabeled=include_unlabeled, img_dir=constants.DIR_IMAGES,
-        relative_side=relative_side)
+    # 0 Create test prediction save path
+    save_path = create_save_path(exp_name,
+                                 seq_number_limit=seq_number_limit)
+    # If prediction already exist, skip
+    if os.path.exists(save_path):
+        return
 
-    # 2.1 Get hyperparameters for run
-    model_dir = os.path.dirname(checkpoint_path)
+    # 0. Get experiment directory, where model was trained
+    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+    if not os.path.exists(model_dir):
+        raise RuntimeError("`exp_name` provided does not lead to a valid model "
+                           "training directory")
+
+    # 1 Get experiment hyperparameters
     hparams = get_hyperparameters(model_dir)
+    hparams.update(overwrite_hparams)
 
-    # 2.2 Load test metadata
-    df_test_metadata = get_test_set_metadata(df_metadata, hparams)
+    # 2. Get test set metadata
+    df_test_metadata = get_test_set_metadata(hparams)
 
-    # If provided, filter out high sequence number images
+    # 2.1 If provided, filter out high sequence number images
     if seq_number_limit:
         mask = (df_test_metadata["seq_number"] <= seq_number_limit)
         df_test_metadata = df_test_metadata[mask]
 
-    # 2.3 Sort, so no mismatch occurs due to groupby sorting
+    # 2.2 Sort, so no mismatch occurs due to groupby sorting
     df_test_metadata = df_test_metadata.sort_values(by=["id", "visit"],
                                                     ignore_index=True)
 
     # 3. Load existing model and send to device
+    # 3.1 Get checkpoint path
+    ckpt_path = find_best_ckpt_path(model_dir)
+    # 3.2 Get model class and extra parameters for loading from checkpoint
+    hparams_copy = hparams.copy()
+    model_cls = get_model_cls(hparams)
+    extra_ckpt_params = {k:v for k,v in hparams.items() \
+        if k not in hparams_copy}
+    # 3.3 Load model
     model = model_cls.load_from_checkpoint(
-        checkpoint_path,
-        **(load_from_ckpt_params if load_from_ckpt_params else {}))
+        checkpoint_path=ckpt_path,
+        **extra_ckpt_params)
     model = model.to(DEVICE)
 
     # 4. Get predictions on test set
-    if not sequential:
+    if not hparams["full_seq"]:
         filenames = df_test_metadata.filename.tolist()
         preds, probs, outs = predict_on_images(model=model, filenames=filenames,
-                                               img_dir=None)
+                                               img_dir=None, **hparams)
     else:
         # Perform inference one sequence at a time
         ret = df_test_metadata.groupby(by=["id", "visit"]).progress_apply(
             lambda df: predict_on_sequences(
-                model=model, filenames=df.filename.tolist(), img_dir=None)
+                model=model, filenames=df.filename.tolist(), img_dir=None,
+                **hparams)
         )
 
         # Flatten predictions, probs and model outputs from all sequences
@@ -1134,70 +1270,73 @@ def main_test_set(model_cls, checkpoint_path,
     df_test_metadata.to_csv(save_path, index=False)
 
 
+def analyze_test_set_preds(exp_name):
+    """
+    Analyze test set predictions
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+
+    Raises
+    ------
+    RuntimeError
+        If `exp_name` does not lead to a valid training directory
+    """
+    # 0. Get experiment directory, where model was trained
+    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+    if not os.path.exists(model_dir):
+        raise RuntimeError("`exp_name` provided does not lead to a valid model "
+                           "training directory")
+
+    # 1 Get experiment hyperparameters
+    hparams = get_hyperparameters(model_dir)
+
+    # 2. Load test metadata
+    save_path = create_save_path(exp_name)
+    df_pred = pd.read_csv(save_path)
+
+    # 3. Test results directory, to store figures
+    test_dir = os.path.join(constants.DIR_TEST_RESULTS, exp_name)
+
+    # Print reasons for misclassification of most confident predictions
+    if not hparams.get("label_part"):
+        check_misclassifications(df_pred,
+                                 relative_side=hparams.get("relative_side"))
+
+    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+    # Plot confusion matrix for most confident predictions
+    plot_confusion_matrix(df_pred, filter_confident=True, ax=ax1, **hparams)
+    # Plot confusion matrix for all predictions
+    plot_confusion_matrix(df_pred, filter_confident=False, ax=ax2, **hparams)
+    plt.tight_layout()
+    plt.savefig(os.path.join(test_dir, "confusion_matrix.png"))
+
+    # Print confusion matrix for all predictions
+    print_confusion_matrix(df_pred, **hparams)
+
+    # Plot probability of predicted labels over the sequence number
+    # plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
+
+    # Plot accuracy over sequence number
+    # plot_acc_over_sequence(df_pred, update_seq_num=True)
+
+    # Show randomly chosen side predictions for full sequences
+    show_example_side_predictions(df_pred,
+                                  relative_side=hparams.get("relative_side"))
+
+
 if __name__ == '__main__':
-    # NOTE: Chosen checkpoint and model type
-    MODEL_TYPE = MODEL_TYPES[-1]
-    LOGGER.info(MODEL_TYPE)
-    ckpt_path = constants.DIR_RESULTS + MODEL_TYPE_TO_CKPT[MODEL_TYPE]
+    # 0. Initialize ArgumentParser
+    PARSER = argparse.ArgumentParser()
+    init(PARSER)
 
-    # Flag for relative side encoding
-    relative_side = ("relative" in MODEL_TYPE)
+    # 1. Parse Arguments
+    ARGS = PARSER.parse_args()
 
-    # Add model type to save path
-    test_save_path = TEST_PRED_PATH % (MODEL_TYPE,)
+    # Perform inference
+    infer_test_set(exp_name=ARGS.exp_name)
 
-    # Inference on test set
-    if not os.path.exists(test_save_path):
-        # Get model class based on model type
-        model_cls, load_ckpt_params = get_model_class(MODEL_TYPE)
-
-        # Perform inference
-        main_test_set(model_cls, ckpt_path, load_ckpt_params,
-                      save_path=test_save_path,
-                      sequential=("seq" in MODEL_TYPE),
-                      include_unlabeled=("other" in MODEL_TYPE),
-                      seq_number_limit=40 if "short" in MODEL_TYPE else None,
-                      relative_side=relative_side)
-
-    # Load test metadata
-    df_pred = pd.read_csv(test_save_path)
-
-    # 5-View (Not including 'Other' label)
-    if "five_view" in MODEL_TYPE and "other" not in MODEL_TYPE:
-        # Print reasons for misclassification of most confident predictions
-        check_misclassifications(df_pred, relative_side=relative_side)
-
-        # Plot confusion matrix for most confident predictions
-        plot_confusion_matrix(df_pred, filter_confident=True,
-                              relative_side=relative_side)
-        # Plot confusion matrix for all predictions
-        plot_confusion_matrix(df_pred, filter_confident=False,
-                              relative_side=relative_side)
-        # Print confusion matrix for all predictions
-        print_confusion_matrix(
-            df_pred, constants.CLASSES["relative" if relative_side else ""])
-
-        # Plot probability of predicted labels over the sequence number
-        plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
-
-        # Plot accuracy over sequence number
-        plot_acc_over_sequence(df_pred, update_seq_num=True)
-
-        # Plot number of images over sequence number
-        plot_image_count_over_sequence(df_pred, update_seq_num=True)
-
-        # Relative side labels
-        if relative_side:
-            check_rel_side_pred_progression(df_pred)
-
-        # Show randomly chosen side predictions for full sequences
-        show_example_side_predictions(df_pred, relative_side=relative_side)
-
-    # Bladder vs. Other models
-    if "binary" in MODEL_TYPE:
-        # Plot binary avg. prediction probabilites by view
-        plot_pred_probability_by_views(df_pred)
-
-    # 5-View (Includin 'Other' label)
-    if "five_view" in MODEL_TYPE and "other" in MODEL_TYPE:
-        check_others_pred_progression(df_pred)
+    # Evaluate predictions
+    analyze_test_set_preds(exp_name=ARGS.exp_name)
