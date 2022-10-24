@@ -396,6 +396,11 @@ def print_confusion_matrix(df_pred, **hparams):
     # Remove axis names
     df_cm = df_cm.rename_axis(None).rename_axis(None, axis=1)
 
+    # Fill in columns, if not predicted (at all)
+    for label in all_labels:
+        if label not in df_cm.columns:
+            df_cm[label] = "0.0 (0)"
+
     # Reorder column and index by given labels
     df_cm = df_cm.loc[:, all_labels].reindex(all_labels)
 
