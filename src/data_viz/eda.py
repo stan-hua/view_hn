@@ -20,7 +20,7 @@ from tabulate import tabulate
 
 # Custom libraries
 from src.data import constants
-from src.data_prep.dataset import SelfSupervisedUltrasoundDataModule
+from src.data_prep.ssl_dataset import SelfSupervisedUltrasoundDataModule
 from src.data_prep.utils import load_sickkids_metadata
 
 

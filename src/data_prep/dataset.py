@@ -29,6 +29,7 @@ from src.data_prep import utils
 #                                  Constants                                   #
 ################################################################################
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(level=logging.DEBUG)
 
 # Torchvision Grayscale/RGB constants
 IMAGE_MODES = {1: ImageReadMode.GRAY, 3: ImageReadMode.RGB}
@@ -167,10 +168,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
         #                        DataLoader Parameters                         #
         ########################################################################
         # Default parameters for data loader
-        default_data_params = {'batch_size': 32,
-                               'shuffle': False,
-                               'num_workers': 4,
-                               'pin_memory': True}
+        default_data_params = {"batch_size": 32,
+                               "shuffle": False,
+                               "num_workers": 4,
+                               "pin_memory": True}
 
         # Parameters for training/validation DataLoaders
         self.train_dataloader_params = default_data_params
@@ -180,8 +181,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
         # NOTE: Shuffle is turned off during validation/test
         # NOTE: Batch size is set to 1 during validation/test
         self.val_dataloader_params = self.train_dataloader_params.copy()
-        self.val_dataloader_params['batch_size'] = 1
-        self.val_dataloader_params['shuffle'] = False
+        self.val_dataloader_params["batch_size"] = 1
+        self.val_dataloader_params["shuffle"] = False
 
         ########################################################################
         #                          Dataset Splitting                           #
@@ -212,7 +213,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
             self.cross_fold_indices = None
 
 
-    def setup(self, stage='fit'):
+    def setup(self, stage="fit"):
         """
         Prepares data for model training/validation/testing
         """
@@ -392,154 +393,6 @@ class UltrasoundDataModule(pl.LightningDataModule):
         dset_to_ids[from_dset] = dset_to_ids[from_dset][keep_idx]
         dset_to_paths[from_dset] = dset_to_paths[from_dset][keep_idx]
         dset_to_labels[from_dset] = dset_to_labels[from_dset][keep_idx]
-
-
-class SelfSupervisedUltrasoundDataModule(UltrasoundDataModule):
-    """
-    Top-level object used to access all data preparation and loading
-    functionalities in the self-supervised setting.
-    """
-    def __init__(self, dataloader_params=None, df=None, img_dir=None,
-                 full_seq=False, mode=3, **kwargs):
-        """
-        Initialize SelfSupervisedUltrasoundDataModule object.
-
-        Note
-        ----
-        Either df or img_dir must be exclusively specified to load in data.
-
-        By default, does not split data.
-
-        Parameters
-        ----------
-        dataloader_params : dict, optional
-            Used to override default parameters for DataLoaders, by default None
-        df : pd.DataFrame, optional
-            Contains paths to image files and labels for each image, by default
-            None
-        img_dir : str, optional
-            Path to directory containing ultrasound images, by default None
-        full_seq : bool, optional
-            If True, each item has all ordered images for one full
-            ultrasound sequence (determined by patient ID and visit). If False,
-            treats each image under a patient as independent, by default False.
-        mode : int
-            Number of channels (mode) to read images into (1=grayscale, 3=RGB),
-            by default 3.
-        **kwargs : dict
-            Optional keyword arguments:
-                img_size : int or tuple of ints, optional
-                    If int provided, resizes found images to
-                    (img_size x img_size), by default None.
-                train_test_split : float
-                    Percentage of data to leave for training. The rest will be
-                    used for testing
-                train_val_split : float
-                    Percentage of training set (test set removed) to leave for
-                    validation
-                cross_val_folds : int, 
-                    Number of folds to use for cross-validation
-        """
-        # Set default DataLoader parameters for self-supervised task
-        default_dataloader_params = {'batch_size': 128,
-                                     'shuffle': True,
-                                     'num_workers': 7,
-                                     'pin_memory': True}
-        if dataloader_params:
-            default_dataloader_params.update(dataloader_params)
-
-        # Pass UltrasoundDataModule arguments
-        super().__init__(default_dataloader_params, df, img_dir, full_seq, mode,
-                         **kwargs)
-        self.val_dataloader_params['batch_size'] = \
-            default_dataloader_params["batch_size"]
-
-
-    def train_dataloader(self):
-        """
-        Returns DataLoader for training set.
-
-        Returns
-        -------
-        torch.utils.data.DataLoader
-            Data loader for training data
-        """
-        df_train = pd.DataFrame({
-            "filename": self.dset_to_paths["train"],
-            "label": self.dset_to_labels["train"]
-        })
-
-        # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_train)
-
-        # Instantiate UltrasoundDatasetDataFrame
-        train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
-                                                   self.full_seq,
-                                                   img_size=self.img_size,
-                                                   mode=self.mode,
-                                                   label_part=self.label_part)
-
-        # Add random transformations
-        transforms = T.Compose([
-            T.RandomAdjustSharpness(1.25, p=0.25),
-            T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
-            T.RandomRotation(15),
-            T.RandomResizedCrop(self.img_size, scale=(0.5, 1)),
-        ])
-
-        # Instantiate CustomCollateFunction, used to create paired augmentations
-        collate_fn = CustomCollateFunction(transforms)
-
-        # Transform to LightlyDataset
-        train_dataset = LightlyDataset.from_torch_dataset(train_dataset,
-                                                          transform=transforms)
-
-        # Create DataLoader with parameters specified
-        return DataLoader(train_dataset, drop_last=True, collate_fn=collate_fn,
-                          **self.train_dataloader_params)
-
-
-    def val_dataloader(self):
-        """
-        Returns DataLoader for validation set.
-
-        Returns
-        -------
-        torch.utils.data.DataLoader
-            Data loader for validation data
-        """
-        # Instantiate UltrasoundDatasetDataFrame
-        df_val = pd.DataFrame({
-            "filename": self.dset_to_paths["val"],
-            "label": self.dset_to_labels["val"]
-        })
-
-        # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_val)
-
-        val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
-                                                 self.full_seq,
-                                                 img_size=self.img_size,
-                                                 mode=self.mode,
-                                                 label_part=self.label_part)
-
-        # Add random transformations
-        transforms = T.Compose([
-            T.RandomAdjustSharpness(1.25, p=0.25),
-            T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
-            T.RandomRotation(15),
-            T.RandomResizedCrop(self.img_size, scale=(0.5, 1)),
-        ])
-
-        # Instantiate CustomCollateFunction, used to create paired augmentations
-        collate_fn = CustomCollateFunction(transforms)
-
-        # Transform to LightlyDataset
-        val_dataset = LightlyDataset.from_torch_dataset(val_dataset)
-
-        # Create DataLoader with parameters specified
-        return DataLoader(val_dataset, drop_last=True, collate_fn=collate_fn,
-                          **self.val_dataloader_params)
 
 
 ################################################################################
@@ -907,6 +760,9 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             Contains torch.Tensor and dict (containing metadata). Metadata may
             include paths to images and labels.
         """
+        if isinstance(index, list) and len(index) == 1:
+            index = index[0]
+
         # 1. Create boolean mask for the right US sequence
         patient_id, visit = self.id_visit[index]
         id_mask = (self.ids == patient_id)
@@ -965,49 +821,3 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             return len(self.id_visit)
 
         return super().__len__()
-
-
-################################################################################
-#                         CustomCollateFunction Class                          #
-################################################################################
-class CustomCollateFunction(lightly.data.collate.BaseCollateFunction):
-    """
-    CustomCollateFunction. Used to create paired image augmentations with custom
-    batch data.
-    """
-    def forward(self, batch):
-        """
-        Turns a batch of tuples into a tuple of batches.
-
-        Parameters
-        ----------
-            batch: tuple of (torch.Tensor, dict of Tensors)
-                Tuple of image tensors and metadata dict (containing filenames,
-                etc.)
-        Returns:
-            A tuple of images and metadata dict. The images consist of 
-            two batches corresponding to the two transformations of the
-            input images.
-        """
-        batch_size = len(batch)
-
-        # Accumulate lists for keys in metadata dicts
-        metadata_accum = {}
-        for item in batch:
-            metadata = item[1]
-            for key, val in metadata.items():
-                if key not in metadata_accum:
-                    metadata_accum[key] = []
-                metadata_accum[key].append(val)
-
-        # Perform random transform on each image twice
-        X_transformed = [self.transform(batch[i % batch_size][0]).unsqueeze_(0)
-            for i in range(2 * batch_size)]
-
-        # Tuple of paired transforms
-        X_transformed_paired = (
-            torch.cat(X_transformed[:batch_size], 0),
-            torch.cat(X_transformed[batch_size:], 0)
-        )
-
-        return X_transformed_paired, metadata_accum

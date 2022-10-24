@@ -19,8 +19,8 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 # Custom libraries
 from src.data import constants
 from src.data_prep import utils 
-from src.data_prep.dataset import (SelfSupervisedUltrasoundDataModule,
-                                   UltrasoundDataModule)
+from src.data_prep.dataset import UltrasoundDataModule
+from src.data_prep.ssl_dataset import SelfSupervisedUltrasoundDataModule
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_pl import EfficientNetPL
 from src.models.linear_classifier import LinearClassifier
@@ -29,13 +29,11 @@ from src.models.moco import MoCo
 from src.utilities.custom_logger import FriendlyCSVLogger
 
 
-# Set logging config
-logging.basicConfig(level=logging.DEBUG)
-
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(level=logging.DEBUG)
 
 
 ################################################################################
@@ -97,6 +95,10 @@ def init(parser):
         "num_workers": "Number of CPU workers used to retrieve data during "
                        "training.",
         "pin_memory": "If flagged, pins tensors on GPU to speed data loading.",
+        "same_label": "If flagged, positive samples in SSL pretraining "
+                      "are same-patient images with the same label. NOTE: This "
+                      "logic conflicts with `memory_bank_size` > 0.",
+
         "checkpoint": "If flagged, save last model checkpoint during training.",
         "precision": "Number of bits for precision of floating point values.",
         "grad_clip_norm": "If specified, value to normalize gradient to.",
@@ -167,6 +169,9 @@ def init(parser):
                         help=arg_help["num_workers"])
     parser.add_argument("--pin_memory", action="store_true",
                         help=arg_help["pin_memory"])
+    # Self-supervised data arguments
+    parser.add_argument("--same_label", action="store_true",
+                        help=arg_help["same_label"])
 
     # pl.Trainer arguments
     parser.add_argument("--checkpoint", type=bool, default=True,
@@ -210,10 +215,10 @@ def setup_data_module(hparams):
         data_module_cls = UltrasoundDataModule
     # 2.2 Pass in specified dataloader parameters
     dataloader_params = {
-        'batch_size': hparams["batch_size"] if not hparams["full_seq"] else 1,
-        'shuffle': hparams["shuffle"],
-        'num_workers': hparams["num_workers"],
-        'pin_memory': hparams["pin_memory"],
+        "batch_size": hparams["batch_size"] if not hparams["full_seq"] else 1,
+        "shuffle": hparams["shuffle"],
+        "num_workers": hparams["num_workers"],
+        "pin_memory": hparams["pin_memory"],
     }
     dm = data_module_cls(dataloader_params, df=df_metadata,
                          img_dir=constants.DIR_IMAGES, **hparams)
@@ -341,9 +346,9 @@ def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
                       num_sanity_val_steps=0,
                       log_every_n_steps=20,
                       accumulate_grad_batches=hparams["accum_batches"],
-                      precision=hparams['precision'],
-                      gradient_clip_val=hparams['grad_clip_norm'],
-                      max_epochs=hparams['stop_epoch'],
+                      precision=hparams["precision"],
+                      gradient_clip_val=hparams["grad_clip_norm"],
+                      max_epochs=hparams["stop_epoch"],
                       enable_checkpointing=checkpoint,
                       # stochastic_weight_avg=True,
                       callbacks=callbacks,
@@ -352,10 +357,10 @@ def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
                       )
 
     # Show number of patients
-    num_patients_train = len(np.unique(dm.dset_to_ids['train']))
+    num_patients_train = len(np.unique(dm.dset_to_ids["train"]))
     LOGGER.info(f"[Training] Num Patients: {num_patients_train}")
-    if dm.dset_to_ids['val'] is not None:
-        num_patients_val = len(np.unique(dm.dset_to_ids['val']))
+    if dm.dset_to_ids["val"] is not None:
+        num_patients_val = len(np.unique(dm.dset_to_ids["val"]))
         LOGGER.info(f"[Validation] Num Patients: {num_patients_val}")
 
     # (1) Perform training
@@ -412,7 +417,7 @@ def main(args):
                 **experiment_hparams)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 0. Initialize ArgumentParser
     PARSER = argparse.ArgumentParser()
     init(PARSER)

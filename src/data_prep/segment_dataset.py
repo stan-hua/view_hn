@@ -161,6 +161,7 @@ def custom_collate_fn(batch):
     """
     return batch[0]
 
+
 class SegmentedUSDataset(torch.utils.data.Dataset):
     """
     Dataset to load images from a directory.

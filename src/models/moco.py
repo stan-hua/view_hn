@@ -27,6 +27,8 @@ from src.data import constants
 ################################################################################
 #                               MoCo Model Class                               #
 ################################################################################
+# TODO: Consider same-patient memory banks to avoid conflict between
+# `memory_bank_size` and `same_label` (in SSL data module)
 class MoCo(pl.LightningModule):
     """
     MoCo for self-supervised learning.
