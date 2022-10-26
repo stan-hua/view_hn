@@ -287,10 +287,8 @@ def instantiate_embedder(model_name, weights):
                                            input_shape=(None, None, 3),
                                            pooling="avg")
     elif model_name == "imagenet":
-        feature_extractor = EfficientNetB0(weights='imagenet',
-                                           include_top=False,
-                                           input_shape=(None, None, 3),
-                                           pooling="avg")
+        feature_extractor = EfficientNetPL.from_pretrained(
+            model_name="efficientnet-b0")
     elif model_name == "hn":
         feature_extractor = load_siamnet()
     elif model_name == "cpc":
@@ -360,7 +358,7 @@ def main(model_name, save_embed_path,
         return
 
     # Separate by Tensorflow and PyTorch models
-    if model_name in ("cytoimagenet", "imagenet"):
+    if model_name == "cytoimagenet":
         embedder.predict_dir_tf(save_embed_path,
                                 img_dir=img_dir,
                                 img_dataloader=img_dataloader)
