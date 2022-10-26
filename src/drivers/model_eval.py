@@ -850,26 +850,26 @@ def calculate_metrics(df_pred):
     """
     metrics = OrderedDict()
 
-    # Overall accuracy
-    metrics["Overall Accuracy"] = round(
-        (df_pred["label"] == df_pred["pred"]).mean(), 4)
     # Accuracy by class
     unique_labels = sorted(df_pred["label"].unique())
     for label in unique_labels:
         df_pred_filtered = df_pred[df_pred.label == label]
         metrics[f"Label Accuracy ({label})"] = round(
             (df_pred_filtered["label"] == df_pred_filtered["pred"]).mean(), 4)
+    # Overall accuracy
+    metrics["Overall Accuracy"] = round(
+        (df_pred["label"] == df_pred["pred"]).mean(), 4)
 
-    # Overall F1 Score
-    metrics["Overall F1 Score"] = round(skmetrics.f1_score(
-        df_pred["label"], df_pred["pred"],
-        average="micro"), 4)
     # F1 Score by class
     f1_scores = skmetrics.f1_score(df_pred["label"], df_pred["pred"],
                                    labels=unique_labels,
                                    average=None)
     for i, f1_score in enumerate(f1_scores):
         metrics[f"Label F1-Score ({unique_labels[i]})"] = round(f1_score, 4)
+    # Overall F1 Score
+    metrics["Overall F1 Score"] = round(skmetrics.f1_score(
+        df_pred["label"], df_pred["pred"],
+        average="micro"), 4)
 
     return pd.Series(metrics)
 
