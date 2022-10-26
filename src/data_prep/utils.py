@@ -52,6 +52,7 @@ def load_metadata(hospital, **kwargs):
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            extract=False,
+                           machine=False,
                            relative_side=False,
                            include_unlabeled=False,
                            img_dir=constants.DIR_IMAGES,
@@ -78,6 +79,8 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
+    machine : bool, optional
+        If True, extract machine for US image, by default False.
     relative_side : bool, optional
         If True, converts side (Left/Right) to order in which side appeared
         (First/Second/None). Requires <extract> to be True, by default False.
