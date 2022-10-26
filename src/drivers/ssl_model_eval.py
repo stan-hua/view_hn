@@ -166,8 +166,8 @@ def analyze_preds(exp_name):
             exp_eval_name = EVAL_EXP_NAME.format(
                 exp_name=exp_name, model_type=model_type, label_part=label_part)
 
-            model_eval.infer_test_set(exp_eval_name)
-            model_eval.analyze_test_set_preds(exp_eval_name)
+            model_eval.infer_dset(exp_eval_name)
+            model_eval.analyze_dset_preds(exp_eval_name)
 
 
 ################################################################################

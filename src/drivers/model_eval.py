@@ -1,7 +1,7 @@
 """
 model_eval.py
 
-Description: Used to evaluate a trained model's performance on the testing set.
+Description: Used to evaluate a trained model's performance.
 """
 
 # Standard libraries
@@ -24,7 +24,7 @@ import torchvision.transforms as T
 import yaml
 from efficientnet_pytorch import EfficientNet
 from scipy.stats import pearsonr
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn import metrics as skmetrics
 from torchvision.io import read_image, ImageReadMode
 from tqdm import tqdm
 
@@ -61,6 +61,9 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
                 "Transverse_Right": 3, "Sagittal_Right": 4, "Other": 5}
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
+
+# Default dataset to perform inference on
+DEFAULT_DSET = "test"
 
 ################################################################################
 #                               Paths Constants                                #
@@ -111,30 +114,37 @@ def init(parser):
         ArgumentParser object
     """
     arg_help = {
-        "exp_name": "Name of experiment (to evaluate)"
+        "exp_name": "Name of experiment (to evaluate)",
+        "dset": "Specific split of data available during training. One of "
+                "(train/val/test)",
     }
-    parser.add_argument("--exp_name", help=arg_help["exp_name"])
+    parser.add_argument("--exp_name", help=arg_help["exp_name"], required=True)
+    parser.add_argument("--dset", default=DEFAULT_DSET, help=arg_help["dset"])
 
 
 ################################################################################
 #                             Inference - Related                              #
 ################################################################################
-def get_test_set_metadata(hparams, img_dir=constants.DIR_IMAGES):
+def get_dset_metadata(hparams, dset=DEFAULT_DSET, img_dir=constants.DIR_IMAGES):
     """
-    Get metadata table containing (filename, label) for each image in the test
-    set.
+    Get metadata table containing (filename, label) for each image in the
+    specified set (train/val/test).
 
     Parameters
     ----------
     hparams : dict
-        Hyperparameters used in model training run, used to load exact test set.
+        Hyperparameters used in model training run, used to load exact dset
+        split.
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        DEFAULT_DSET.
     img_dir : str, optional
         Path to directory containing metadata, by default constants.DIR_IMAGES
 
     Returns
     -------
     pandas.DataFrame
-        Metadata of each image in the test set
+        Metadata of each image in the dset split
     """
     # NOTE: If data splitting parameters are not given, assume defaults
     for split_params in ("train_val_split", "train_test_split"):
@@ -154,17 +164,17 @@ def get_test_set_metadata(hparams, img_dir=constants.DIR_IMAGES):
     dm = UltrasoundDataModule(df=df_metadata, img_dir=img_dir, **hparams)
     dm.setup()
 
-    # Get filename and label of test set data from data module
-    df_test = pd.DataFrame({
-        "filename": dm.dset_to_paths["test"],
-        "label": dm.dset_to_labels["test"]})
+    # Get filename and label of dset split data from data module
+    df_dset = pd.DataFrame({
+        "filename": dm.dset_to_paths[dset],
+        "label": dm.dset_to_labels[dset]})
 
     # Extract other metadata from filename
-    df_test["orig_filename"] = df_test.filename.map(lambda x: x.split("\\")[-1])
-    utils.extract_data_from_filename(df_test, col="orig_filename")
-    df_test = df_test.drop(columns="orig_filename")
+    df_dset["orig_filename"] = df_dset.filename.map(lambda x: x.split("\\")[-1])
+    utils.extract_data_from_filename(df_dset, col="orig_filename")
+    df_dset = df_dset.drop(columns=["orig_filename"])
 
-    return df_test
+    return df_dset
 
 
 def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
@@ -311,7 +321,7 @@ def plot_confusion_matrix(df_pred, filter_confident=False, ax=None, **hparams):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions and labels. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     filter_confident : bool, optional
         If True, filters for most confident prediction in each view label for
@@ -333,9 +343,9 @@ def plot_confusion_matrix(df_pred, filter_confident=False, ax=None, **hparams):
         all_labels = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
 
     # Plots confusion matrix
-    cm = confusion_matrix(df_pred["label"], df_pred["pred"],
-                          labels=all_labels)
-    disp = ConfusionMatrixDisplay(cm, display_labels=all_labels)
+    cm = skmetrics.confusion_matrix(df_pred["label"], df_pred["pred"],
+                                    labels=all_labels)
+    disp = skmetrics.ConfusionMatrixDisplay(cm, display_labels=all_labels)
     disp.plot(ax=ax)
 
     # Set title
@@ -352,7 +362,7 @@ def print_confusion_matrix(df_pred, **hparams):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions and labels. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     hparams : dict, optional
         Keyword arguments for experiment hyperparameters
@@ -365,7 +375,7 @@ def print_confusion_matrix(df_pred, **hparams):
         Parameters
         ----------
         df : pandas.DataFrame
-            Test set prediction for 1 label.
+            Model prediction for 1 label.
         """
         df_counts = df["pred"].value_counts()
         num_samples = len(df)
@@ -379,7 +389,7 @@ def print_confusion_matrix(df_pred, **hparams):
         label_part = hparams.get("label_part")
         all_labels = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
 
-    # Check that test labels include all labels
+    # Check that all labels are found
     assert set(df_pred["label"].unique()) == set(all_labels), \
         "Not all given labels are present!"
 
@@ -414,7 +424,7 @@ def plot_pred_probability_by_views(df_pred, relative_side=False):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     relative_side : bool, optional
         If True, assumes predicted labels are encoded for relative sides, by
@@ -422,7 +432,7 @@ def plot_pred_probability_by_views(df_pred, relative_side=False):
     """
     df_pred = df_pred.copy()
 
-    # Filter for correct test predictions
+    # Filter for correct predictions
     df_pred.binary_label = df_pred.label.map(
         lambda x: "Bladder" if x == "Bladder" else "Other")
     df_pred = df_pred[df_pred.binary_label == df_pred.pred]
@@ -443,7 +453,7 @@ def plot_pred_probability_by_views(df_pred, relative_side=False):
 def check_misclassifications(df_pred, filter=True, local=True,
                              relative_side=False):
     """
-    Given the most confident test set predictions, determine the percentage of
+    Given the most confident model predictions, determine the percentage of
     misclassifications that are due to:
         1. Swapping sides (e.g., Saggital Right mistaken for Saggital Left)
         2. Adjacent views
@@ -451,7 +461,7 @@ def check_misclassifications(df_pred, filter=True, local=True,
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     filter : bool, optional
         If True, filters for most confident prediction in consecutive label
@@ -520,7 +530,7 @@ def plot_prob_over_sequence(df_pred, correct_only=False, update_seq_num=False):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     correct_only : bool, optional
         If True, filters for correctly predicted samples before plotting, by
@@ -559,7 +569,7 @@ def plot_acc_over_sequence(df_pred, update_seq_num=False):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     update_seq_num : bool, optional
         If True, accounts for missing images between sequence numbers by
@@ -594,7 +604,7 @@ def plot_image_count_over_sequence(df_pred, update_seq_num=False):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     """
     col = "seq_number"
@@ -619,13 +629,13 @@ def plot_image_count_over_sequence(df_pred, update_seq_num=False):
 
 def check_others_pred_progression(df_pred):
     """
-    Given test set predictions for full sequences that include "Other" labels,
+    Given model predictions for full sequences that include "Other" labels,
     show (predicted) label progression for unlabeled images among real labels.
 
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     """
     def _get_label_sequence(df):
@@ -689,7 +699,7 @@ def check_others_pred_progression(df_pred):
 
 def check_rel_side_pred_progression(df_pred):
     """
-    Given test set predictions for full sequences where side labels are relative
+    Given model predictions for full sequences where side labels are relative
     to the first side, show label/predicted label progression.
 
     Note
@@ -699,7 +709,7 @@ def check_rel_side_pred_progression(df_pred):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     """
     def _get_label_sequence(df):
@@ -773,16 +783,16 @@ def check_rel_side_pred_progression(df_pred):
 def compare_prediction_similarity(df_pred_1, df_pred_2):
     """
     For each label, print Pearson correlation of:
-        (1) test set predicted label with model 1 vs model 2
+        (1) predicted label with model 1 vs model 2
         (2) side predicted
         (3) view predicted
 
     Parameters
     ----------
     df_pred_1 : pandas.DataFrame
-        Inference on the same test set by model 1
+        Inference on the same dset by model 1
     df_pred_2 : pandas.DataFrame
-        Inference on the same test set by model 2
+        Inference on the same dset by model 2
     """
     # Correlation of exact label
     print("""
@@ -822,6 +832,46 @@ def compare_prediction_similarity(df_pred_1, df_pred_2):
         pred_mask_1 = (df_pred_1.pred_plane == plane)
         pred_mask_2 = (df_pred_2.pred_plane == plane)
         print(f"{plane}: {pearsonr(pred_mask_1, pred_mask_2)}")
+
+
+def calculate_metrics(df_pred):
+    """
+    Calculate important metrics given prediction and labels
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Model predictions and labels
+
+    Returns
+    -------
+    pd.DataFrame
+        Table containing metrics
+    """
+    metrics = OrderedDict()
+
+    # Overall accuracy
+    metrics["Overall Accuracy"] = round(
+        (df_pred["label"] == df_pred["pred"]).mean(), 4)
+    # Accuracy by class
+    unique_labels = sorted(df_pred["label"].unique())
+    for label in unique_labels:
+        df_pred_filtered = df_pred[df_pred.label == label]
+        metrics[f"Label Accuracy ({label})"] = round(
+            (df_pred_filtered["label"] == df_pred_filtered["pred"]).mean(), 4)
+
+    # Overall F1 Score
+    metrics["Overall F1 Score"] = round(skmetrics.f1_score(
+        df_pred["label"], df_pred["pred"],
+        average="micro"), 4)
+    # F1 Score by class
+    f1_scores = skmetrics.f1_score(df_pred["label"], df_pred["pred"],
+                                   labels=unique_labels,
+                                   average=None)
+    for i, f1_score in enumerate(f1_scores):
+        metrics[f"Label F1-Score ({unique_labels[i]})"] = round(f1_score, 4)
+
+    return pd.Series(metrics)
 
 
 ################################################################################
@@ -945,7 +995,7 @@ def filter_most_confident(df_pred, local=False):
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     local : bool, optional
         If True, gets the most confident prediction within each group of
@@ -1006,7 +1056,7 @@ def get_new_seq_numbers(df_pred):
     Parameters
     ----------
     df_pred : pd.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
 
     Returns
@@ -1036,7 +1086,7 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False):
     Parameters
     ----------
     df_pred : pd.DataFrame
-        Test set predictions. Each row is a test example with a label,
+        Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
     n : int
         Number of random unique sequences to show
@@ -1151,35 +1201,38 @@ def find_best_ckpt_path(path_exp_dir):
     return ckpt_paths[0]
 
 
-def create_save_path(exp_name, **extra_flags):
+def create_save_path(exp_name, dset=DEFAULT_DSET, **extra_flags):
     """
-    Create file path to test predictions, based on experiment name and keyword
+    Create file path to dset predictions, based on experiment name and keyword
     arguments
 
     Parameters
     ----------
     exp_name : str
         Name of experiment
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        DEFAULT_DSET.
     **extra_flags : dict, optional
-        Keyword arguments, specifying extra flags used during test set
-        inference
+        Keyword arguments, specifying extra flags used during inference
 
     Returns
     -------
     str
-        Expected path to test predictions
+        Expected path to dset predictions
     """
     for flag, val in extra_flags.items():
         if val:
             exp_name += f"__{flag}"
 
-    # Create test results directory, if not exists
-    test_dir = os.path.join(constants.DIR_TEST_RESULTS, exp_name)
-    if not os.path.exists(test_dir):
-        os.mkdir(test_dir)
+    # Create inference directory, if not exists
+    inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
+    if not os.path.exists(inference_dir):
+        os.mkdir(inference_dir)
 
-    # Expected path to test set results
-    save_path = os.path.join(test_dir, f"test_set_results({exp_name}).csv")
+    # Expected path to dset inference
+    fname = f"{dset}_set_results({exp_name}).csv"
+    save_path = os.path.join(inference_dir, fname)
 
     return save_path
 
@@ -1187,17 +1240,20 @@ def create_save_path(exp_name, **extra_flags):
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
-def infer_test_set(exp_name, seq_number_limit=None, **overwrite_hparams):
+def infer_dset(exp_name, dset=DEFAULT_DSET, seq_number_limit=None,
+               **overwrite_hparams):
     """
-    Perform inference on test set, and saves results
+    Perform inference on dset, and saves results
 
     Parameters
     ----------
     exp_name : str
         Name of experiment
-        experiment name
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        DEFAULT_DSET.
     seq_number_limit : int, optional
-        If provided, filters out test set samples with sequence numbers higher
+        If provided, filters out dset split samples with sequence numbers higher
         than this value, by default None.
     overwrite_hparams : dict, optional
         Keyword arguments to overwrite experiment hyperparameters
@@ -1208,7 +1264,7 @@ def infer_test_set(exp_name, seq_number_limit=None, **overwrite_hparams):
         If `exp_name` does not lead to a valid training directory
     """
     # 0 Create test prediction save path
-    save_path = create_save_path(exp_name,
+    save_path = create_save_path(exp_name, dset=dset,
                                  seq_number_limit=seq_number_limit)
     # If prediction already exist, skip
     if os.path.exists(save_path):
@@ -1224,17 +1280,16 @@ def infer_test_set(exp_name, seq_number_limit=None, **overwrite_hparams):
     hparams = get_hyperparameters(model_dir)
     hparams.update(overwrite_hparams)
 
-    # 2. Get test set metadata
-    df_test_metadata = get_test_set_metadata(hparams)
+    # 2. Get metadata (for specified split)
+    df_metadata = get_dset_metadata(hparams, dset=dset)
 
     # 2.1 If provided, filter out high sequence number images
     if seq_number_limit:
-        mask = (df_test_metadata["seq_number"] <= seq_number_limit)
-        df_test_metadata = df_test_metadata[mask]
+        mask = (df_metadata["seq_number"] <= seq_number_limit)
+        df_metadata = df_metadata[mask]
 
     # 2.2 Sort, so no mismatch occurs due to groupby sorting
-    df_test_metadata = df_test_metadata.sort_values(by=["id", "visit"],
-                                                    ignore_index=True)
+    df_metadata = df_metadata.sort_values(by=["id", "visit"], ignore_index=True)
 
     # 3. Load existing model and send to device
     # 3.1 Get checkpoint path
@@ -1250,14 +1305,14 @@ def infer_test_set(exp_name, seq_number_limit=None, **overwrite_hparams):
         **extra_ckpt_params)
     model = model.to(DEVICE)
 
-    # 4. Get predictions on test set
+    # 4. Get predictions on dset split
     if not hparams["full_seq"]:
-        filenames = df_test_metadata.filename.tolist()
+        filenames = df_metadata.filename.tolist()
         preds, probs, outs = predict_on_images(model=model, filenames=filenames,
                                                img_dir=None, **hparams)
     else:
         # Perform inference one sequence at a time
-        ret = df_test_metadata.groupby(by=["id", "visit"]).progress_apply(
+        ret = df_metadata.groupby(by=["id", "visit"]).progress_apply(
             lambda df: predict_on_sequences(
                 model=model, filenames=df.filename.tolist(), img_dir=None,
                 **hparams)
@@ -1268,21 +1323,24 @@ def infer_test_set(exp_name, seq_number_limit=None, **overwrite_hparams):
         probs = np.concatenate(ret.map(lambda x: x[1]).to_numpy())
         outs = np.concatenate(ret.map(lambda x: x[2]).to_numpy())
 
-    # 5. Save predictions on test set
-    df_test_metadata["pred"] = preds
-    df_test_metadata["prob"] = probs
-    df_test_metadata["out"] = outs
-    df_test_metadata.to_csv(save_path, index=False)
+    # 5. Save predictions on dset split
+    df_metadata["pred"] = preds
+    df_metadata["prob"] = probs
+    df_metadata["out"] = outs
+    df_metadata.to_csv(save_path, index=False)
 
 
-def analyze_test_set_preds(exp_name):
+def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
     """
-    Analyze test set predictions
+    Analyze dset split predictions
 
     Parameters
     ----------
     exp_name : str
         Name of experiment
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        DEFAULT_DSET.
 
     Raises
     ------
@@ -1298,28 +1356,33 @@ def analyze_test_set_preds(exp_name):
     # 1 Get experiment hyperparameters
     hparams = get_hyperparameters(model_dir)
 
-    # 2. Load test metadata
-    save_path = create_save_path(exp_name)
+    # 2. Load metadata
+    save_path = create_save_path(exp_name, dset=dset)
     df_pred = pd.read_csv(save_path)
 
-    # 3. Test results directory, to store figures
-    test_dir = os.path.join(constants.DIR_TEST_RESULTS, exp_name)
+    # 3. Experiment-specific inference directory, to store figures
+    inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
 
-    # Print reasons for misclassification of most confident predictions
-    if not hparams.get("label_part"):
-        check_misclassifications(df_pred,
-                                 relative_side=hparams.get("relative_side"))
+    # 4. Calculate metrics
+    df_metrics = calculate_metrics(df_pred)
+    df_metrics.to_csv(os.path.join(inference_dir, f"{dset}_metrics.csv"))
 
+    # 5. Create confusion matrix plot
     _, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
     # Plot confusion matrix for most confident predictions
     plot_confusion_matrix(df_pred, filter_confident=True, ax=ax1, **hparams)
     # Plot confusion matrix for all predictions
     plot_confusion_matrix(df_pred, filter_confident=False, ax=ax2, **hparams)
     plt.tight_layout()
-    plt.savefig(os.path.join(test_dir, "confusion_matrix.png"))
+    plt.savefig(os.path.join(inference_dir, f"{dset}_confusion_matrix.png"))
 
     # Print confusion matrix for all predictions
     print_confusion_matrix(df_pred, **hparams)
+
+    # Print reasons for misclassification of most confident predictions
+    if not hparams.get("label_part"):
+        check_misclassifications(df_pred,
+                                 relative_side=hparams.get("relative_side"))
 
     # Plot probability of predicted labels over the sequence number
     # plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
@@ -1337,11 +1400,11 @@ if __name__ == '__main__':
     PARSER = argparse.ArgumentParser()
     init(PARSER)
 
-    # 1. Parse Arguments
+    # 1. Parse arguments
     ARGS = PARSER.parse_args()
 
-    # Perform inference
-    infer_test_set(exp_name=ARGS.exp_name)
+    # 2. Perform inference
+    infer_dset(exp_name=ARGS.exp_name, dset=ARGS.dset)
 
-    # Evaluate predictions
-    analyze_test_set_preds(exp_name=ARGS.exp_name)
+    # 3. Evaluate predictions
+    analyze_dset_preds(exp_name=ARGS.exp_name, dset=ARGS.dset)
