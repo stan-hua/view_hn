@@ -10,13 +10,11 @@ import os
 from abc import abstractmethod
 
 # Non-standard libraries
-import lightly
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torchvision.transforms as T
-from lightly.data import LightlyDataset
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 

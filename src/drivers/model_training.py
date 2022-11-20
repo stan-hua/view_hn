@@ -20,7 +20,7 @@ from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
 from src.data import constants
 from src.data_prep import utils 
 from src.data_prep.dataset import UltrasoundDataModule
-from src.data_prep.ssl_dataset import SelfSupervisedUltrasoundDataModule
+from src.data_prep.moco_dataset import MoCoDataModule
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_pl import EfficientNetPL
 from src.models.linear_classifier import LinearClassifier
@@ -210,7 +210,7 @@ def setup_data_module(hparams):
     # 2.1 Choose appropriate class for data module
     if hparams["self_supervised"] and not \
             (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
-        data_module_cls = SelfSupervisedUltrasoundDataModule
+        data_module_cls = MoCoDataModule
     else:
         data_module_cls = UltrasoundDataModule
     # 2.2 Pass in specified dataloader parameters

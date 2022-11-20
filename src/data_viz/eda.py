@@ -20,7 +20,7 @@ from tabulate import tabulate
 
 # Custom libraries
 from src.data import constants
-from src.data_prep.ssl_dataset import SelfSupervisedUltrasoundDataModule
+from src.data_prep.moco_dataset import MoCoDataModule
 from src.data_prep.utils import load_sickkids_metadata
 
 
@@ -465,7 +465,7 @@ def plot_ssl_augmentations():
     # Instantiate data module
     df_metadata = load_sickkids_metadata(extract=True)
     dataloader_params = {"batch_size": 9}
-    data_module = SelfSupervisedUltrasoundDataModule(
+    data_module = MoCoDataModule(
         dataloader_params,
         df=df_metadata, img_dir=constants.DIR_IMAGES)
 
