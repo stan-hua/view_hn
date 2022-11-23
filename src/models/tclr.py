@@ -171,15 +171,16 @@ class TCLR(pl.LightningModule):
         # Accumulate losses
         loss = instance_loss + local_loss + global_loss
 
-        self.log("train_loss", loss)
+        self.log("train_loss", loss, batch_size=B)
 
         # Calculate mean of SD along each dimension for spatiel embeddings
         # NOTE: To monitor potential collapse of learned representations
         x_q_flattened = x_q_features.view(B, -1)
         collapse_metric = lightly.utils.debug.std_of_l2_normalized(
             x_q_flattened)
-        self.log("train_collapse_metric", collapse_metric)
-        self.log("ideal_collapse_metric", 1 / np.sqrt(x_q_flattened.size()[-1]))
+        self.log("train_collapse_metric", collapse_metric, batch_size=B)
+        self.log("ideal_collapse_metric", 1 / np.sqrt(x_q_flattened.size()[-1]),
+                 batch_size=B)
 
         return loss
 
@@ -228,7 +229,7 @@ class TCLR(pl.LightningModule):
         # Accumulate losses
         loss = instance_loss + local_loss + global_loss
 
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, batch_size=B)
 
         return loss
 

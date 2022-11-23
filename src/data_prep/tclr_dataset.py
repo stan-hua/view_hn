@@ -93,10 +93,13 @@ class TCLRDataModule(UltrasoundDataModule):
         # Extra SSL flags
         self.seq_length = seq_length
 
+        # Ensure processing data in full sequence
+        if "full_seq" in kwargs:
+            kwargs["full_seq"] = True
+
         # Pass UltrasoundDataModule arguments
         super().__init__(default_dataloader_params,
                          df=df, img_dir=img_dir,
-                         full_seq=True,
                          mode=mode,
                          **kwargs)
         self.val_dataloader_params["batch_size"] = \
@@ -172,6 +175,9 @@ class TCLRDataModule(UltrasoundDataModule):
 
         # Add metadata for patient ID, visit number and sequence number
         utils.extract_data_from_filename(df_val)
+
+        # Ensure US image sequences to have exactly `seq_length` frames
+        df_val = utils.restrict_seq_len(df_val, n=self.seq_length)
 
         # Instantiate UltrasoundDatasetDataFrame
         val_dataset = UltrasoundDatasetDataFrame(

@@ -21,19 +21,34 @@ from src.data import constants
 from src.data_prep import utils 
 from src.data_prep.dataset import UltrasoundDataModule
 from src.data_prep.moco_dataset import MoCoDataModule
+from src.data_prep.tclr_dataset import TCLRDataModule
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_pl import EfficientNetPL
 from src.models.linear_classifier import LinearClassifier
 from src.models.linear_lstm import LinearLSTM
 from src.models.moco import MoCo
+from src.models.tclr import TCLR
 from src.utilities.custom_logger import FriendlyCSVLogger
 
 
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
+# Configure logging
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(level=logging.DEBUG)
+
+# Mapping of SSL model name to model class
+SSL_NAME_TO_MODEL_CLS = {
+    "moco": MoCo,
+    "tclr": TCLR,
+}
+
+# Mapping of SSL model name to corresponding data module
+SSL_NAME_TO_DATA_MODULE = {
+    "moco": MoCoDataModule,
+    "tclr": TCLRDataModule,
+}
 
 
 ################################################################################
@@ -53,6 +68,7 @@ def init(parser):
         "exp_name": "Name of experiment",
 
         "self_supervised": "If flagged, trains a MoCo model on US images.",
+        "ssl_model": "Name of SSL model",
         "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
         "ssl_ckpt_path": "If evaluating SSL method, path to trained SSL model.",
         "ssl_eval_linear": "If flagged, trains linear classifier over "
@@ -113,14 +129,18 @@ def init(parser):
     # Model and data - related arguments
     parser.add_argument("--self_supervised", action="store_true",
                         help=arg_help["self_supervised"])
-    parser.add_argument("--full_seq", action="store_true",
-                        help=arg_help["full_seq"])
+    parser.add_argument("--ssl_model",
+                        choices=SSL_NAME_TO_MODEL_CLS.keys(),
+                        default="moco",
+                        help=arg_help["ssl_model"])
     parser.add_argument("--ssl_ckpt_path", default=constants.MOCO_CKPT_PATH,
                         help=arg_help["ssl_ckpt_path"])
     parser.add_argument("--ssl_eval_linear", action="store_true",
                         help=arg_help["ssl_eval_linear"])
     parser.add_argument("--ssl_eval_linear_lstm", action="store_true",
                         help=arg_help["ssl_eval_linear_lstm"])
+    parser.add_argument("--full_seq", action="store_true",
+                        help=arg_help["full_seq"])
     parser.add_argument("--relative_side", action="store_true",
                         help=arg_help["relative_side"])
 
@@ -210,7 +230,7 @@ def setup_data_module(hparams):
     # 2.1 Choose appropriate class for data module
     if hparams["self_supervised"] and not \
             (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
-        data_module_cls = MoCoDataModule
+        data_module_cls = SSL_NAME_TO_DATA_MODULE[hparams["ssl_model"]]
     else:
         data_module_cls = UltrasoundDataModule
     # 2.2 Pass in specified dataloader parameters
@@ -248,15 +268,19 @@ def get_model_cls(hparams):
     # For self-supervised (SSL) image-based model
     if hparams["self_supervised"]:
         # If training SSL
-        if not (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
-            model_cls = MoCo
+        model_cls = SSL_NAME_TO_MODEL_CLS[hparams["ssl_model"]]
+
         # If evaluating SSL method
-        else:
-            # Load pretrained conv. backbone
-            # NOTE: Updates hparams with backbone
-            pretrained_model = MoCo.load_from_checkpoint(
+        if hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]:
+            # NOTE: Pretrained backbone/s, needs to be inserted as an arg.
+            pretrained_model = model_cls.load_from_checkpoint(
                 hparams["ssl_ckpt_path"])
-            hparams["backbone"] = pretrained_model.backbone
+            
+            if hparams["ssl_model"] == "moco":
+                hparams["backbone"] = pretrained_model.backbone
+            elif hparams["ssl_model"] == "tclr":
+                hparams["conv_backbone"] = pretrained_model.conv_backbone
+                hparams["lstm_backbone"] = pretrained_model.lstm_backbone
 
             model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
                 else LinearLSTM
