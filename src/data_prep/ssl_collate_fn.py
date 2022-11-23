@@ -9,6 +9,7 @@ Description: Contains collate functions to augment image batches for
 import lightly
 import numpy as np
 import torch
+from torchvision.transforms import Lambda
 
 
 ################################################################################
@@ -147,6 +148,77 @@ class SameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         X_transformed_paired = (
             torch.cat([X_transformed[idx] for idx in first_idx], 0),
             torch.cat([X_transformed[idx] for idx in second_idx], 0)
+        )
+
+        return X_transformed_paired, metadata_accum
+
+
+class TCLRCollateFunction(lightly.data.collate.BaseCollateFunction):
+    """
+    TCLRCollateFunction class
+    """
+
+    def forward(self, batch):
+        """
+        Given each item in the batch is an ultrasound image sequence with a
+        fixed number of frames, performs the following:
+            (1) Augments each frame 2 times independently, maintaining the
+                initial shape
+
+        Parameters
+        ----------
+            batch: tuple of (torch.Tensor, dict)
+                Tuple of image clips and metadata dict (containing filenames,
+                etc.), where each batch is of the shape:
+                (B, `seq_length`, 3, H, W).
+                    # B: batch size
+                    # `seq_length`: fixed number of frames per ultrasound seq.
+                    # H: height
+                    # W: width
+
+        Returns
+        -------
+            tuple of ((torch.Tensor, torch.Tensor), dict).
+                The two augmented video tensors with corresponding ultrasound
+                image sequences of the shape (B, `seq_length`, 3, H, W).
+        """
+        # Function to perform transforms independently on images in a clip
+        clip_transform = Lambda(
+            lambda clip: torch.stack([self.transform(img) for img in clip]))
+
+        # Accumulate lists for keys in metadata dicts
+        metadata_accum = {}
+        for item in batch:
+            metadata = item[1]
+            for key, val in metadata.items():
+                if key not in metadata_accum:
+                    metadata_accum[key] = []
+
+                if not isinstance(val, str):
+                    try:
+                        metadata_accum[key].extend(val)
+                    except:
+                        metadata_accum[key].append(val)
+                else:
+                    metadata_accum[key].append(val)
+
+        # Get clips
+        # If batch size is 1, but contains multiple US images
+        if len(batch) == 1 and len(batch[0][0]) > 1:
+            clips = batch[0][0]
+        else:
+            clips = [data[0] for data in batch]
+
+        # Perform random augmentation on each image in each clip twice
+        batch_size = len(clips)
+        X_transformed = [
+            clip_transform(clips[i % batch_size])
+            for i in range(batch_size * 2)]
+
+        # Tuple of paired transforms
+        X_transformed_paired = (
+            torch.stack(X_transformed[:batch_size]),
+            torch.stack(X_transformed[batch_size:])
         )
 
         return X_transformed_paired, metadata_accum

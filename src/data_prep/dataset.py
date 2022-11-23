@@ -475,7 +475,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
     """
     def __init__(self, img_dir, full_seq=False, img_size=None, mode=3):
         """
-        Initialize KidneyDatasetDir object.
+        Initialize UltrasoundDatasetDir object.
 
         Parameters
         ----------
@@ -629,7 +629,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
                  label_part=None):
         """
-        Initialize KidneyDatasetDataFrame object.
+        Initialize UltrasoundDatasetDataFrame object.
 
         Note
         ----
@@ -819,3 +819,71 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             return len(self.id_visit)
 
         return super().__len__()
+
+
+################################################################################
+#                        Dataset Classes (Paired Data)                         #
+################################################################################
+class UltrasoundDatasetDataFramePair(UltrasoundDatasetDataFrame):
+    """
+    Dataset to load images and labels from a DataFrame in item pairs.
+    """
+
+    def __init__(self, df, random_pair=False, **kwargs):
+        """
+        Initialize UltrasoundDatasetDataFramePair object.
+
+        Note
+        ----
+        Expects path column to be "filename", and label column to be "label".
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Contains path to images and labels.
+        random_pair : bool, optional
+            If True, second item can be any item in the dataset randomly.
+            Otherwise, second item is the next item in the index, by default
+            False.
+        kwargs : keyword arguments for UltrasoundDatasetDataFrame
+            img_dir : str, optional
+            full_seq : bool, optional
+            img_size : int or tuple of ints, optional
+            mode : int, optional
+            label_part : str, optional
+        """
+        self.random_pair = random_pair
+        super().__init__(df=df, **kwargs)
+
+
+    def __getitem__(self, index):
+        """
+        Loads a pair of ultrasound images, or ultrasound image sequences.
+
+        Note
+        ----
+        Second item in pair is either deterministic (next item) or random.
+
+        Parameters
+        ----------
+        index : int
+            Integer index to paths.
+
+        Returns
+        -------
+        tuple of tuple of (torch.Tensor, dict)
+            Pair of items to return
+        """
+        # Choose index of next pair
+        if self.random_pair:
+            second_index = index
+            while second_index == index:
+                second_index = np.random.randint(low=0, high=self.__len__())
+        else:
+            second_index = (index + 1) % self.__len__()
+        
+        # If returning all images from full US sequences, override logic
+        first_item = super().__getitem__(index)
+        second_item = super().__getitem__(second_index)
+
+        return first_item, second_item

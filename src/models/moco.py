@@ -14,14 +14,8 @@ import pytorch_lightning as pl
 import torch
 from efficientnet_pytorch import EfficientNet
 from lightly.models.modules.heads import MoCoProjectionHead
-from lightly.models.utils import deactivate_requires_grad
-from lightly.models.utils import update_momentum
-from lightly.models.utils import batch_shuffle
-from lightly.models.utils import batch_unshuffle
-from torch.nn import functional as F
-
-# Custom libraries
-from src.data import constants
+from lightly.models.utils import (batch_shuffle, batch_unshuffle, 
+                                  deactivate_requires_grad, update_momentum)
 
 
 ################################################################################
@@ -33,7 +27,7 @@ class MoCo(pl.LightningModule):
     """
     MoCo for self-supervised learning.
     """
-    def __init__(self, num_classes=5, img_size=(256, 256), adam=True, lr=0.0005,
+    def __init__(self, img_size=(256, 256), adam=True, lr=0.0005,
                  momentum=0.9, weight_decay=0.0005,
                  memory_bank_size=4096, temperature=0.1,
                  extract_features=False, *args, **kwargs):
@@ -42,8 +36,6 @@ class MoCo(pl.LightningModule):
 
         Parameters
         ----------
-        num_classes : int, optional
-            Number of classes to predict, by default 5
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
         adam : bool, optional
@@ -125,8 +117,10 @@ class MoCo(pl.LightningModule):
 
         Parameters
         ----------
-        train_batch : tuple
-            Contains (img tensor, metadata dict)
+        train_batch : tuple of ((torch.Tensor, torch.Tensor), dict)
+            Contains paired (augmented) images and metadata dict.
+            Each image tensor is of the shape:
+            - (B, 3, H, W)
         batch_idx : int
             Training batch index
 
@@ -166,8 +160,10 @@ class MoCo(pl.LightningModule):
 
         Parameters
         ----------
-        val_batch : tuple
-            Contains (img tensor, metadata dict)
+        val_batch : tuple of ((torch.Tensor, torch.Tensor), dict)
+            Contains paired (augmented) images and metadata dict.
+            Each image tensor is of the shape:
+            - (B, 3, H, W)
         batch_idx : int
             Validation batch index
 
@@ -199,13 +195,6 @@ class MoCo(pl.LightningModule):
         self.log("val_loss", loss)
 
         return loss
-
-
-    def test_step(self, test_batch, batch_idx):
-        """
-        Currently not implemented.
-        """
-        pass
 
 
     ############################################################################

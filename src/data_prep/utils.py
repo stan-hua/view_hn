@@ -7,6 +7,7 @@ Description: Contains helper functions for a variety of data/label preprocessing
 
 # Standard libraries
 import glob
+import logging
 import os
 
 # Non-standard libraries
@@ -18,6 +19,12 @@ from skimage.exposure import equalize_hist
 
 # Custom libraries
 from src.data import constants
+
+
+################################################################################
+#                                  Constants                                   #
+################################################################################
+LOGGER = logging.getLogger(__name__)
 
 
 ################################################################################
@@ -433,6 +440,73 @@ def make_side_label_relative(labels):
         new_labels.append(side_to_relative[label])
 
     return new_labels
+
+
+def restrict_seq_len(df_metadata, n=18):
+    """
+    Filter metadata for ultrasound image sequences, to restrict each sequence to
+    have exactly `n` images.
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains an `id` and `visit`, which specify a unique US
+        sequence.
+    n : int, optional
+        Absolute sequence length to restrict to, by default 18.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Filtered metadata table
+    """
+    def downsample_df(df):
+        """
+        Downsample dataframe with consecutive rows.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Metadata table with n+ rows
+
+        Returns
+        -------
+        pandas.DataFrame
+            Downsampled metadata dataframe
+        """
+        if len(df) == n:
+            return df
+        start_idx = np.random.randint(0, high=len(df)-n)
+        return df.iloc[start_idx: start_idx+n]
+
+    # Create copy to avoid in-place operations
+    df_metadata = df_metadata.copy()
+
+    # Create identifiers for ultrasound sequences
+    # NOTE: Unique sequences are identified by patient ID and hospital visit
+    seq_ids = pd.Series(
+        df_metadata[["id", "visit"]].itertuples(index=False, name=None))
+
+    # Get number of images per US sequence
+    seq_counts = seq_ids.value_counts()
+    initial_num_seq = len(seq_counts)
+
+    # Filter for minimum length sequences
+    seq_counts = seq_counts[seq_counts >= n]
+    filtered_num_seq = len(seq_counts)
+    kept_idx = set(seq_counts.index.tolist())
+    idx = seq_ids.map(lambda x: x in kept_idx)
+    df_metadata = df_metadata[idx]
+
+    # Log number of sequences that decreased
+    LOGGER.info(f"Filter for Sequences w/ {n}+ Images: "
+                f"{initial_num_seq} -> {filtered_num_seq}")
+
+    # Downsample sequences with > `n` images
+    df_metadata = df_metadata.groupby(by=["id", "visit"]).apply(
+        downsample_df)
+
+    return df_metadata
 
 
 ################################################################################

@@ -1,12 +1,15 @@
 """
-moco_dataset.py
+tclr_dataset.py
 
-Description: Contains module to load data for Momentum Contrastive learning
-             (MoCo) self-supervised pretraining.
+Description: Contains module to load data for Temporal Contrastive Learning
+             (TCLR) self-supervised pretraining.
 
-Note: Model trained on this dataset does NOT take advantage of temporal
+Note: Model trained on this dataset attempts to take advantage of temporal
       information in patient ultrasound image sequences.
 """
+
+# Standard libraries
+import logging
 
 # Non-standard libraries
 import pandas as pd
@@ -21,25 +24,34 @@ from src.data_prep.dataset import (UltrasoundDataModule,
 
 
 ################################################################################
+#                                  Constants                                   #
+################################################################################
+LOGGER = logging.getLogger(__name__)
+
+
+################################################################################
 #                             Data Module Classes                              #
 ################################################################################
-class MoCoDataModule(UltrasoundDataModule):
+class TCLRDataModule(UltrasoundDataModule):
     """
     Top-level object used to access all data preparation and loading
     functionalities in the self-supervised setting.
     """
     def __init__(self, dataloader_params=None, df=None, img_dir=None,
-                 full_seq=False, mode=3,
-                 same_label=False,
+                 mode=3,
+                 seq_length=18,
                  **kwargs):
         """
-        Initialize MoCoDataModule object.
+        Initialize TCLRDataModule object.
 
         Note
         ----
         Either df or img_dir must be exclusively specified to load in data.
 
         By default, does not split data.
+
+        Filters training set for ultrasound image sequences with at least
+        `seq_length` images.
 
         Parameters
         ----------
@@ -50,16 +62,12 @@ class MoCoDataModule(UltrasoundDataModule):
             None
         img_dir : str, optional
             Path to directory containing ultrasound images, by default None
-        full_seq : bool, optional
-            If True, each item has all ordered images for one full
-            ultrasound sequence (determined by patient ID and visit). If False,
-            treats each image under a patient as independent, by default False.
         mode : int, optional
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
-        same_label : bool, optional
-            If True, positive samples are same-patient images with the same
-            label, by default False.
+        seq_length : int, optional
+            Fixed number of frames for a sampled ultrasound image sequence, by
+            default 18.
         **kwargs : dict
             Optional keyword arguments:
                 img_size : int or tuple of ints, optional
@@ -83,15 +91,13 @@ class MoCoDataModule(UltrasoundDataModule):
             default_dataloader_params.update(dataloader_params)
 
         # Extra SSL flags
-        self.same_label = same_label
-        # NOTE: If same label, each batch must be images from the same sequence
-        if self.same_label:
-            full_seq = True
-            # NOTE: Sampler conflicts with shuffle=True
-            default_dataloader_params["shuffle"] = False
+        self.seq_length = seq_length
 
         # Pass UltrasoundDataModule arguments
-        super().__init__(default_dataloader_params, df, img_dir, full_seq, mode,
+        super().__init__(default_dataloader_params,
+                         df=df, img_dir=img_dir,
+                         full_seq=True,
+                         mode=mode,
                          **kwargs)
         self.val_dataloader_params["batch_size"] = \
             default_dataloader_params["batch_size"]
@@ -104,14 +110,8 @@ class MoCoDataModule(UltrasoundDataModule):
             T.RandomResizedCrop(self.img_size, scale=(0.5, 1)),
         ])
 
-        # Determine collate function
-        if self.same_label:
-            self.collate_fn = ssl_collate_fn.SameLabelCollateFunction(
-                self.transforms)
-        else:
-            # Creates two augmentation from the same image
-            self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
-                self.transforms)
+        # Collate function to create 2 augmented versions of each clip
+        self.collate_fn = ssl_collate_fn.TCLRCollateFunction(self.transforms)
 
 
     def train_dataloader(self):
@@ -131,30 +131,28 @@ class MoCoDataModule(UltrasoundDataModule):
         # Add metadata for patient ID, visit number and sequence number
         utils.extract_data_from_filename(df_train)
 
+        # Ensure US image sequences to have exactly `seq_length` frames
+        df_train = utils.restrict_seq_len(df_train, n=self.seq_length)
+
         # Instantiate UltrasoundDatasetDataFrame
-        train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
-                                                   self.full_seq,
-                                                   img_size=self.img_size,
-                                                   mode=self.mode,
-                                                   label_part=self.label_part)
+        train_dataset = UltrasoundDatasetDataFrame(
+            df_train,
+            img_dir=self.img_dir,
+            full_seq=True,
+            img_size=self.img_size,
+            mode=self.mode,
+            label_part=self.label_part,
+        )
 
         # Transform to LightlyDataset
         train_dataset = LightlyDataset.from_torch_dataset(
             train_dataset,
             transform=self.transforms)
 
-        # Choose sampling method
-        sampler = None
-        if self.full_seq:
-            sampler = BatchSampler(SequentialSampler(train_dataset),
-                                   batch_size=1,
-                                   drop_last=False)
-
         # Create DataLoader with parameters specified
         return DataLoader(train_dataset,
                           drop_last=True,
                           collate_fn=self.collate_fn,
-                          sampler=sampler,
                           **self.train_dataloader_params)
 
 
@@ -176,27 +174,22 @@ class MoCoDataModule(UltrasoundDataModule):
         utils.extract_data_from_filename(df_val)
 
         # Instantiate UltrasoundDatasetDataFrame
-        val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
-                                                 self.full_seq,
-                                                 img_size=self.img_size,
-                                                 mode=self.mode,
-                                                 label_part=self.label_part)
+        val_dataset = UltrasoundDatasetDataFrame(
+            df_val,
+            img_dir=self.img_dir,
+            full_seq=True,
+            img_size=self.img_size,
+            mode=self.mode,
+            label_part=self.label_part,
+        )
 
         # Transform to LightlyDataset
         val_dataset = LightlyDataset.from_torch_dataset(
             val_dataset,
             transform=self.transforms)
 
-        # Choose sampling method
-        sampler = None
-        if self.full_seq:
-            sampler = BatchSampler(SequentialSampler(val_dataset),
-                                   batch_size=1,
-                                   drop_last=False)
-
         # Create DataLoader with parameters specified
         return DataLoader(val_dataset,
                           drop_last=True,
                           collate_fn=self.collate_fn,
-                          sampler=sampler,
                           **self.val_dataloader_params)
