@@ -15,23 +15,33 @@ from torch.nn import functional as F
 
 class LinearLSTM(pl.LightningModule):
     """
-    Linear LSTM object, wrapping over convolutional backbone.
+    LinearLSTM object, wrapping over convolutional backbone.
     """
-    def __init__(self, backbone, backbone_output_dim=1280, num_classes=5,
+    def __init__(self, conv_backbone,
+                 temporal_backbone=None,
+                 freeze_weights=True,
+                 conv_backbone_output_dim=1280,
+                 num_classes=5,
                  img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=512, bidirectional=True,
                  extract_features=False,
                  *args, **kwargs):
         """
-        Initialize LinearClassifier object.
+        Initialize LinearLSTM object.
 
         Parameters
         ----------
-        backbone : torch.nn.Module
+        conv_backbone : torch.nn.Module
             Pretrained convolutional backbone
-        backbone_output_dim : int
-            Size of output of convolutional backbone
+        temporal_backbone : torch.nn.Module, optional
+            Pretrained temporal backbone. Instantiates and trains one, by
+            default None.
+        freeze_weights : bool, optional
+            If True, freeze weights of provided pretrained backbone/s, by
+            default True.
+        conv_backbone_output_dim : int, optional
+            Size of output of pretrained convolutional backbone, by default 1280
         num_classes : int, optional
             Number of classes to predict, by default 5
         img_size : tuple, optional
@@ -59,21 +69,32 @@ class LinearLSTM(pl.LightningModule):
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters("num_classes", "lr", "adam", "weight_decay", 
-                                  "momentum", "img_size", "backbone_output_dim",
-                                  "n_lstm_layers", "hidden_dim",
-                                  "bidirectional", "extract_features",
-                                  *list(kwargs.keys()))
+        self.save_hyperparameters(
+            "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
+            "n_lstm_layers", "hidden_dim", "bidirectional", "extract_features",
+            "conv_backbone_output_dim", "freeze_weights",
+             *list([k for k,v in kwargs.items() if \
+                not isinstance(v, torch.nn.Module)]))
 
         # Store convolutional backbone, and freeze its weights
-        self.backbone = backbone
-        deactivate_requires_grad(backbone)
+        self.conv_backbone = conv_backbone
+        if self.hparams.freeze_weights:
+            deactivate_requires_grad(conv_backbone)
 
-        # Define LSTM layers
-        self._lstm = torch.nn.LSTM(
-            backbone_output_dim, self.hparams.hidden_dim, batch_first=True,
-            num_layers=self.hparams.n_lstm_layers,
-            bidirectional=self.hparams.bidirectional)
+        # If provided, store temporal backbone
+        # TODO: Train w/ and w/o frozen weights
+        if temporal_backbone:
+            self.temporal_backbone = temporal_backbone
+            if self.hparams.freeze_weights:
+                deactivate_requires_grad(temporal_backbone)
+        else:
+            # Define LSTM layers
+            self.temporal_backbone = torch.nn.LSTM(
+                self.hparams.conv_backbone_output_dim,
+                self.hparams.hidden_dim,
+                batch_first=True,
+                num_layers=self.hparams.n_lstm_layers,
+                bidirectional=self.hparams.bidirectional)
 
         # Define classification layer
         multiplier = 2 if self.hparams.bidirectional else 1
@@ -131,12 +152,12 @@ class LinearLSTM(pl.LightningModule):
             Model output after final linear layer
         """
         # Extract convolutional features
-        x = self.backbone(inputs)
+        x = self.conv_backbone(inputs)
 
         # LSTM layers
         seq_len = x.size()[0]
         x = x.view(1, seq_len, -1)
-        x, _ = self._lstm(x)
+        x, _ = self.temporal_backbone(x)
 
         if not self.hparams.extract_features:
             x = self._fc(x)

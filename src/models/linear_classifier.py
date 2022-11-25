@@ -17,7 +17,9 @@ class LinearClassifier(pl.LightningModule):
     """
     Linear classifier object, wrapping over convolutional backbone.
     """
-    def __init__(self, backbone, backbone_output_dim=1280, num_classes=5,
+    def __init__(self, conv_backbone,
+                 freeze_weights=True,
+                 conv_backbone_output_dim=1280, num_classes=5,
                  img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  *args, **kwargs):
@@ -26,9 +28,12 @@ class LinearClassifier(pl.LightningModule):
 
         Parameters
         ----------
-        backbone : torch.nn.Module
+        conv_backbone : torch.nn.Module
             Pretrained convolutional backbone
-        backbone_output_dim : int
+        freeze_weights : bool, optional
+            If True, freeze weights of provided pretrained backbone/s, by
+            default True.
+        conv_backbone_output_dim : int
             Size of output of convolutional backbone
         num_classes : int, optional
             Number of classes to predict, by default 5
@@ -49,16 +54,19 @@ class LinearClassifier(pl.LightningModule):
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters("num_classes", "lr", "adam", "weight_decay", 
-                                  "momentum", "img_size", "backbone_output_dim",
-                                  *list(kwargs.keys()))
+        self.save_hyperparameters(
+            "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
+            "freeze_weights", "conv_backbone_output_dim",
+            *list([k for k,v in kwargs.items() if \
+                not isinstance(v, torch.nn.Module)]))
 
         # Store convolutional backbone, and freeze its weights
-        self.backbone = backbone
-        deactivate_requires_grad(backbone)
+        self.conv_backbone = conv_backbone
+        if self.hparams.freeze_weights:
+            deactivate_requires_grad(conv_backbone)
 
         # Create linear layer for classification
-        self.fc = torch.nn.Linear(backbone_output_dim, num_classes)
+        self.fc = torch.nn.Linear(conv_backbone_output_dim, num_classes)
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
@@ -110,7 +118,7 @@ class LinearClassifier(pl.LightningModule):
             Model output after final linear layer
         """
         # Extract convolutional features
-        x = self.backbone(inputs).flatten(start_dim=1)
+        x = self.conv_backbone(inputs).flatten(start_dim=1)
 
         # Predict label
         x = self.fc(x)

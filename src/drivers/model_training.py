@@ -69,12 +69,15 @@ def init(parser):
 
         "self_supervised": "If flagged, trains a MoCo model on US images.",
         "ssl_model": "Name of SSL model",
-        "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
         "ssl_ckpt_path": "If evaluating SSL method, path to trained SSL model.",
         "ssl_eval_linear": "If flagged, trains linear classifier over "
-                           "pretrained self-supervised model.",
-        "ssl_eval_linear_lstm": "If flagged, trains linear classifier over "
-                                "pretrained self-supervised model.",
+                           "the SSL-pretrained model.",
+        "ssl_eval_linear_lstm": "If flagged, trains linear + lstm classifier "
+                                "over the SSL-pretrained model.",
+        "freeze_weights": "If flagged, freeze weights when training "
+                          "classifier over the SSL-pretrained model.",
+
+        "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
         "relative_side": "If flagged, relabels side Left/Right to First/Second "
                          "based on which appeared first per sequence.",
 
@@ -139,6 +142,9 @@ def init(parser):
                         help=arg_help["ssl_eval_linear"])
     parser.add_argument("--ssl_eval_linear_lstm", action="store_true",
                         help=arg_help["ssl_eval_linear_lstm"])
+    parser.add_argument("--freeze_weights", action="store_true",
+                        help=arg_help["freeze_weights"])
+
     parser.add_argument("--full_seq", action="store_true",
                         help=arg_help["full_seq"])
     parser.add_argument("--relative_side", action="store_true",
@@ -277,10 +283,10 @@ def get_model_cls(hparams):
                 hparams["ssl_ckpt_path"])
             
             if hparams["ssl_model"] == "moco":
-                hparams["backbone"] = pretrained_model.backbone
+                hparams["conv_backbone"] = pretrained_model.backbone
             elif hparams["ssl_model"] == "tclr":
                 hparams["conv_backbone"] = pretrained_model.conv_backbone
-                hparams["lstm_backbone"] = pretrained_model.lstm_backbone
+                hparams["temporal_backbone"] = pretrained_model.lstm_backbone
 
             model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
                 else LinearLSTM

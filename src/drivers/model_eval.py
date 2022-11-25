@@ -158,7 +158,7 @@ def get_dset_metadata(hparams, dset=DEFAULT_DSET, img_dir=constants.DIR_IMAGES):
         img_dir=constants.DIR_IMAGES,
         label_part=hparams.get("label_part"),
         include_unlabeled=hparams.get("include_unlabeled", False),
-        relative_side=hparams["relative_side"])
+        relative_side=hparams.get("relative_side", False))
 
     # Set up data
     dm = UltrasoundDataModule(df=df_metadata, img_dir=img_dir, **hparams)

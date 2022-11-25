@@ -14,6 +14,9 @@ import logging
 import os
 import shutil
 
+# Non-standard libraries
+from jinja2 import Environment
+
 # Custom libraries
 from src.data import constants
 from src.drivers import model_eval, model_training
@@ -49,8 +52,11 @@ DEFAULT_ARGS = [
     "--stop_epoch", "25",
 ]
 
-# Experiment name of SSL evaluation model
-EVAL_EXP_NAME = "{exp_name}__{model_type}__{label_part}"
+# Template for experiment name of a SSL evaluation model
+EVAL_EXP_NAME = "{{ exp_name }}__{{ model_type }}__{{ label_part }}" \
+                "{% if freeze_weights is defined and not freeze_weights %}" \
+                "__finetuned{% endif %}"
+TEMPLATE_EVAL_EXP_NAME = Environment().from_string(EVAL_EXP_NAME)
 
 
 ################################################################################
@@ -112,7 +118,9 @@ def train_model_with_kwargs(exp_name, **extra_args):
         model_training.main(args)
     except Exception as error_msg:
         # On exception, delete folder
-        shutil.rmtree(os.path.join(constants.DIR_RESULTS, exp_name))
+        exp_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+        if os.path.exists(exp_dir):
+            shutil.rmtree(exp_dir)
 
         # Re-raise error
         raise error_msg
@@ -131,23 +139,35 @@ def train_eval_models(exp_name):
     ckpt_path = find_best_ckpt_path(os.path.join(constants.DIR_RESULTS,
                                                  exp_name))
 
-    # For each model type, train model for side/plane separately
+    # Determine SSL model type
+    ssl_model = None
+    for model_name in model_training.SSL_NAME_TO_MODEL_CLS.keys():
+        if model_name in exp_name:
+            ssl_model = model_name
+
+    # Train models on side/plane prediction with/without fine-tuning
     for model_type in MODEL_TYPES:
         for label_part in LABEL_PARTS:
-            exp_eval_name = EVAL_EXP_NAME.format(
-                exp_name=exp_name, model_type=model_type, label_part=label_part)
+            for freeze_weights in (True, False):
+                exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
+                    exp_name=exp_name,
+                    model_type=model_type,
+                    label_part=label_part,
+                    freeze_weights=freeze_weights)
 
-            # Skip if exists
-            if os.path.exists(os.path.join(constants.DIR_RESULTS,
-                                           exp_eval_name)):
-                continue
+                # Skip if exists
+                if os.path.exists(os.path.join(constants.DIR_RESULTS,
+                                            exp_eval_name)):
+                    continue
 
-            # Attempt to train model type with specified label part
-            train_model_with_kwargs(
-                exp_name=exp_eval_name,
-                label_part=label_part,
-                ssl_ckpt_path=ckpt_path,
-                **{f"ssl_eval_{model_type}": True})
+                # Attempt to train model type with specified label part
+                train_model_with_kwargs(
+                    exp_name=exp_eval_name,
+                    label_part=label_part,
+                    freeze_weights=freeze_weights,
+                    ssl_ckpt_path=ckpt_path,
+                    ssl_model=ssl_model,
+                    **{f"ssl_eval_{model_type}": True})
 
 
 def analyze_preds(exp_name):
@@ -163,11 +183,15 @@ def analyze_preds(exp_name):
     # Evaluate each model separately
     for model_type in MODEL_TYPES:
         for label_part in LABEL_PARTS:
-            exp_eval_name = EVAL_EXP_NAME.format(
-                exp_name=exp_name, model_type=model_type, label_part=label_part)
+            for freeze_weights in (True, False):
+                exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
+                        exp_name=exp_name,
+                        model_type=model_type,
+                        label_part=label_part,
+                        freeze_weights=freeze_weights)
 
-            model_eval.infer_dset(exp_eval_name)
-            model_eval.analyze_dset_preds(exp_eval_name)
+                model_eval.infer_dset(exp_eval_name)
+                model_eval.analyze_dset_preds(exp_eval_name)
 
 
 ################################################################################
@@ -231,7 +255,7 @@ def main(args):
     analyze_preds(args.exp_name)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 0. Initialize ArgumentParser
     PARSER = argparse.ArgumentParser()
     init(PARSER)
