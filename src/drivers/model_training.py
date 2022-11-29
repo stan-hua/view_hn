@@ -272,9 +272,10 @@ def get_model_cls(hparams):
         Model class
     """
     # For self-supervised (SSL) image-based model
-    if hparams["self_supervised"]:
+    if hparams.get("self_supervised"):
         # If training SSL
-        model_cls = SSL_NAME_TO_MODEL_CLS[hparams["ssl_model"]]
+        ssl_model = hparams.get("ssl_model", "moco")
+        model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
 
         # If evaluating SSL method
         if hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]:
@@ -282,16 +283,16 @@ def get_model_cls(hparams):
             pretrained_model = model_cls.load_from_checkpoint(
                 hparams["ssl_ckpt_path"])
             
-            if hparams["ssl_model"] == "moco":
+            if ssl_model == "moco":
                 hparams["conv_backbone"] = pretrained_model.backbone
-            elif hparams["ssl_model"] == "tclr":
+            elif ssl_model == "tclr":
                 hparams["conv_backbone"] = pretrained_model.conv_backbone
                 hparams["temporal_backbone"] = pretrained_model.lstm_backbone
 
             model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
                 else LinearLSTM
     # For supervised full-sequence model
-    elif not hparams["self_supervised"] and hparams["full_seq"]:
+    elif not hparams.get("self_supervised") and hparams.get("full_seq"):
         model_cls = EfficientNetLSTM
     # For supervised image-based model
     else:

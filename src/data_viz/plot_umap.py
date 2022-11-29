@@ -401,75 +401,6 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
-def get_views_for_filenames(filenames, sickkids=True, stanford=True):
-    """
-    Attempt to get view labels for all filenames given, using metadata file
-
-    Parameters
-    ----------
-    filenames : list or array-like or pandas.Series
-        List of filenames
-    sickkids : bool, optional
-        If True, include SickKids image labels, by default True.
-    stanford : bool, optional
-        If True, include Stanford image labels, by default True.
-
-    Returns
-    -------
-    numpy.array
-        List of view labels. For filenames not found, label will None.
-    """
-    df_labels = pd.DataFrame()
-
-    # Get SickKids metadata
-    if sickkids:
-        df_labels = pd.concat([df_labels, utils.load_sickkids_metadata()],
-                              ignore_index=True)
-
-    # Get Stanford metadata
-    if stanford:
-        df_labels = pd.concat([df_labels, utils.load_stanford_metadata()],
-                              ignore_index=True)
-
-    # Get mapping of filename to labels
-    filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))
-    view_labels = np.array([*map(filename_to_label.get, filenames)])
-
-    return view_labels
-
-
-def get_machine_for_filenames(filenames, sickkids=True):
-    """
-    Attempt to get machine labels for all filenames given, using metadata file
-
-    Parameters
-    ----------
-    filenames : list or array-like or pandas.Series
-        List of filenames
-    sickkids : bool, optional
-        If True, include SickKids image labels, by default True.
-
-    Returns
-    -------
-    numpy.array
-        List of machine labels. For filenames not found, label will None.
-    """
-    filename_to_machine = {}
-    if sickkids:
-        # Get mapping of filename to machine
-        df_machines = pd.concat([
-            pd.read_csv(constants.SK_MACHINE_METADATA_FILE),
-            pd.read_csv(constants.SK_MACHINE_TEST_METADATA_FILE)
-        ])
-        df_machines = df_machines.set_index("IMG_FILE")
-        filename_to_machine.update(df_machines["machine"].to_dict())
-
-    # Get machine label for each filename
-    machine_labels = np.array([*map(filename_to_machine.get, filenames)])
-
-    return machine_labels
-
-
 def cluster_by_density(embeds):
     """
     Cluster embeddings by density.
@@ -525,9 +456,9 @@ def main(model, raw=False, segmented=False, reverse_mask=False):
     filenames = df_metadata["filename"].map(os.path.basename).to_numpy()
 
     # Get view labels (if any) for all extracted images
-    view_labels = get_views_for_filenames(filenames)
+    view_labels = utils.get_views_for_filenames(filenames)
     # Get machine labels (if any) for all extracted images
-    machine_labels = get_machine_for_filenames(filenames)
+    machine_labels = utils.get_machine_for_filenames(filenames)
 
     # Isolate UMAP embeddings (all patients)
     df_embeds_only = df_embeds.drop(columns=["files"])
@@ -549,11 +480,11 @@ def main(model, raw=False, segmented=False, reverse_mask=False):
     plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw,
                       hospital="Both")
     # 4.2 Only SickKids Data
-    sk_view_labels = get_views_for_filenames(filenames, True, False)
+    sk_view_labels = utils.get_views_for_filenames(filenames, True, False)
     plot_umap_by_view(model, sk_view_labels, filenames, df_embeds_only, raw=raw,
                       hospital="SickKids")
     # 4.3 Only Stanford Data
-    su_view_labels = get_views_for_filenames(filenames, False, True)
+    su_view_labels = utils.get_views_for_filenames(filenames, False, True)
     plot_umap_by_view(model, su_view_labels, filenames, df_embeds_only, raw=raw,
                       hospital="Stanford")
 

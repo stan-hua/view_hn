@@ -28,7 +28,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 ################################################################################
-#                               Metadata Related                               #
+#                             Metadata Extraction                              #
 ################################################################################
 def load_metadata(hospital, **kwargs):
     """
@@ -59,9 +59,9 @@ def load_metadata(hospital, **kwargs):
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            extract=False,
-                           machine=False,
                            relative_side=False,
                            include_unlabeled=False,
+                           include_hn=True,
                            img_dir=constants.DIR_IMAGES,
                            include_test_set=False,
                            test_path=constants.SK_TEST_METADATA_FILE):
@@ -86,13 +86,14 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
-    machine : bool, optional
-        If True, extract machine for US image, by default False.
     relative_side : bool, optional
         If True, converts side (Left/Right) to order in which side appeared
         (First/Second/None). Requires <extract> to be True, by default False.
     include_unlabeled : bool, optional
         If True, include all unlabeled images in <img_dir>, by default False.
+    include_hn : bool, optional
+        If True, include all available hydronephrosis and surgery labels, by
+        default False.
     img_dir : str, optional
         Directory containing unlabeled (and labeled) images, by default
         constants.DIR_IMAGES
@@ -155,7 +156,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
         df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
 
     if extract:
-        extract_data_from_filename(df_metadata)
+        df_metadata = extract_data_from_filename(df_metadata)
 
         # Convert side (in label) to order of relative appearance (First/Second)
         if relative_side:
@@ -169,7 +170,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
     return df_metadata
 
 
-def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE,
+def load_stanford_metadata(path=constants.SU_METADATA_FILE,
                            label_part=None,
                            extract=False,
                            relative_side=False,
@@ -247,7 +248,7 @@ def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE,
         df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
 
     if extract:
-        extract_data_from_filename(df_metadata)
+        df_metadata = extract_data_from_filename(df_metadata)
 
         # Convert side (in label) to order of relative appearance (First/Second)
         if relative_side:
@@ -263,7 +264,7 @@ def load_stanford_metadata(path=constants.STANFORD_METADATA_FILE,
 
 def extract_data_from_filename(df_metadata, col="filename"):
     """
-    Extract metadata from each image's filename. Assign columns in-place.
+    Extract metadata from each image's filename and combines with HN labels.
 
     Parameters
     ----------
@@ -271,7 +272,15 @@ def extract_data_from_filename(df_metadata, col="filename"):
         Each row contains metadata for an ultrasound image.
     col : str, optional
         Name of column containing filename, by default "filename"
+
+    Returns
+    -------
+    Metadata table with additional data extracted
     """
+    # Create copy to avoid in-place assignment
+    df_metadata = df_metadata.copy()
+
+    # Extract data from filenames
     df_metadata["basename"] = df_metadata[col].map(os.path.basename)
     df_metadata["id"] = df_metadata["basename"].map(
             lambda x: x.split("_")[0])
@@ -280,6 +289,74 @@ def extract_data_from_filename(df_metadata, col="filename"):
     df_metadata["seq_number"] = df_metadata["basename"].map(
         lambda x: int(x.split("_")[2].replace(".jpg", "")))
     df_metadata.drop(columns=["basename"], inplace=True)
+
+    # Include all available surgery labels
+    df_metadata = extract_hn_labels(df_metadata, sickkids=True, stanford=True)
+
+    return df_metadata
+
+
+def extract_hn_labels(df_metadata, sickkids=True, stanford=True):
+    """
+    Extract labels for hydronephrosis (HN) and surgery, if available, and insert
+    them into the supplied metadata table in-place.
+
+    Note
+    ----
+    Unlabeled will appear as null values.
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image.
+    sickkids : bool, optional
+        If True, loads in HN labels for SickKids data, by default True.
+    stanford : bool, optional
+        If True, loads in HN labels for Stanford data, by default True.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Metadata table with HN and surgery labels filled in.
+    """
+    # Load SickKids HN labels
+    df_hn = pd.DataFrame()
+    if sickkids:
+        df_hn = pd.concat([df_hn, pd.read_csv(constants.SK_HN_METADATA_FILE)])
+    if stanford:
+        df_hn = pd.concat([df_hn, pd.read_csv(constants.SU_HN_METADATA_FILE)])
+
+    # Ensure ID is string
+    df_hn["id"] = df_hn["id"].astype(str)
+    df_metadata["id"] = df_metadata["id"].astype(str)
+
+    # Join to df_metadata
+    df_metadata = pd.merge(df_metadata, df_hn, how="left", on="id")
+
+    return df_metadata
+
+
+def extract_from_label(label, extract="plane"):
+    """
+    Extract data from label string.
+
+    Parameters
+    ----------
+    label : str
+        Label of the form <plane>_<side> or "Bladder"
+    extract : str, optional
+        One of "plane" or "side", by default "plane"
+
+    Returns
+    -------
+    str
+        Extracted item from label
+    """
+    assert extract in ("plane", "side")
+    label_parts = label.split("_")
+    if extract == "side":
+        return label_parts[1] if len(label_parts) > 1 else "None"
+    return label_parts[0]
 
 
 def get_from_paths(paths, item="id"):
@@ -343,62 +420,78 @@ def get_from_path(path, item="id"):
     return extracted
 
 
-def remove_only_unlabeled_seqs(df_metadata):
+def get_views_for_filenames(filenames, sickkids=True, stanford=True):
     """
-    Removes rows from fully unlabeled ultrasound sequences.
+    Attempt to get view labels for all filenames given, using metadata file
 
     Parameters
     ----------
-    df_metadata : pandas.DataFrame
-        Each row contains metadata for an ultrasound image. May contain
-        unlabeled images (label as "Other")
+    filenames : list or array-like or pandas.Series
+        List of filenames
+    sickkids : bool, optional
+        If True, include SickKids image labels, by default True.
+    stanford : bool, optional
+        If True, include Stanford image labels, by default True.
 
     Returns
     -------
-    pandas.DataFrame
-        Metadata dataframe with completely unlabeled sequences removed
+    numpy.array
+        List of view labels. For filenames not found, label will None.
     """
-    # If including unlabeled, exclude sequences that are all "Others"
-    # NOTE: This leads to the same patient-visit splits as in training
-    mask = df_metadata.groupby(by=["id", "visit"]).apply(
-        lambda df: not all(df.label == "Other"))
-    mask = mask[mask]
-    mask.name = "bool_mask"
+    df_labels = pd.DataFrame()
 
-    # Join to filter 
-    df_metadata = df_metadata.set_index(["id", "visit"])
-    df_metadata = df_metadata.join(mask, how="inner")
+    # Get SickKids metadata
+    if sickkids:
+        df_labels = pd.concat([df_labels, load_sickkids_metadata()],
+                              ignore_index=True)
 
-    # Remove added column
-    df_metadata = df_metadata.reset_index()
-    df_metadata = df_metadata.drop(columns=["bool_mask"])
+    # Get Stanford metadata
+    if stanford:
+        df_labels = pd.concat([df_labels, load_stanford_metadata()],
+                              ignore_index=True)
 
-    return df_metadata
+    # Get mapping of filename to labels
+    filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))
+    view_labels = np.array([*map(filename_to_label.get, filenames)])
+
+    return view_labels
 
 
-def extract_from_label(label, extract="plane"):
+def get_machine_for_filenames(filenames, sickkids=True):
     """
-    Extract data from label string.
+    Attempt to get machine labels for all filenames given, using metadata file
 
     Parameters
     ----------
-    label : str
-        Label of the form <plane>_<side> or "Bladder"
-    extract : str, optional
-        One of "plane" or "side", by default "plane"
+    filenames : list or array-like or pandas.Series
+        List of filenames
+    sickkids : bool, optional
+        If True, include SickKids image labels, by default True.
 
     Returns
     -------
-    str
-        Extracted item from label
+    numpy.array
+        List of machine labels. For filenames not found, label will None.
     """
-    assert extract in ("plane", "side")
-    label_parts = label.split("_")
-    if extract == "side":
-        return label_parts[1] if len(label_parts) > 1 else "None"
-    return label_parts[0]
+    filename_to_machine = {}
+    if sickkids:
+        # Get mapping of filename to machine
+        df_machines = pd.concat([
+            pd.read_csv(constants.SK_MACHINE_METADATA_FILE),
+            pd.read_csv(constants.SK_MACHINE_TEST_METADATA_FILE)
+        ])
+        df_machines = df_machines.set_index("IMG_FILE")
+        filename_to_machine.update(df_machines["machine"].to_dict())
+
+    # Get machine label for each filename
+    machine_labels = np.array([*map(filename_to_machine.get, filenames)])
+
+    return machine_labels
 
 
+################################################################################
+#                           Metadata Post-Processing                           #
+################################################################################
 def make_side_label_relative(labels):
     """
     First side (Left/Right) becomes First, while the other becomes Second. Use
@@ -440,6 +533,39 @@ def make_side_label_relative(labels):
         new_labels.append(side_to_relative[label])
 
     return new_labels
+
+
+def remove_only_unlabeled_seqs(df_metadata):
+    """
+    Removes rows from fully unlabeled ultrasound sequences.
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image. May contain
+        unlabeled images (label as "Other")
+
+    Returns
+    -------
+    pandas.DataFrame
+        Metadata dataframe with completely unlabeled sequences removed
+    """
+    # If including unlabeled, exclude sequences that are all "Others"
+    # NOTE: This leads to the same patient-visit splits as in training
+    mask = df_metadata.groupby(by=["id", "visit"]).apply(
+        lambda df: not all(df.label == "Other"))
+    mask = mask[mask]
+    mask.name = "bool_mask"
+
+    # Join to filter 
+    df_metadata = df_metadata.set_index(["id", "visit"])
+    df_metadata = df_metadata.join(mask, how="inner")
+
+    # Remove added column
+    df_metadata = df_metadata.reset_index()
+    df_metadata = df_metadata.drop(columns=["bool_mask"])
+
+    return df_metadata
 
 
 def restrict_seq_len(df_metadata, n=18):

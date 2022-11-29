@@ -63,7 +63,7 @@ CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 # Default dataset to perform inference on
-DEFAULT_DSET = "test"
+DEFAULT_DSET = "val"
 
 ################################################################################
 #                               Paths Constants                                #
@@ -834,6 +834,86 @@ def compare_prediction_similarity(df_pred_1, df_pred_2):
         print(f"{plane}: {pearsonr(pred_mask_1, pred_mask_2)}")
 
 
+def plot_rolling_accuracy(df_pred, window_size=15, max_seq_num=75,
+                          update_seq_num=False, save_path=None):
+    """
+    Given predictions on ultrasound image sequences, plot accuracy on
+    overlapping windows of size `window_size`, based on sequence number.
+
+    Note
+    ----
+    Windows are done on sequence numbers (e.g., sequence numbers [0-14])
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Model predictions. Each row contains a label,
+        prediction, and other patient and sequence-related metadata.
+    window_size : int, optional
+        Window size for sequence numbers, by default 15
+    max_seq_num : int, optional
+        Maximum sequence number to consider, by default 75
+    update_seq_num : bool, optional
+        If True, accounts for missing images between sequence numbers by
+        creating new (raw) sequence number based on existing images, by default
+        False.
+    save_path : str, optional
+        If provided, saves figure to path, by default None.
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axis plot
+    """
+    seq_num_col = "seq_number" if not update_seq_num else "seq_number_new"
+    # If specified, update sequence numbers to relative sequence numbers
+    if update_seq_num:
+        df_pred = get_new_seq_numbers(df_pred)
+
+    # Specify maximum sequencec number
+    true_max_seq_num = df_pred[seq_num_col].max()
+    max_seq_num = min(max_seq_num, true_max_seq_num)
+
+    # Calculate accuracies of windows
+    window_accs = []
+    sample_sizes = []
+    for i in range(0, max_seq_num-window_size):
+        df_window = df_pred[(df_pred[seq_num_col] >= i) &
+                            (df_pred[seq_num_col] < i+window_size)]
+        window_accs.append(round((df_window.label == df_window.pred).mean(), 4))
+        sample_sizes.append(len(df_window))
+
+    # Create bar plot
+    plt.figure(figsize=(10, 7))
+    container = plt.bar(list(range(len(window_accs))), window_accs)
+
+    # Add number of samples (used to calculate accuracy) as bar labels
+    bar_labels = [f"N:{n}" if idx % 3 == 0 else "" for idx, n in
+                    enumerate(sample_sizes)]
+    plt.bar_label(container,
+                  labels=bar_labels,
+                  label_type="edge",
+                  fontsize="small",
+                  alpha=0.75)
+
+    # Set y bounds
+    plt.ylim(0, 1)
+
+    # Add axis text
+    plt.xlabel("Starting Sequence Number")
+    plt.ylabel("Accuracy")
+    plt.title("Rolling Accuracy over Sequence Number Windows of "
+              f"Size {window_size}")
+
+    plt.tight_layout()
+
+    # Save figure if specified
+    if save_path:
+        plt.savefig(save_path)
+
+    return plt.gca()
+
+
 def calculate_metrics(df_pred):
     """
     Calculate important metrics given prediction and labels
@@ -1359,12 +1439,34 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
     # 2. Load metadata
     save_path = create_save_path(exp_name, dset=dset)
     df_pred = pd.read_csv(save_path)
+    # 2.1 Add HN labels, if not already exists
+    if "hn" not in df_pred.columns.tolist():
+        df_pred = utils.extract_hn_labels(df_pred)
 
     # 3. Experiment-specific inference directory, to store figures
     inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
 
     # 4. Calculate metrics
-    df_metrics = calculate_metrics(df_pred)
+    # 4.1 For all samples
+    df_metrics_all = calculate_metrics(df_pred)
+    df_metrics_all.name = "All"
+
+    # 4.2 Stratify patients w/ HN and w/o HN
+    df_metrics_w_hn = calculate_metrics(df_pred[df_pred.hn == 1])
+    df_metrics_w_hn.name = "With HN"
+    df_metrics_wo_hn = calculate_metrics(df_pred[df_pred.hn == 0])
+    df_metrics_wo_hn.name = "Without HN"
+
+    # 4.3 Filler column
+    filler = df_metrics_all.copy()
+    filler[:] = ""
+    filler.name = ""
+
+    # 4.3 Combine
+    df_metrics = pd.concat(
+        [df_metrics_all, filler, df_metrics_w_hn, df_metrics_wo_hn],
+        axis=1)
+
     df_metrics.to_csv(os.path.join(inference_dir, f"{dset}_metrics.csv"))
 
     # 5. Create confusion matrix plot
@@ -1387,8 +1489,11 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
     # Plot probability of predicted labels over the sequence number
     # plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
 
-    # Plot accuracy over sequence number
-    # plot_acc_over_sequence(df_pred, update_seq_num=True)
+    # Plot accuracy over sequence number windows
+    plot_rolling_accuracy(
+        df_pred,
+        update_seq_num=True,
+        save_path=os.path.join(inference_dir, f"{dset}_rolling_accuracy.png"))
 
     # Show randomly chosen side predictions for full sequences
     show_example_side_predictions(df_pred,
