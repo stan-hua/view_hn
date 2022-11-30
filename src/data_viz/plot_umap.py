@@ -22,6 +22,7 @@ from sklearn.preprocessing import StandardScaler
 from src.data import constants
 from src.data_prep import utils
 from src.drivers.embed import get_embeds
+from src.data_viz import utils as viz_utils
 from src.data_viz.eda import gridplot_images
 
 
@@ -32,9 +33,7 @@ from src.data_viz.eda import gridplot_images
 logging.disable()
 
 # Plot configurations
-sns.set_style("dark")
-plt.style.use('dark_background')
-plt.rc('font', family='serif')
+viz_utils.set_theme("dark")
 
 # Set random seed
 random.seed(constants.SEED)
@@ -109,9 +108,17 @@ def plot_umap(embeds, labels, label_order=None, s=5,
 
     # Save Figure
     if save:
+        full_path = f"{save_dir}umap/{filename}.png"
+
+        # Check if UMAP directory exists
         if not os.path.isdir(f"{save_dir}umap/"):
             os.mkdir(f"{save_dir}umap/")
-        plt.savefig(f"{save_dir}umap/{filename}.png",
+
+        # Check if subdirectory exists
+        if not os.path.isdir(os.path.dirname(full_path)):
+            os.makedirs(os.path.dirname(full_path))
+
+        plt.savefig(full_path,
                     bbox_inches='tight',
                     dpi=400)
 
@@ -149,7 +156,7 @@ def plot_umap_all_patients(model, patients, df_embeds_only, color="patient",
 
     # Plot by patient
     plot_umap(umap_embeds_all, label, title=f"UMAP (colored by {color})",
-              filename=f"{model}_umap{'_raw' if raw else ''}({color})",
+              filename=f"{model}/{model}_umap{'_raw' if raw else ''}({color})",
               save=True)
 
 
@@ -192,7 +199,7 @@ def plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=False,
               label_order=VIEW_LABEL_ORDER,
               save=True,
               title=f"UMAP ({hospital}, colored by view)",
-              filename=f"{model}_umap_{hospital.lower()}"
+              filename=f"{model}/{model}_umap_{hospital.lower()}"
                        f"{'_raw' if raw else ''}(views)")
 
 
@@ -235,7 +242,7 @@ def plot_umap_by_machine(model, machine_labels, filenames, df_embeds_only,
     plot_umap(umap_embeds_views, machine_labels,
               save=True,
               title=f"UMAP ({hospital}, colored by machine)",
-              filename=f"{model}_umap_{hospital.lower()}"
+              filename=f"{model}/{model}_umap_{hospital.lower()}"
                        f"{'_raw' if raw else ''}(machine)")
 
 
@@ -300,7 +307,7 @@ def plot_umap_for_one_patient_seq(model, view_labels, patient_visit,
               title=f"UMAP (patient {patient_selected}, colored by US number)",
               palette="Blues" if color == "us_nums" else "tab20",
               save=True,
-              filename=f"{model}_umap_single{'_raw' if raw else ''}"
+              filename=f"{model}/{model}_umap_single{'_raw' if raw else ''}"
                        f"({color})")
 
 
@@ -339,7 +346,7 @@ def plot_umap_for_n_patient(model, patients, df_embeds_only, n=3,
               title=f"UMAP (patients {patients_selected}, "
                     "colored by patient ID)",
               save=True,
-              filename=f"{model}_umap{'_raw' if raw else ''}(patient_id)")
+              filename=f"{model}/{model}_umap{'_raw' if raw else ''}(patient_id)")
 
 
 def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
@@ -397,7 +404,8 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
               label_order=sorted(np.unique(cluster_labels)),
               save=True,
               title=f"UMAP (colored by cluster label)",
-              filename=f"{model}_umap{'_raw' if raw else ''}(cluster_labels)")
+              filename=f"{model}/{model}_umap{'_raw' if raw else ''}"
+                       "(cluster_labels)")
 
 
 ################################################################################
@@ -448,7 +456,17 @@ def cluster_by_density(embeds):
 ################################################################################
 #                                 Main Method                                  #
 ################################################################################
-def main(model, raw=False, segmented=False, reverse_mask=False):
+def main(model, raw=False, segmented=False, reverse_mask=False,
+         label_part=None,
+         sickkids=True,
+         stanford=False,
+         hospital_umap=False,
+         view_umap=True,
+         one_seq_umap=True,
+         machine_umap=False,
+         n_patient_umap=False,
+         cluster_umap=False,
+         ):
     """
     Retrieves embeddings from specified pretrained model. Then plot UMAPs.
 
@@ -465,6 +483,8 @@ def main(model, raw=False, segmented=False, reverse_mask=False):
     reverse_mask : bool, optional
         If True, loads embeddings extracted from segmented images where the mask
         is reversed, by default False.
+    label_part : str, optional
+        Specific part of view label (e.g., plane/side), by default None.
     """
     # Load embeddings
     df_embeds = get_embeds(model, raw=raw, segmented=segmented,
@@ -473,7 +493,7 @@ def main(model, raw=False, segmented=False, reverse_mask=False):
 
     # Extract metadata from image file paths
     df_metadata = pd.DataFrame({"filename": df_embeds["files"]})
-    utils.extract_data_from_filename(df_metadata, col="filename")
+    df_metadata = utils.extract_data_from_filename(df_metadata, col="filename")
 
     patients = df_metadata["id"]
     patient_visits = df_metadata.apply(
@@ -482,7 +502,8 @@ def main(model, raw=False, segmented=False, reverse_mask=False):
     filenames = df_metadata["filename"].map(os.path.basename).to_numpy()
 
     # Get view labels (if any) for all extracted images
-    view_labels = utils.get_views_for_filenames(filenames)
+    view_labels = utils.get_labels_for_filenames(
+        filenames, label_part=label_part)
     # Get machine labels (if any) for all extracted images
     machine_labels = utils.get_machine_for_filenames(filenames)
 
@@ -490,39 +511,56 @@ def main(model, raw=False, segmented=False, reverse_mask=False):
     df_embeds_only = df_embeds.drop(columns=["files"])
 
     # 1. Plot UMAP of all patients, colored by hospital (SickKids / Stanford)
-    plot_umap_all_patients(model, patients, df_embeds_only, color="hospital",
-                           raw=raw)
+    if hospital_umap:
+        plot_umap_all_patients(
+            model, patients, df_embeds_only, color="hospital", raw=raw)
 
-    # 2. Plot UMAP of one patient, colored by number in sequence
-    plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
-                                  df_embeds_only, color="us_nums", raw=raw)
-    # 3. Plot UMAP for one unique US sequence, colored by view
-    # NOTE: Only keeps images with labels in provided df_labels
-    plot_umap_for_one_patient_seq(model, view_labels, patient_visits, us_nums,
-                                  df_embeds_only, color="views", raw=raw)
+    if one_seq_umap:
+        # 2. Plot UMAP of one patient, colored by number in sequence
+        plot_umap_for_one_patient_seq(
+            model, view_labels, patient_visits, us_nums, df_embeds_only,
+            color="us_nums", raw=raw)
+        # 3. Plot UMAP for one unique US sequence, colored by view
+        # NOTE: Only keeps images with labels in provided df_labels
+        plot_umap_for_one_patient_seq(
+            model, view_labels, patient_visits, us_nums, df_embeds_only,
+            color="views", raw=raw)
 
     # 4. Plot UMAP of patients, colored by view
     # 4.1 Both SickKids and Stanford Data
-    plot_umap_by_view(model, view_labels, filenames, df_embeds_only, raw=raw,
-                      hospital="Both")
-    # 4.2 Only SickKids Data
-    sk_view_labels = utils.get_views_for_filenames(filenames, True, False)
-    plot_umap_by_view(model, sk_view_labels, filenames, df_embeds_only, raw=raw,
-                      hospital="SickKids")
-    # 4.3 Only Stanford Data
-    su_view_labels = utils.get_views_for_filenames(filenames, False, True)
-    plot_umap_by_view(model, su_view_labels, filenames, df_embeds_only, raw=raw,
-                      hospital="Stanford")
+    if view_umap:
+        if sickkids and stanford:
+            plot_umap_by_view(
+                model, view_labels, filenames, df_embeds_only,
+                raw=raw, hospital="Both")
+        # 4.2 Only SickKids Data
+        if sickkids:
+            sk_view_labels = utils.get_labels_for_filenames(
+                filenames, True, False)
+            plot_umap_by_view(
+                model, sk_view_labels, filenames, df_embeds_only,
+                raw=raw, hospital="SickKids")
+        # 4.3 Only Stanford Data
+        if stanford:
+            su_view_labels = utils.get_labels_for_filenames(
+                filenames, False, True)
+            plot_umap_by_view(
+                model, su_view_labels, filenames, df_embeds_only,
+                raw=raw, hospital="Stanford")
 
     # 5 Plot UMAP of patients, colored by machine label
-    plot_umap_by_machine(model, machine_labels, filenames, df_embeds_only,
-                         raw=raw, hospital="SickKids")
+    if machine_umap:
+        plot_umap_by_machine(model, machine_labels, filenames, df_embeds_only,
+                             raw=raw, hospital="SickKids")
 
     # 6. Plot UMAP for N patients, colored by patient ID
-    plot_umap_for_n_patient(model, patients, df_embeds_only, n=3, raw=raw)
+    if n_patient_umap:
+        plot_umap_for_n_patient(model, patients, df_embeds_only, n=3, raw=raw)
 
     # 7. Plot example images from UMAP clusters
-    plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False)
+    if cluster_umap:
+        plot_images_in_umap_clusters(model, filenames, df_embeds_only,
+                                     raw=False)
 
     # Close all figures
     plt.close("all")

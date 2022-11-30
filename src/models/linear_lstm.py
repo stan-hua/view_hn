@@ -82,7 +82,6 @@ class LinearLSTM(pl.LightningModule):
             deactivate_requires_grad(conv_backbone)
 
         # If provided, store temporal backbone
-        # TODO: Train w/ and w/o frozen weights
         if temporal_backbone:
             self.temporal_backbone = temporal_backbone
             if self.hparams.freeze_weights:
@@ -392,3 +391,37 @@ class LinearLSTM(pl.LightningModule):
             self.log(f'{dset}_auprc', auprc, prog_bar=True)
             exec(f'self.{dset}_auroc.reset()')
             exec(f'self.{dset}_auprc.reset()')
+
+
+    ############################################################################
+    #                          Extract Embeddings                              #
+    ############################################################################
+    @torch.no_grad()
+    def extract_embeds(self, inputs):
+        """
+        Extracts embeddings from input images.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Ultrasound images from one ultrasound image sequence. Expected size
+            is (T, C, H, W)
+
+        Returns
+        -------
+        numpy.array
+            Embeddings after CNN+LSTM
+        """
+        # Get dimensions
+        T, _, _, _ = inputs.size()
+
+        # Extract convolutional features
+        z = self.conv_backbone(inputs)
+
+        # Flatten
+        z = z.view(1, T, -1)
+
+        # Extract temporal features
+        c = self.temporal_backbone(z)[0]
+
+        return c.detach().cpu().numpy()

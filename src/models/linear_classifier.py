@@ -326,3 +326,29 @@ class LinearClassifier(pl.LightningModule):
             self.log(f'{dset}_auprc', auprc, prog_bar=True)
             exec(f'self.{dset}_auroc.reset()')
             exec(f'self.{dset}_auprc.reset()')
+
+
+    ############################################################################
+    #                          Extract Embeddings                              #
+    ############################################################################
+    @torch.no_grad()
+    def extract_embeds(self, inputs):
+        """
+        Extracts embeddings from input images.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Ultrasound images. Expected size is (B, C, H, W)
+
+        Returns
+        -------
+        numpy.array
+            Deep embeddings before final linear layer
+        """
+        z = self.conv_backbone(inputs)
+
+        # Flatten
+        z = z.view(inputs.size()[0], -1)
+
+        return z.detach().cpu().numpy()

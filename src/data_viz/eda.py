@@ -16,7 +16,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from mpl_toolkits.axes_grid1 import ImageGrid
-from tabulate import tabulate
 
 # Custom libraries
 from src.data import constants
@@ -478,27 +477,6 @@ def plot_ssl_augmentations():
     # Plot example images
     gridplot_images(src_imgs, filename="before_ssl_augmentations.png")
     gridplot_images(augmented_imgs, filename="after_ssl_augmentations.png")
-
-
-################################################################################
-#                               Helper Functions                               #
-################################################################################
-def print_table(df, show_cols=True, show_index=True):
-    """
-    Prints table to stdout in a pretty format.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        A table
-    show_cols : bool
-        If True, prints column names, by default True.
-    show_index : bool
-        If True, prints row index, by default True.
-    """
-    print(tabulate(df, tablefmt="psql",
-                   headers="keys" if show_cols else None,
-                   showindex=show_index))
 
 
 if __name__ == '__main__':

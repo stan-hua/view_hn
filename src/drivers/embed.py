@@ -79,13 +79,13 @@ class ImageEmbedder:
             return self.embed_tf_batch(save_path, **kwargs)
 
 
-    def embed_torch(self, img):
+    def embed_torch(self, data):
         """
         Extract embeddings for image, using a PyTorch model.
 
         Parameters
         ----------
-        img : torch.Tensor
+        data : torch.Tensor
             Image tensor
 
         Returns
@@ -101,11 +101,11 @@ class ImageEmbedder:
         # Check if custom embed function present. If not, use forward pass
         with torch.no_grad():
             if hasattr(self.model, "forward_embed"):
-                features = self.model.forward_embed(img)
+                features = self.model.forward_embed(data)
             elif hasattr(self.model, "extract_embeds"):
-                features = self.model.extract_embeds(img)
+                features = self.model.extract_embeds(data)
             else:
-                features = self.model(img)
+                raise RuntimeError("No feature extraction function defined!")
         
         # If more than 1 image, attempt to flatten extra 3rd dimension
         if features.shape[0] > 1:
@@ -200,7 +200,9 @@ class ImageEmbedder:
         df_features.to_hdf(save_path, "embeds")
 
 
-    def embed_torch_batch(self, save_path, img_dir=None, img_dataloader=None):
+    def embed_torch_batch(self, save_path,
+                          img_dir=None, img_dataloader=None,
+                          device="cpu"):
         """
         Extract embeddings for all images in the directory, using PyTorch
         libraries.
@@ -218,6 +220,8 @@ class ImageEmbedder:
         img_dataloader : torch.utils.data.DataLoader, optional
             Image dataloader with metadata dictionary containing `filename`, by
             default None
+        device : str, optional
+            Device to send data to, by default "cpu".
 
         Returns
         -------
@@ -247,15 +251,17 @@ class ImageEmbedder:
         file_paths = []
 
         # Extract embeddings in batches
-        for img, metadata in tqdm(dataloader):
-            embeds = self.embed_torch(img)
+        for data, metadata in tqdm(dataloader):
+            if device != "cpu":
+                data = data.to(device)
+            embeds = self.embed_torch(data)
 
             all_embeds.append(embeds)
             file_paths.extend(metadata["filename"])
 
         # Save embeddings. Each row is a feature vector
         df_features = pd.DataFrame(np.concatenate(all_embeds))
-        df_features['files'] = file_paths
+        df_features['files'] = np.array(file_paths).flatten()
         df_features.to_hdf(save_path, "embeds", mode="w")
 
         return df_features

@@ -160,6 +160,9 @@ def train_eval_models(exp_name):
                                             exp_eval_name)):
                     continue
 
+                # Use full sequence if LSTM
+                full_seq = "lstm" in model_type
+
                 # Attempt to train model type with specified label part
                 train_model_with_kwargs(
                     exp_name=exp_eval_name,
@@ -167,6 +170,7 @@ def train_eval_models(exp_name):
                     freeze_weights=freeze_weights,
                     ssl_ckpt_path=ckpt_path,
                     ssl_model=ssl_model,
+                    full_seq=full_seq,
                     **{f"ssl_eval_{model_type}": True})
 
 

@@ -511,7 +511,8 @@ class TCLR(pl.LightningModule):
         Parameters
         ----------
         inputs : torch.Tensor
-            Ultrasound images from one patient. Expected size is (B, C, H, W)
+            Ultrasound images from one ultrasound image sequence. Expected size
+            is (T, C, H, W)
 
         Returns
         -------

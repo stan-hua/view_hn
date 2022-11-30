@@ -27,7 +27,8 @@ from tqdm import tqdm
 # Custom libraries
 from src.data import constants
 from src.data_prep import utils
-from src.data_viz.eda import print_table
+from src.data_viz import plot_umap
+from src.data_viz import utils as viz_utils
 from src.drivers import embed, load_model, model_training
 
 
@@ -55,6 +56,9 @@ IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 # Default dataset to perform inference on
 DEFAULT_DSET = "val"
+
+# Plot theme (light/dark)
+THEME = "light"
 
 ################################################################################
 #                               Paths Constants                                #
@@ -142,7 +146,7 @@ def get_dset_metadata(dm, dset=DEFAULT_DSET):
 
     # Extract other metadata from filename
     df_dset["orig_filename"] = df_dset.filename.map(lambda x: x.split("\\")[-1])
-    utils.extract_data_from_filename(df_dset, col="orig_filename")
+    df_dset = utils.extract_data_from_filename(df_dset, col="orig_filename")
     df_dset = df_dset.drop(columns=["orig_filename"])
 
     return df_dset
@@ -385,7 +389,7 @@ def print_confusion_matrix(df_pred, **hparams):
     # Reorder column and index by given labels
     df_cm = df_cm.loc[:, all_labels].reindex(all_labels)
 
-    print_table(df_cm)
+    viz_utils.print_table(df_cm)
 
 
 def plot_pred_probability_by_views(df_pred, relative_side=False):
@@ -665,7 +669,7 @@ def check_others_pred_progression(df_pred):
         columns={"index": "Label Sequence", 0: "Count"})
 
     # Print to stdout
-    print_table(label_seq_counts, show_index=False)
+    viz_utils.print_table(label_seq_counts, show_index=False)
 
 
 def check_rel_side_pred_progression(df_pred):
@@ -748,7 +752,7 @@ def check_rel_side_pred_progression(df_pred):
         columns={"index": "Label Sequence", 0: "Count"})
 
     # Print to stdout
-    print_table(label_seq_counts, show_index=False)
+    viz_utils.print_table(label_seq_counts, show_index=False)
 
 
 def compare_prediction_similarity(df_pred_1, df_pred_2):
@@ -1087,7 +1091,8 @@ def get_new_seq_numbers(df_pred):
     return df_pred
 
 
-def show_example_side_predictions(df_pred, n=5, relative_side=False):
+def show_example_side_predictions(df_pred, n=5, relative_side=False,
+                                  label_part=None):
     """
     Given label sequences and their corresponding side predictions (encoded as
     single characters), print full label and prediction sequences with incorrect
@@ -1103,16 +1108,27 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False):
     relative_side : bool
         If True, predicted labels must be relative side (e.g., Transverse_First)
     """
+    # If relative side label
     if relative_side:
         side_to_idx = {"First": "1", "Second": "2", "None": "-",}
     else:
         side_to_idx = {"Left": "1", "Right": "2", "None": "-",}
+
+    # How to determine side index
+    side_func = lambda x: side_to_idx[utils.extract_from_label(x, "side")]
+    if label_part == "side":
+        side_func = lambda x: side_to_idx[x]
+    else:
+        LOGGER.warning(f"Invalid `label_part` provided! {label_part}")
+        return
+
+    # Apply function above to labels/preds
     labels = df_pred.groupby(by=["id", "visit"]).apply(
-        lambda df: "".join(df.sort_values(by=["seq_number"]).label.map(
-            lambda x: side_to_idx[utils.extract_from_label(x, "side")]).tolist()))
+        lambda df: "".join(
+            df.sort_values(by=["seq_number"]).label.map(side_func).tolist()))
     preds = df_pred.groupby(by=["id", "visit"]).apply(
-        lambda df: "".join(df.sort_values(by=["seq_number"]).pred.map(
-            lambda x: side_to_idx[utils.extract_from_label(x, "side")]).tolist()))
+        lambda df: "".join(
+            df.sort_values(by=["seq_number"]).pred.map(side_func).tolist()))
 
     for _ in range(n):
         # Choose random sequence
@@ -1312,7 +1328,8 @@ def embed_dset(exp_name, dset=DEFAULT_DSET, **overwrite_hparams):
     embed.extract_embeds(
         model,
         save_embed_path=embed_save_path,
-        img_dataloader=dataloader)
+        img_dataloader=dataloader,
+        device=DEVICE)
 
 
 def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
@@ -1374,35 +1391,42 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
 
     df_metrics.to_csv(os.path.join(inference_dir, f"{dset}_metrics.csv"))
 
+    # 5.0. Reset theme
+    viz_utils.set_theme(THEME)
+
     # 5. Create confusion matrix plot
     _, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-    # Plot confusion matrix for most confident predictions
+    # 5.1 Plot confusion matrix for most confident predictions
     plot_confusion_matrix(df_pred, filter_confident=True, ax=ax1, **hparams)
-    # Plot confusion matrix for all predictions
+    # 5.2 Plot confusion matrix for all predictions
     plot_confusion_matrix(df_pred, filter_confident=False, ax=ax2, **hparams)
     plt.tight_layout()
     plt.savefig(os.path.join(inference_dir, f"{dset}_confusion_matrix.png"))
 
-    # Print confusion matrix for all predictions
+    # 5.3 Print confusion matrix for all predictions
     print_confusion_matrix(df_pred, **hparams)
 
-    # Print reasons for misclassification of most confident predictions
+    # 6. Print reasons for misclassification of most confident predictions
     if not hparams.get("label_part"):
         check_misclassifications(df_pred,
                                  relative_side=hparams.get("relative_side"))
 
-    # Plot probability of predicted labels over the sequence number
-    # plot_prob_over_sequence(df_pred, update_seq_num=True, correct_only=True)
-
-    # Plot accuracy over sequence number windows
+    # 7. Plot accuracy over sequence number windows
     plot_rolling_accuracy(
         df_pred,
         update_seq_num=True,
         save_path=os.path.join(inference_dir, f"{dset}_rolling_accuracy.png"))
 
-    # Show randomly chosen side predictions for full sequences
+    # 8. Show randomly chosen side predictions for full sequences
     show_example_side_predictions(df_pred,
-                                  relative_side=hparams.get("relative_side"))
+                                  relative_side=hparams.get("relative_side"),
+                                  label_part=hparams.get("label_part"))
+
+    # 9. Plot embeddings with labels
+    plot_umap.main(exp_name, label_part=hparams.get("label_part"))
+
+    # 10. Close all open figures
+    plt.close("all")
 
 
 if __name__ == '__main__':

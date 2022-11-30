@@ -132,7 +132,7 @@ class TCLRDataModule(UltrasoundDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_train)
+        df_train = utils.extract_data_from_filename(df_train)
 
         # Ensure US image sequences to have exactly `seq_length` frames
         df_train = utils.restrict_seq_len(df_train, n=self.seq_length)
@@ -174,7 +174,7 @@ class TCLRDataModule(UltrasoundDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_val)
+        df_val = utils.extract_data_from_filename(df_val)
 
         # Ensure US image sequences to have exactly `seq_length` frames
         df_val = utils.restrict_seq_len(df_val, n=self.seq_length)

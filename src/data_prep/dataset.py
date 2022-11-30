@@ -179,7 +179,6 @@ class UltrasoundDataModule(pl.LightningDataModule):
         # NOTE: Shuffle is turned off during validation/test
         # NOTE: Batch size is set to 1 during validation/test
         self.val_dataloader_params = self.train_dataloader_params.copy()
-        self.val_dataloader_params["batch_size"] = 1
         self.val_dataloader_params["shuffle"] = False
 
         ########################################################################
@@ -256,7 +255,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_train)
+        df_train = utils.extract_data_from_filename(df_train)
 
         # Instantiate UltrasoundDatasetDataFrame
         train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
@@ -285,7 +284,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_val)
+        df_val = utils.extract_data_from_filename(df_val)
 
         val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
                                                  self.full_seq,
@@ -313,7 +312,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         })
 
         # Add metadata for patient ID, visit number and sequence number
-        utils.extract_data_from_filename(df_test)
+        df_test = utils.extract_data_from_filename(df_test)
 
         test_dataset = UltrasoundDatasetDataFrame(df_test, self.img_dir,
                                                   self.full_seq,

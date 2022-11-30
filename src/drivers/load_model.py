@@ -80,10 +80,7 @@ def get_model_cls(hparams):
                 hparams["conv_backbone"] = pretrained_model.conv_backbone
 
                 # Get temporal backbone
-                if hasattr("temporal_backbone"):
-                    temporal_backbone = pretrained_model.temporal_backbone
-                else:
-                    temporal_backbone = pretrained_model.lstm_backbone
+                temporal_backbone = pretrained_model.temporal_backbone
                 hparams["temporal_backbone"] = temporal_backbone
 
             model_cls = LinearClassifier if hparams["ssl_eval_linear"] \

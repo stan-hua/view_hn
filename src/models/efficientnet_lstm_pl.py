@@ -383,3 +383,45 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
             self.log(f'{dset}_auprc', auprc, prog_bar=True)
             exec(f'self.{dset}_auroc.reset()')
             exec(f'self.{dset}_auprc.reset()')
+
+
+    ############################################################################
+    #                          Extract Embeddings                              #
+    ############################################################################
+    @torch.no_grad()
+    def extract_embeds(self, inputs):
+        """
+        Extracts embeddings from input images.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Ultrasound images from one ultrasound image sequence. Expected size
+            is (T, C, H, W)
+
+        Returns
+        -------
+        numpy.array
+            Embeddings after CNN+LSTM
+        """
+        # If shape is (1, seq_len, C, H, W), flatten first dimension
+        if len(inputs.size()) == 5:
+            inputs = inputs.squeeze(dim=0)
+
+        # Get dimensions
+        T, _, _, _ = inputs.size()
+
+        # Extract convolutional features
+        z = self.extract_features(inputs)
+
+        # 2. Average Pooling
+        z = self._avg_pooling(z)
+
+        # Flatten
+        z = z.view(1, T, -1)
+
+        # Extract temporal features
+        c = self._lstm(z)[0]
+        c = c.view(T, -1)
+
+        return c.detach().cpu().numpy()

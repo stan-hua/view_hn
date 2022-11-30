@@ -59,9 +59,9 @@ def load_metadata(hospital, **kwargs):
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            extract=False,
+                           include_hn=False,
                            relative_side=False,
                            include_unlabeled=False,
-                           include_hn=True,
                            img_dir=constants.DIR_IMAGES,
                            include_test_set=False,
                            test_path=constants.SK_TEST_METADATA_FILE):
@@ -86,14 +86,14 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
+    include_hn : bool, optional
+        If True, include all available hydronephrosis and surgery labels, by
+        default False.
     relative_side : bool, optional
         If True, converts side (Left/Right) to order in which side appeared
         (First/Second/None). Requires <extract> to be True, by default False.
     include_unlabeled : bool, optional
         If True, include all unlabeled images in <img_dir>, by default False.
-    include_hn : bool, optional
-        If True, include all available hydronephrosis and surgery labels, by
-        default False.
     img_dir : str, optional
         Directory containing unlabeled (and labeled) images, by default
         constants.DIR_IMAGES
@@ -158,6 +158,11 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
     if extract:
         df_metadata = extract_data_from_filename(df_metadata)
 
+        # Include all available surgery labels
+        if include_hn:
+            df_metadata = extract_hn_labels(
+                df_metadata, sickkids=True, stanford=False)
+
         # Convert side (in label) to order of relative appearance (First/Second)
         if relative_side:
             df_metadata = df_metadata.sort_values(
@@ -173,6 +178,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
 def load_stanford_metadata(path=constants.SU_METADATA_FILE,
                            label_part=None,
                            extract=False,
+                           include_hn=False,
                            relative_side=False,
                            include_unlabeled=False,
                            img_dir=constants.DIR_IMAGES):
@@ -197,6 +203,9 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
+    include_hn : bool, optional
+        If True, include all available hydronephrosis and surgery labels, by
+        default False.
     relative_side : bool, optional
         If True, converts side (Left/Right) to order in which side appeared
         (First/Second/None). Requires <extract> to be True, by default False.
@@ -250,6 +259,11 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
     if extract:
         df_metadata = extract_data_from_filename(df_metadata)
 
+        # Include all available surgery labels
+        if include_hn:
+            df_metadata = extract_hn_labels(
+                df_metadata, sickkids=False, stanford=True)
+
         # Convert side (in label) to order of relative appearance (First/Second)
         if relative_side:
             df_metadata = df_metadata.sort_values(
@@ -289,9 +303,6 @@ def extract_data_from_filename(df_metadata, col="filename"):
     df_metadata["seq_number"] = df_metadata["basename"].map(
         lambda x: int(x.split("_")[2].replace(".jpg", "")))
     df_metadata.drop(columns=["basename"], inplace=True)
-
-    # Include all available surgery labels
-    df_metadata = extract_hn_labels(df_metadata, sickkids=True, stanford=True)
 
     return df_metadata
 
@@ -420,9 +431,10 @@ def get_from_path(path, item="id"):
     return extracted
 
 
-def get_views_for_filenames(filenames, sickkids=True, stanford=True):
+def get_labels_for_filenames(filenames, sickkids=True, stanford=True,
+                            **kwargs):
     """
-    Attempt to get view labels for all filenames given, using metadata file
+    Attempt to get labels for all filenames given, using metadata file
 
     Parameters
     ----------
@@ -432,6 +444,9 @@ def get_views_for_filenames(filenames, sickkids=True, stanford=True):
         If True, include SickKids image labels, by default True.
     stanford : bool, optional
         If True, include Stanford image labels, by default True.
+    **kwargs : dict, optional
+        Keyword arguments to pass into hospital-specific metadata-loading
+        functions.
 
     Returns
     -------
@@ -442,7 +457,7 @@ def get_views_for_filenames(filenames, sickkids=True, stanford=True):
 
     # Get SickKids metadata
     if sickkids:
-        df_labels = pd.concat([df_labels, load_sickkids_metadata()],
+        df_labels = pd.concat([df_labels, load_sickkids_metadata(**kwargs)],
                               ignore_index=True)
 
     # Get Stanford metadata
