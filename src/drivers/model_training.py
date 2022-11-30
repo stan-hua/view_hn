@@ -22,12 +22,7 @@ from src.data_prep import utils
 from src.data_prep.dataset import UltrasoundDataModule
 from src.data_prep.moco_dataset import MoCoDataModule
 from src.data_prep.tclr_dataset import TCLRDataModule
-from src.models.efficientnet_lstm_pl import EfficientNetLSTM
-from src.models.efficientnet_pl import EfficientNetPL
-from src.models.linear_classifier import LinearClassifier
-from src.models.linear_lstm import LinearLSTM
-from src.models.moco import MoCo
-from src.models.tclr import TCLR
+from src.drivers import load_model
 from src.utilities.custom_logger import FriendlyCSVLogger
 
 
@@ -37,12 +32,6 @@ from src.utilities.custom_logger import FriendlyCSVLogger
 # Configure logging
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(level=logging.DEBUG)
-
-# Mapping of SSL model name to model class
-SSL_NAME_TO_MODEL_CLS = {
-    "moco": MoCo,
-    "tclr": TCLR,
-}
 
 # Mapping of SSL model name to corresponding data module
 SSL_NAME_TO_DATA_MODULE = {
@@ -133,7 +122,7 @@ def init(parser):
     parser.add_argument("--self_supervised", action="store_true",
                         help=arg_help["self_supervised"])
     parser.add_argument("--ssl_model",
-                        choices=SSL_NAME_TO_MODEL_CLS.keys(),
+                        choices=load_model.SSL_NAME_TO_MODEL_CLS.keys(),
                         default="moco",
                         help=arg_help["ssl_model"])
     parser.add_argument("--ssl_ckpt_path", default=constants.MOCO_CKPT_PATH,
@@ -211,23 +200,38 @@ def init(parser):
     parser.add_argument("--debug", action="store_true", help=arg_help["debug"])
 
 
-def setup_data_module(hparams):
+def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
+                      **overwrite_hparams):
     """
-    Set up data module
+    Set up data module.
 
     Parameters
     ----------
     hparams : dict
         Experiment hyperparameters
+    img_dir : str, optional
+        Path to directory containing metadata, by default constants.DIR_IMAGES
+    **overwrite_hparams : dict, optional
+        Keyword arguments to overwrite `hparams`
 
     Returns
     -------
     pytorch_lightning.LightningDataModule
     """
+    # 0. If data splitting parameters are not given, assume defaults
+    for split_params in ("train_val_split", "train_test_split"):
+        if split_params not in hparams:
+            hparams[split_params] = 0.75
+
+    # 0. Create copy and overwrite hparams
+    hparams = hparams.copy()
+    hparams.update(overwrite_hparams)
+
     # 1. Load metadata
     df_metadata = utils.load_metadata(
         hospital=hparams["hospital"],
         extract=True,
+        img_dir=img_dir,
         label_part=hparams["label_part"],
         relative_side=hparams["relative_side"],
         include_unlabeled=hparams["include_unlabeled"])
@@ -247,58 +251,10 @@ def setup_data_module(hparams):
         "pin_memory": hparams["pin_memory"],
     }
     dm = data_module_cls(dataloader_params, df=df_metadata,
-                         img_dir=constants.DIR_IMAGES, **hparams)
+                         img_dir=img_dir, **hparams)
     dm.setup()
 
     return dm
-
-
-def get_model_cls(hparams):
-    """
-    Given experiment hyperparameters, get appropriate model class.
-
-    Note
-    ----
-    Adds `backbone` to hparams, if needed.
-
-    Parameters
-    ----------
-    hparams : dict
-        Experiment parameters
-
-    Returns
-    -------
-    class
-        Model class
-    """
-    # For self-supervised (SSL) image-based model
-    if hparams.get("self_supervised"):
-        # If training SSL
-        ssl_model = hparams.get("ssl_model", "moco")
-        model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
-
-        # If evaluating SSL method
-        if hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]:
-            # NOTE: Pretrained backbone/s, needs to be inserted as an arg.
-            pretrained_model = model_cls.load_from_checkpoint(
-                hparams["ssl_ckpt_path"])
-            
-            if ssl_model == "moco":
-                hparams["conv_backbone"] = pretrained_model.backbone
-            elif ssl_model == "tclr":
-                hparams["conv_backbone"] = pretrained_model.conv_backbone
-                hparams["temporal_backbone"] = pretrained_model.lstm_backbone
-
-            model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
-                else LinearLSTM
-    # For supervised full-sequence model
-    elif not hparams.get("self_supervised") and hparams.get("full_seq"):
-        model_cls = EfficientNetLSTM
-    # For supervised image-based model
-    else:
-        model_cls = EfficientNetPL
-
-    return model_cls
 
 
 ################################################################################
@@ -435,7 +391,7 @@ def main(args):
     dm = setup_data_module(hparams)
 
     # 2. Specify model class
-    model_cls = get_model_cls(hparams)
+    model_cls = load_model.get_model_cls(hparams)
 
     # 3.1 Run experiment
     if hparams["cross_val_folds"] == 1:

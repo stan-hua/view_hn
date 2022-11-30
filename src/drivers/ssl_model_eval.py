@@ -19,7 +19,7 @@ from jinja2 import Environment
 
 # Custom libraries
 from src.data import constants
-from src.drivers import model_eval, model_training
+from src.drivers import load_model, model_eval, model_training
 
 
 ################################################################################
@@ -141,7 +141,7 @@ def train_eval_models(exp_name):
 
     # Determine SSL model type
     ssl_model = None
-    for model_name in model_training.SSL_NAME_TO_MODEL_CLS.keys():
+    for model_name in load_model.SSL_NAME_TO_MODEL_CLS.keys():
         if model_name in exp_name:
             ssl_model = model_name
 
@@ -191,6 +191,7 @@ def analyze_preds(exp_name):
                         freeze_weights=freeze_weights)
 
                 model_eval.infer_dset(exp_eval_name)
+                model_eval.embed_dset(exp_eval_name)
                 model_eval.analyze_dset_preds(exp_eval_name)
 
 

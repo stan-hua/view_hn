@@ -14,12 +14,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+import umap
 from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
 
 # Custom libraries
 from src.data import constants
 from src.data_prep import utils
-from src.drivers.extract_embeddings import get_umap_embeddings, get_embeds
+from src.drivers.embed import get_embeds
 from src.data_viz.eda import gridplot_images
 
 
@@ -401,6 +403,30 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False):
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
+def get_umap_embeddings(df_embeds):
+    """
+    Get 2D-UMAP embeddings.
+
+    Parameters
+    ----------
+    df_embeds : pd.DataFrame
+        Contains embeddings for images
+    
+    Returns
+    -------
+    numpy.array
+        2-dimensional UMAP embeddings
+    """
+    # Standardize embeddings
+    df_scaled = StandardScaler().fit_transform(df_embeds)
+
+    # Perform dimensionality reduction
+    reducer = umap.UMAP(random_state=0)
+    umap_embeds = reducer.fit_transform(df_scaled)
+
+    return umap_embeds
+
+
 def cluster_by_density(embeds):
     """
     Cluster embeddings by density.

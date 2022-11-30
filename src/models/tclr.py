@@ -73,8 +73,8 @@ class TCLR(pl.LightningModule):
         self.conv_backbone = EfficientNet.from_name(
             self.model_name, image_size=img_size, include_top=False)
 
-        # Instantiate LSTM backbone
-        self.lstm_backbone = torch.nn.LSTM(
+        # Instantiate temporal backbone
+        self.temporal_backbone = torch.nn.LSTM(
             self.feature_dim,
             hidden_size=hidden_dim,
             num_layers=n_lstm_layers,
@@ -160,7 +160,9 @@ class TCLR(pl.LightningModule):
         x_k_features = x_k_features.view(B, clip_size, -1)
 
         # (1) Instance-based contrastive loss
-        instance_loss = self.compute_instance_loss(x_q_features)
+        # NOTE: Disabled instance-based contrastive loss
+        instance_loss = 0
+        # instance_loss = self.compute_instance_loss(x_q_features)
 
         # (2) Local-Local contrastive loss
         local_loss = self.compute_local_local_loss(x_q_features, x_k_features)
@@ -218,7 +220,9 @@ class TCLR(pl.LightningModule):
         x_k_features = x_k_features.view(B, clip_size, -1)
 
         # (1) Instance-based contrastive loss
-        instance_loss = self.compute_instance_loss(x_q_features)
+        # NOTE: Disabled instance-based contrastive loss
+        instance_loss = 0
+        # instance_loss = self.compute_instance_loss(x_q_features)
 
         # (2) Local-Local contrastive loss
         local_loss = self.compute_local_local_loss(x_q_features, x_k_features)
@@ -276,13 +280,13 @@ class TCLR(pl.LightningModule):
 
         # (For query), extract temporally-aware embeddings
         # NOTE: Average over frames in subclip to create subclip representation
-        q = self.lstm_backbone(instance_x_q)[0]
+        q = self.temporal_backbone(instance_x_q)[0]
         q = torch.mean(q, dim=1)
         q = self.projection_head(q)
 
         # (For keys), extract temporally-aware embeddings
         # NOTE: Average over frames in subclip to create subclip representation
-        k = self.lstm_backbone(instance_x_k)[0]
+        k = self.temporal_backbone(instance_x_k)[0]
         k = torch.mean(k, dim=1)
         k = self.projection_head(k)
 
@@ -340,13 +344,13 @@ class TCLR(pl.LightningModule):
 
         # (For query), extract temporally-aware embeddings
         # NOTE: Average over frames in subclip to create subclip representation
-        q = self.lstm_backbone(x_q__all_subclips)[0]
+        q = self.temporal_backbone(x_q__all_subclips)[0]
         q = torch.mean(q, dim=1)
         q = self.projection_head(q)
 
         # (For keys), extract temporally-aware embeddings
         # NOTE: Average over frames in subclip to create subclip representation
-        k = self.lstm_backbone(x_k__all_subclips)[0]
+        k = self.temporal_backbone(x_k__all_subclips)[0]
         k = torch.mean(k, dim=1)
         k = self.projection_head(k)
 
@@ -418,7 +422,7 @@ class TCLR(pl.LightningModule):
         # (For query), extract (local) temporally-aware embeddings
         # NOTE: Average over frames in subclip to create local subclip
         #       representation
-        q = self.lstm_backbone(x_q__all_subclips)[0]
+        q = self.temporal_backbone(x_q__all_subclips)[0]
         q = torch.mean(q, dim=1)
         q = self.projection_head(q)
 
@@ -430,7 +434,7 @@ class TCLR(pl.LightningModule):
 
         # B. Create global representations
         # (For keys), extract (global) temporally-aware embeddings
-        k = self.lstm_backbone(x_q)[0]
+        k = self.temporal_backbone(x_q)[0]
 
         # Average over subclips
         k__batch_subclips = torch.split(k, subclip_size, dim=1)
@@ -494,3 +498,36 @@ class TCLR(pl.LightningModule):
         for name, params in self.named_parameters():
             self.logger.experiment[1].add_histogram(
                 name, params, self.current_epoch)
+
+
+    ############################################################################
+    #                          Extract Embeddings                              #
+    ############################################################################
+    @torch.no_grad()
+    def extract_embeds(self, inputs):
+        """
+        Extracts embeddings from input images.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Ultrasound images from one patient. Expected size is (B, C, H, W)
+
+        Returns
+        -------
+        numpy.array
+            Embeddings after CNN+LSTM
+        """
+        # Get dimensions
+        dims = inputs.size()
+
+        # Extract convolutional features
+        z = self.conv_backbone(inputs)
+
+        # Flatten
+        z = z.view(1, dims[0], -1)
+
+        # Extract temporal features
+        c = self.temporal_backbone(z)[0]
+
+        return c.detach().cpu().numpy()

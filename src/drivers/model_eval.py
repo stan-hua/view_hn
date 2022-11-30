@@ -11,8 +11,6 @@ import os
 import random
 from colorama import Fore, Style
 from collections import OrderedDict
-from pathlib import Path
-
 
 # Non-standard libraries
 import pandas as pd
@@ -21,8 +19,6 @@ import numpy as np
 import seaborn as sns
 import torch
 import torchvision.transforms as T
-import yaml
-from efficientnet_pytorch import EfficientNet
 from scipy.stats import pearsonr
 from sklearn import metrics as skmetrics
 from torchvision.io import read_image, ImageReadMode
@@ -30,14 +26,9 @@ from tqdm import tqdm
 
 # Custom libraries
 from src.data import constants
-from src.data_prep.dataset import UltrasoundDataModule
 from src.data_prep import utils
 from src.data_viz.eda import print_table
-from src.drivers.model_training import get_model_cls
-from src.models.efficientnet_pl import EfficientNetPL
-from src.models.efficientnet_lstm_pl import EfficientNetLSTM
-from src.models.linear_classifier import LinearClassifier
-from src.models.linear_lstm import LinearLSTM
+from src.drivers import embed, load_model, model_training
 
 
 # Configure logging
@@ -125,45 +116,25 @@ def init(parser):
 ################################################################################
 #                             Inference - Related                              #
 ################################################################################
-def get_dset_metadata(hparams, dset=DEFAULT_DSET, img_dir=constants.DIR_IMAGES):
+def get_dset_metadata(dm, dset=DEFAULT_DSET):
     """
     Get metadata table containing (filename, label) for each image in the
     specified set (train/val/test).
 
     Parameters
     ----------
-    hparams : dict
+    dm : pl.LightningDataModule
         Hyperparameters used in model training run, used to load exact dset
         split.
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
         DEFAULT_DSET.
-    img_dir : str, optional
-        Path to directory containing metadata, by default constants.DIR_IMAGES
 
     Returns
     -------
     pandas.DataFrame
         Metadata of each image in the dset split
     """
-    # NOTE: If data splitting parameters are not given, assume defaults
-    for split_params in ("train_val_split", "train_test_split"):
-        if split_params not in hparams:
-            hparams[split_params] = 0.75
-
-    # Load metadata
-    df_metadata = utils.load_metadata(
-        hospital="sickkids",
-        extract=True,
-        img_dir=constants.DIR_IMAGES,
-        label_part=hparams.get("label_part"),
-        include_unlabeled=hparams.get("include_unlabeled", False),
-        relative_side=hparams.get("relative_side", False))
-
-    # Set up data
-    dm = UltrasoundDataModule(df=df_metadata, img_dir=img_dir, **hparams)
-    dm.setup()
-
     # Get filename and label of dset split data from data module
     df_dset = pd.DataFrame({
         "filename": dm.dset_to_paths[dset],
@@ -885,16 +856,19 @@ def plot_rolling_accuracy(df_pred, window_size=15, max_seq_num=75,
 
     # Create bar plot
     plt.figure(figsize=(10, 7))
-    container = plt.bar(list(range(len(window_accs))), window_accs)
+    container = plt.bar(list(range(len(window_accs))), window_accs,
+                        color="#377eb8",
+                        alpha=0.7)
 
     # Add number of samples (used to calculate accuracy) as bar labels
     bar_labels = [f"N:{n}" if idx % 3 == 0 else "" for idx, n in
                     enumerate(sample_sizes)]
     plt.bar_label(container,
-                  labels=bar_labels,
-                  label_type="edge",
-                  fontsize="small",
-                  alpha=0.75)
+                    labels=bar_labels,
+                    label_type="edge",
+                    fontsize="small",
+                    alpha=0.75,
+                    padding=1)
 
     # Set y bounds
     plt.ylim(0, 1)
@@ -981,50 +955,6 @@ def transform_image(img):
     transforms = T.Compose(transforms)
 
     return transforms(img)
-
-
-def get_hyperparameters(hparam_dir=None, filename="hparams.yaml"):
-    """
-    Load hyperparameters from model training directory. If not provided, return
-    default hyperparameters.
-
-    Parameters
-    ----------
-    hparam_dir : str
-        Path to model training directory containing hyperparameters.
-    filename : str
-        Filename of YAML file with hyperparameters, by default "hparams.yaml"
-
-    Returns
-    -------
-    dict
-        Hyperparameters
-    """
-    if hparam_dir:
-        file_path = None
-        # Recursively find hyperparameter file
-        for path in Path(hparam_dir).rglob(filename):
-            file_path = str(path)
-
-        # Load hyperparameter file
-        with open(file_path, "r") as stream:
-            try:
-                hparams = yaml.full_load(stream)
-                return hparams
-            except yaml.YAMLError as exc:
-                LOGGER.critical(exc)
-                LOGGER.critical("Using default hyperparameters...")
-
-    # If above does not succeed, use default hyperparameters
-    hparams = {
-        "img_size": constants.IMG_SIZE,
-        "train": True,
-        "test": True,
-        "train_test_split": 0.75,
-        "train_val_split": 0.75
-    }
-
-    return hparams
 
 
 def get_local_groups(values):
@@ -1203,84 +1133,6 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False):
         print(colored_pred_str)
 
 
-def get_model_class(model_type):
-    """
-    Return model class and parameters, needed to load model class from
-    checkpoint.
-
-    Parameters
-    ----------
-    model_type : str
-        Name of model. Must be in MODEL_TYPES
-
-    Returns
-    -------
-    tuple of (cls, dict)
-        The first is reference to a class. Can be used to instantiate a model.
-        The second is a dict of parameters needed in cls.load_from_checkpoint.
-    """
-    assert model_type in MODEL_TYPES
-
-    # Parameters to pass into load_from_checkpoint
-    load_from_ckpt_params = {}
-
-    # Flags based on model name
-    moco = ("moco" in model_type)
-    sequential = ("seq" in model_type)
-
-    # Choose model class
-    if moco:
-        if sequential:
-            model_cls = LinearLSTM
-        else:
-            model_cls = LinearClassifier
-
-        # Backbone used in MoCo pretraining
-        load_from_ckpt_params["backbone"] = EfficientNet.from_name(
-            "efficientnet-b0", include_top=False)
-    elif sequential:
-        model_cls = EfficientNetLSTM
-    else:
-        model_cls = EfficientNetPL
-
-    return model_cls, load_from_ckpt_params
-
-
-def find_best_ckpt_path(path_exp_dir):
-    """
-    Finds the path to the best model checkpoint.
-
-    Parameters
-    ----------
-    path_exp_dir : str
-        Path to a trained model directory
-
-    Returns
-    -------
-    str
-        Path to PyTorch Lightning best model checkpoint
-
-    Raises
-    ------
-    RuntimeError
-        If no valid ckpt files found
-    """
-    # Look for checkpoint files
-    ckpt_paths = [str(path) for path in Path(path_exp_dir).rglob("*.ckpt")]
-
-    # Remove last checkpoint. NOTE: The other checkpoint is for the best epoch
-    ckpt_paths = [path for path in ckpt_paths if "last.ckpt" not in path]
-
-    if not ckpt_paths:
-        raise RuntimeError("No best epoch model checkpoint (.ckpt) found!")
-
-    if len(ckpt_paths) > 1:
-        LOGGER.warning("More than 1 checkpoint file (.ckpt) found besides "
-                       "last.ckpt!")
-
-    return ckpt_paths[0]
-
-
 def create_save_path(exp_name, dset=DEFAULT_DSET, **extra_flags):
     """
     Create file path to dset predictions, based on experiment name and keyword
@@ -1343,11 +1195,11 @@ def infer_dset(exp_name, dset=DEFAULT_DSET, seq_number_limit=None,
     RuntimeError
         If `exp_name` does not lead to a valid training directory
     """
-    # 0 Create test prediction save path
-    save_path = create_save_path(exp_name, dset=dset,
-                                 seq_number_limit=seq_number_limit)
-    # If prediction already exist, skip
-    if os.path.exists(save_path):
+    # 0. Create path to save predictions
+    pred_save_path = create_save_path(exp_name, dset=dset,
+                                      seq_number_limit=seq_number_limit)
+    # Early return, if prediction already made
+    if os.path.isfile(pred_save_path):
         return
 
     # 0. Get experiment directory, where model was trained
@@ -1357,39 +1209,32 @@ def infer_dset(exp_name, dset=DEFAULT_DSET, seq_number_limit=None,
                            "training directory")
 
     # 1 Get experiment hyperparameters
-    hparams = get_hyperparameters(model_dir)
+    hparams = load_model.get_hyperparameters(model_dir)
     hparams.update(overwrite_hparams)
 
-    # 2. Get metadata (for specified split)
-    df_metadata = get_dset_metadata(hparams, dset=dset)
+    # 2. Load existing model and send to device
+    model = load_model.load_pretrained_from_exp_name(
+        exp_name, overwrite_hparams=overwrite_hparams)
+    model = model.to(DEVICE)
 
-    # 2.1 If provided, filter out high sequence number images
+    # 3. Load data
+    # NOTE: Ensure data is loaded in the non-SSL mode
+    dm = model_training.setup_data_module(hparams, self_supervised=False)
+
+    # 3.1 Get metadata (for specified split)
+    df_metadata = get_dset_metadata(dm, dset=dset)
+    # 3.2 If provided, filter out high sequence number images
     if seq_number_limit:
         mask = (df_metadata["seq_number"] <= seq_number_limit)
         df_metadata = df_metadata[mask]
-
-    # 2.2 Sort, so no mismatch occurs due to groupby sorting
+    # 3.3 Sort, so no mismatch occurs due to groupby sorting
     df_metadata = df_metadata.sort_values(by=["id", "visit"], ignore_index=True)
 
-    # 3. Load existing model and send to device
-    # 3.1 Get checkpoint path
-    ckpt_path = find_best_ckpt_path(model_dir)
-    # 3.2 Get model class and extra parameters for loading from checkpoint
-    hparams_copy = hparams.copy()
-    model_cls = get_model_cls(hparams)
-    extra_ckpt_params = {k:v for k,v in hparams.items() \
-        if k not in hparams_copy}
-    # 3.3 Load model
-    model = model_cls.load_from_checkpoint(
-        checkpoint_path=ckpt_path,
-        **extra_ckpt_params)
-    model = model.to(DEVICE)
-
-    # 4. Get predictions on dset split
+    # 4. Predict on dset split
     if not hparams["full_seq"]:
         filenames = df_metadata.filename.tolist()
         preds, probs, outs = predict_on_images(model=model, filenames=filenames,
-                                               img_dir=None, **hparams)
+                                            img_dir=None, **hparams)
     else:
         # Perform inference one sequence at a time
         ret = df_metadata.groupby(by=["id", "visit"]).progress_apply(
@@ -1407,7 +1252,67 @@ def infer_dset(exp_name, dset=DEFAULT_DSET, seq_number_limit=None,
     df_metadata["pred"] = preds
     df_metadata["prob"] = probs
     df_metadata["out"] = outs
-    df_metadata.to_csv(save_path, index=False)
+    df_metadata.to_csv(pred_save_path, index=False)
+
+
+def embed_dset(exp_name, dset=DEFAULT_DSET, **overwrite_hparams):
+    """
+    Extract embeddings on dset.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        DEFAULT_DSET.
+    overwrite_hparams : dict, optional
+        Keyword arguments to overwrite experiment hyperparameters
+
+    Raises
+    ------
+    RuntimeError
+        If `exp_name` does not lead to a valid training directory
+    """
+    # 0. Create path to save embeddings
+    embed_save_path = embed.get_save_path(exp_name)
+
+    # Early return, if embeddings already made
+    if os.path.isfile(embed_save_path):
+        return
+
+    # 0. Get experiment directory, where model was trained
+    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+    if not os.path.exists(model_dir):
+        raise RuntimeError("`exp_name` provided does not lead to a valid model "
+                           "training directory")
+
+    # 1 Get experiment hyperparameters
+    hparams = load_model.get_hyperparameters(model_dir)
+    hparams.update(overwrite_hparams)
+
+    # 2. Load existing model and send to device
+    model = load_model.load_pretrained_from_exp_name(
+        exp_name, overwrite_hparams=overwrite_hparams)
+    model = model.to(DEVICE)
+
+    # 3. Load data
+    # NOTE: Ensure data is loaded in the non-SSL mode
+    dm = model_training.setup_data_module(hparams, self_supervised=False)
+
+    # 4. Create a DataLoader
+    if dset == "train":
+        dataloader = dm.train_dataloader()
+    elif dset == "val":
+        dataloader = dm.val_dataloader()
+    else:
+        dataloader = dm.test_dataloader()
+
+    # 5. Extract embeddings and save them
+    embed.extract_embeds(
+        model,
+        save_embed_path=embed_save_path,
+        img_dataloader=dataloader)
 
 
 def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
@@ -1434,7 +1339,7 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
                            "training directory")
 
     # 1 Get experiment hyperparameters
-    hparams = get_hyperparameters(model_dir)
+    hparams = load_model.get_hyperparameters(model_dir)
 
     # 2. Load metadata
     save_path = create_save_path(exp_name, dset=dset)
@@ -1511,5 +1416,8 @@ if __name__ == '__main__':
     # 2. Perform inference
     infer_dset(exp_name=ARGS.exp_name, dset=ARGS.dset)
 
-    # 3. Evaluate predictions
+    # 3. Extract embeddings
+    embed_dset(exp_name=ARGS.exp_name, dset=ARGS.dset)
+
+    # 4. Evaluate predictions and embeddings
     analyze_dset_preds(exp_name=ARGS.exp_name, dset=ARGS.dset)
