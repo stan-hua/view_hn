@@ -252,9 +252,17 @@ class ImageEmbedder:
 
         # Extract embeddings in batches
         for data, metadata in tqdm(dataloader):
+            # If shape is (1, seq_len, C, H, W), flatten first dimension
+            if len(data.size()) == 5:
+                data = data.squeeze(dim=0)
+
             if device != "cpu":
                 data = data.to(device)
             embeds = self.embed_torch(data)
+
+            # Remove possibly added extra dimension
+            if len(embeds.shape) == 3 and embeds.shape[0] == 1:
+                embeds = embeds.squeeze(axis=0)
 
             all_embeds.append(embeds)
             file_paths.extend(metadata["filename"])

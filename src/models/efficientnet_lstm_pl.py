@@ -404,10 +404,6 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         numpy.array
             Embeddings after CNN+LSTM
         """
-        # If shape is (1, seq_len, C, H, W), flatten first dimension
-        if len(inputs.size()) == 5:
-            inputs = inputs.squeeze(dim=0)
-
         # Get dimensions
         T, _, _, _ = inputs.size()
 
