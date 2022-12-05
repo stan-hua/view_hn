@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 
 # Non-standard libraries
+import torch
 import yaml
 from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
@@ -207,9 +208,16 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     extra_ckpt_params = {k:v for k,v in hparams.items() \
         if k not in hparams_copy}
     # 2.3 Load model
-    model = model_cls.load_from_checkpoint(
-        checkpoint_path=ckpt_path,
-        **extra_ckpt_params)
+    try:
+        model = model_cls.load_from_checkpoint(
+            checkpoint_path=ckpt_path,
+            **extra_ckpt_params)
+    except:
+        rename_torch_module(ckpt_path)
+        LOGGER.info("Renamed model module names!")
+        model = model_cls.load_from_checkpoint(
+            checkpoint_path=ckpt_path,
+            **extra_ckpt_params)
 
     return model
 
@@ -255,3 +263,32 @@ def load_pretrained_from_model_name(model_name):
         raise RuntimeError("Invalid model_name specified!")
 
     return feature_extractor
+
+
+
+def rename_torch_module(ckpt_path):
+    """
+    Rename module in a saved model checkpoint
+
+    Parameters
+    ----------
+    ckpt_path : str
+        Path to PyTorch Lightning checkpoint file
+    """
+    ckpt_dict = torch.load(ckpt_path)
+    state_dict = ckpt_dict["state_dict"]
+    name_mapping = {
+        "conv_conv_backbone.": "conv_backbone.",
+        "backbone.": "conv_backbone.",
+        "lstm_backbone.": "temporal_backbone.",
+        "_lstm.": "temporal_backbone.",
+    }
+    for module_name in list(state_dict.keys()):
+        for pre_name in sorted(name_mapping.keys(),
+                               key=lambda x: len(x),
+                               reverse=True):
+            post_name = name_mapping[pre_name]
+            if module_name.startswith(pre_name):
+                new_module_name = module_name.replace(pre_name, post_name)
+                state_dict[new_module_name] = state_dict.pop(module_name)
+    torch.save(ckpt_dict, ckpt_path)

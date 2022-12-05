@@ -495,7 +495,7 @@ def check_misclassifications(df_pred, filter=True, local=True,
     }, index=["Wrong Side", "Adjacent Label", "Other"])
 
     # Print to command line
-    print_table(df_results)
+    viz_utils.print_table(df_results)
 
 
 def plot_prob_over_sequence(df_pred, correct_only=False, update_seq_num=False):
@@ -919,15 +919,13 @@ def calculate_metrics(df_pred):
         (df_pred["label"] == df_pred["pred"]).mean(), 4)
 
     # F1 Score by class
+    # NOTE: Overall F1 Score isn't calculated because it's equal to 
+    #       Overall Accuracy in multi-label problems.
     f1_scores = skmetrics.f1_score(df_pred["label"], df_pred["pred"],
                                    labels=unique_labels,
                                    average=None)
     for i, f1_score in enumerate(f1_scores):
         metrics[f"Label F1-Score ({unique_labels[i]})"] = round(f1_score, 4)
-    # Overall F1 Score
-    metrics["Overall F1 Score"] = round(skmetrics.f1_score(
-        df_pred["label"], df_pred["pred"],
-        average="micro"), 4)
 
     return pd.Series(metrics)
 
@@ -1362,8 +1360,14 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
     save_path = create_save_path(exp_name, dset=dset)
     df_pred = pd.read_csv(save_path)
     # 2.1 Add HN labels, if not already exists
-    if "hn" not in df_pred.columns.tolist():
+    if "hn" not in df_pred.columns:
+        # Add side label, if not present
+        if "side" not in df_pred.columns:
+            df_pred["side"] = utils.get_labels_for_filenames(
+                df_pred["filename"].tolist(), label_part="side")
         df_pred = utils.extract_hn_labels(df_pred)
+    # 2.2 Specify which images are at label boundaries
+    df_pred["at_label_boundary"] = utils.get_label_boundaries(df_pred)
 
     # 3. Experiment-specific inference directory, to store figures
     inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
@@ -1379,15 +1383,24 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
     df_metrics_wo_hn = calculate_metrics(df_pred[df_pred.hn == 0])
     df_metrics_wo_hn.name = "Without HN"
 
-    # 4.3 Filler column
+    # 4.3 For images at label boundaries
+    df_metrics_at_boundary = calculate_metrics(
+        df_pred[df_pred["at_label_boundary"]])
+    df_metrics_at_boundary.name = "At Label Boundary"
+
+    # Filler columns
     filler = df_metrics_all.copy()
     filler[:] = ""
     filler.name = ""
 
-    # 4.3 Combine
-    df_metrics = pd.concat(
-        [df_metrics_all, filler, df_metrics_w_hn, df_metrics_wo_hn],
-        axis=1)
+    # 5. Combine
+    df_metrics = pd.concat([
+        df_metrics_all,
+        filler,
+        df_metrics_w_hn, df_metrics_wo_hn,
+        filler,
+        df_metrics_at_boundary,
+        ], axis=1)
 
     df_metrics.to_csv(os.path.join(inference_dir, f"{dset}_metrics.csv"))
 

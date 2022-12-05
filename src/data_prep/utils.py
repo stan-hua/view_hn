@@ -129,7 +129,6 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
 
     # Change label to side/plane, if specified
     if label_part:
-        assert label_part in ("side", "plane")
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -230,7 +229,6 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
 
     # Change label to side/plane, if specified
     if label_part:
-        assert label_part in ("side", "plane")
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -342,7 +340,7 @@ def extract_hn_labels(df_metadata, sickkids=True, stanford=True):
     df_metadata["id"] = df_metadata["id"].astype(str)
 
     # Join to df_metadata
-    df_metadata = pd.merge(df_metadata, df_hn, how="left", on="id")
+    df_metadata = pd.merge(df_metadata, df_hn, how="left", on=["id", "side"])
 
     return df_metadata
 
@@ -432,7 +430,8 @@ def get_from_path(path, item="id"):
 
 
 def get_labels_for_filenames(filenames, sickkids=True, stanford=True,
-                            **kwargs):
+                             label_part=None,
+                             **kwargs):
     """
     Attempt to get labels for all filenames given, using metadata file
 
@@ -444,6 +443,9 @@ def get_labels_for_filenames(filenames, sickkids=True, stanford=True,
         If True, include SickKids image labels, by default True.
     stanford : bool, optional
         If True, include Stanford image labels, by default True.
+    label_part : str, optional
+        If specified, either `side` or `plane` is extracted from each label
+        and used as the given label, by default None.
     **kwargs : dict, optional
         Keyword arguments to pass into hospital-specific metadata-loading
         functions.
@@ -465,8 +467,18 @@ def get_labels_for_filenames(filenames, sickkids=True, stanford=True,
         df_labels = pd.concat([df_labels, load_stanford_metadata()],
                               ignore_index=True)
 
+    # If specified, extract specific label part
+    if label_part:
+        df_labels["label"] = df_labels["label"].map(
+            lambda x: extract_from_label(x, extract=label_part))
+
     # Get mapping of filename to labels
     filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))
+
+    # Extract only filename
+    filenames = [os.path.basename(filename) for filename in filenames]
+
+    # Get labels
     view_labels = np.array([*map(filename_to_label.get, filenames)])
 
     return view_labels
@@ -502,6 +514,85 @@ def get_machine_for_filenames(filenames, sickkids=True):
     machine_labels = np.array([*map(filename_to_machine.get, filenames)])
 
     return machine_labels
+
+
+def get_label_boundaries(df_metadata, min_block_size=3):
+    """
+    Provide mask for samples at the boundaries of contiguous label blocks for
+    each unique ultrasound sequence.
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image.
+    min_block_size : int, optional
+        Minimum number of images of the same label to be a valid contiguous
+        label block, to be searched for the images at the boundaries
+
+    Returns
+    -------
+    pd.Series
+        Boolean mask, where True signifies image is at the boundary of two
+        contiguous label blocks
+    """
+    def _find_boundaries(df_seq):
+        """
+        Given metadata for a unique ultrasound sequence, identify boundaries
+        between contiguous label blocks.
+
+        Parameters
+        ----------
+        df_seq : pandas.DataFrame
+            Contains metadata for all ultrasound images for one unique sequence
+
+        Returns
+        -------
+        pd.Series
+            Boolean mask at a per-sequence level
+        """
+        # Get indices to sort/unsort by sequence number
+        sort_idx, unsort_idx = argsort_unsort(df_seq["seq_number"])
+        df_seq = df_seq.iloc[sort_idx]
+
+        # Identify boundaries of label blocks
+        all_labels = df_seq["label"]
+        last_label = None
+        curr_block_size = 0
+        boundary_mask = []
+        for label in all_labels:
+            # Case 1: If same label as last
+            if label == last_label:
+                curr_block_size += 1
+                continue
+
+            # Case 2: If new label and last block size was >= the minimum
+            last_block_mask = [False]*curr_block_size
+            if curr_block_size >= min_block_size:
+                last_block_mask[0] = True
+                last_block_mask[-1] = True
+            # Update accumulators
+            boundary_mask.extend(last_block_mask)
+            last_label = label
+            curr_block_size = 1
+
+        # NOTE: Boundary mask for last block wasn't updated
+        if len(boundary_mask) != len(all_labels):
+            last_block_mask = [False]*curr_block_size
+            if curr_block_size >= min_block_size:
+                last_block_mask[0] = True
+                last_block_mask[-1] = True
+            boundary_mask.extend(last_block_mask)
+
+        # Unsort mask
+        boundary_mask = np.array(boundary_mask)
+        return boundary_mask[unsort_idx]
+
+    mask = df_metadata.groupby(by=["id", "visit"]).apply(_find_boundaries)
+
+    # Flatten mask
+    mask = np.concatenate(mask.values)
+
+    return mask
 
 
 ################################################################################
@@ -861,3 +952,37 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     processed_img = 255 * equalized_img
 
     return processed_img
+
+
+################################################################################
+#                        Miscellaneous Helper Functions                        #
+################################################################################
+def argsort_unsort(arr):
+    """
+    Given an array to sort, return indices to sort and unsort the array.
+
+    Note
+    ----
+    Given arr = [C, A, B, D] and its index array be [0, 1, 2, 3].
+        Sort indices: [2, 0, 1, 3] result in [A, B, C, D] & [1, 2, 0, 3],
+        respectively.
+
+    To unsort, sort index array initially sorted by `arr`
+        Initial index: [1, 2, 0, 3]
+        Sorted indices: [2, 0, 1, 3] result in arr = [C, A, B, D]
+
+    Parameters
+    ----------
+    arr : pd.Series or np.array
+        Array of items to sort
+
+    Returns
+    -------
+    tuple of (np.array, np.array)
+        First array contains indices to sort the array.
+        Second array contains indices to unsort the sorted array.
+    """
+    sort_idx = np.argsort(arr)
+    unsort_idx = np.argsort(np.arange(len(arr))[sort_idx])
+
+    return sort_idx, unsort_idx

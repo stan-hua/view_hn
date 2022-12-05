@@ -32,9 +32,6 @@ from src.data_viz.eda import gridplot_images
 # Disable logging
 logging.disable()
 
-# Plot configurations
-viz_utils.set_theme("dark")
-
 # Set random seed
 random.seed(constants.SEED)
 
@@ -77,6 +74,9 @@ def plot_umap(embeds, labels, label_order=None, s=5,
     filename : str, optional
         Filename to save plot as. Not including extension, by default "umap"
     """
+    # Plot configurations
+    viz_utils.set_theme("light")
+
     plt.figure()
 
     if line:
