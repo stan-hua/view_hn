@@ -1183,6 +1183,65 @@ def create_save_path(exp_name, dset=DEFAULT_DSET, **extra_flags):
     return save_path
 
 
+def calculate_per_seq_silhouette_score(exp_name, label_part="side",
+                                       exclude_labels=("None",)):
+    """
+    Calculate a per - ultrasound sequence Silhouette score.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    label_part : str, optional
+        If specified, either `side` or `plane` is extracted from each label
+        and used as the given label, by default "side"
+    exclude_labels : list or array-like, optional
+        List of labels whose matching samples will be excluded when calculating
+        the Silhouette score, by default ("None",)
+
+    Returns
+    -------
+    float
+        Mean Silhouette Score across unique ultrasound sequences
+    """
+    # Load embeddings
+    df_embeds = embed.get_embeds(exp_name)
+    df_embeds = df_embeds.rename(columns={"paths": "files"})    # legacy name
+
+    # Extract metadata from image file paths
+    df_metadata = pd.DataFrame({"filename": df_embeds["files"]})
+    df_metadata = utils.extract_data_from_filename(df_metadata, col="filename")
+
+    filenames = df_metadata["filename"].map(os.path.basename).to_numpy()
+
+    # Get view labels (if any) for all extracted images
+    view_labels = utils.get_labels_for_filenames(
+        filenames, label_part=label_part)
+    df_metadata["label"] = view_labels
+
+    # Isolate UMAP embeddings (all patients)
+    df_embeds_only = df_embeds.drop(columns=["files"])
+
+    # Mask out excluded labels
+    if exclude_labels is not None:
+        mask = ~df_metadata["label"].isin(exclude_labels)
+        df_embeds_only = df_embeds_only[mask]
+        df_metadata = df_metadata[mask]
+
+    # Calculate per-sequence Silhouette score
+    scores = []
+    for p_id, visit in list(df_metadata.groupby(by=["id", "visit"]).groups):
+        mask = ((df_metadata["id"] == p_id) & (df_metadata["visit"] == visit))
+        # Ignore, if number of labes < 2
+        if df_metadata["label"][mask].nunique() < 2:
+            continue
+        scores.append(skmetrics.silhouette_samples(
+            X=df_embeds_only[mask],
+            labels=df_metadata["label"][mask]).mean())
+
+    return np.mean(scores)
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -1373,9 +1432,14 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
     inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
 
     # 4. Calculate metrics
-    # 4.1 For all samples
+    # 4.1.1 For all samples
     df_metrics_all = calculate_metrics(df_pred)
     df_metrics_all.name = "All"
+
+    # 4.1.2 (Optional) Add Per-Sequence Silhouette Score
+    if hparams.get("label_part") == "side":
+        df_metrics_all["Silhouette Score (Left vs. Right)"] = \
+            calculate_per_seq_silhouette_score(exp_name)
 
     # 4.2 Stratify patients w/ HN and w/o HN
     df_metrics_w_hn = calculate_metrics(df_pred[df_pred.hn == 1])

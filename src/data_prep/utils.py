@@ -595,6 +595,83 @@ def get_label_boundaries(df_metadata, min_block_size=3):
     return mask
 
 
+def identify_not_in_label_group(df_metadata, min_block_size=3):
+    """
+    Provide mask for samples not part of a contiguous label block for
+    each unique ultrasound sequence.
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image.
+    min_block_size : int, optional
+        Minimum number of images of the same label to be a valid contiguous
+        label block, to be searched for the images at the boundaries
+
+    Returns
+    -------
+    pd.Series
+        Boolean mask, where True signifies image is in a contiguous label block
+    """
+    def _find_blocks(df_seq):
+        """
+        Given metadata for a unique ultrasound sequence, identify boundaries
+        between contiguous label blocks.
+
+        Parameters
+        ----------
+        df_seq : pandas.DataFrame
+            Contains metadata for all ultrasound images for one unique sequence
+
+        Returns
+        -------
+        pd.Series
+            Boolean mask at a per-sequence level
+        """
+        # Get indices to sort/unsort by sequence number
+        sort_idx, unsort_idx = argsort_unsort(df_seq["seq_number"])
+        df_seq = df_seq.iloc[sort_idx]
+
+        # Identify boundaries of label blocks
+        all_labels = df_seq["label"]
+        last_label = None
+        curr_block_size = 0
+        boundary_mask = []
+        for label in all_labels:
+            # Case 1: If same label as last
+            if label == last_label:
+                curr_block_size += 1
+                continue
+
+            # Case 2: If new label and last block size was >= the minimum
+            last_block_mask = [True]*curr_block_size
+            if curr_block_size >= min_block_size:
+                last_block_mask = [False for _ in range(len(last_block_mask))]
+            # Update accumulators
+            boundary_mask.extend(last_block_mask)
+            last_label = label
+            curr_block_size = 1
+
+        # NOTE: Boundary mask for last block wasn't updated
+        if len(boundary_mask) != len(all_labels):
+            last_block_mask = [False]*curr_block_size
+            if curr_block_size >= min_block_size:
+                last_block_mask[0] = True
+                last_block_mask[-1] = True
+            boundary_mask.extend(last_block_mask)
+
+        # Unsort mask
+        boundary_mask = np.array(boundary_mask)
+        return boundary_mask[unsort_idx]
+
+    mask = df_metadata.groupby(by=["id", "visit"]).apply(_find_blocks)
+
+    # Flatten mask
+    mask = np.concatenate(mask.values)
+
+    return mask
+
+
 ################################################################################
 #                           Metadata Post-Processing                           #
 ################################################################################
