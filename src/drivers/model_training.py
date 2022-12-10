@@ -66,9 +66,15 @@ def init(parser):
         "freeze_weights": "If flagged, freeze weights when training "
                           "classifier over the SSL-pretrained model.",
 
+        "exclude_momentum_encoder": "If flagged, do not use Momentum Encoder "
+                                    "when possible.",
+
         "full_seq": "If flagged, trains a CNN-LSTM model on full US sequences.",
         "relative_side": "If flagged, relabels side Left/Right to First/Second "
                          "based on which appeared first per sequence.",
+        "same_label": "If flagged, positive samples in SSL pretraining "
+                      "are same-patient images with the same label. NOTE: This "
+                      "logic conflicts with `memory_bank_size` > 0.",
 
         "adam": "If flagged, uses Adam optimizer during training. Otherwise, "
                 "uses Stochastic Gradient Descent (SGD).",
@@ -103,9 +109,6 @@ def init(parser):
         "num_workers": "Number of CPU workers used to retrieve data during "
                        "training.",
         "pin_memory": "If flagged, pins tensors on GPU to speed data loading.",
-        "same_label": "If flagged, positive samples in SSL pretraining "
-                      "are same-patient images with the same label. NOTE: This "
-                      "logic conflicts with `memory_bank_size` > 0.",
 
         "checkpoint": "If flagged, save last model checkpoint during training.",
         "precision": "Number of bits for precision of floating point values.",
@@ -118,7 +121,7 @@ def init(parser):
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
 
-    # Model and data - related arguments
+    # SSL Model arguments
     parser.add_argument("--self_supervised", action="store_true",
                         help=arg_help["self_supervised"])
     parser.add_argument("--ssl_model",
@@ -133,7 +136,10 @@ def init(parser):
                         help=arg_help["ssl_eval_linear_lstm"])
     parser.add_argument("--freeze_weights", action="store_true",
                         help=arg_help["freeze_weights"])
-
+    # SSL Model MoCo-specific arguments
+    parser.add_argument("--exclude_momentum_encoder", action="store_true",
+                        help=arg_help["exclude_momentum_encoder"])
+    # SSL Data - related arguments
     parser.add_argument("--full_seq", action="store_true",
                         help=arg_help["full_seq"])
     parser.add_argument("--relative_side", action="store_true",

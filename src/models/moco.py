@@ -30,6 +30,7 @@ class MoCo(pl.LightningModule):
     def __init__(self, img_size=(256, 256), adam=True, lr=0.0005,
                  momentum=0.9, weight_decay=0.0005,
                  memory_bank_size=4096, temperature=0.1,
+                 exclude_momentum_encoder=False,
                  extract_features=False, *args, **kwargs):
         """
         Initialize MoCo object.
@@ -54,6 +55,9 @@ class MoCo(pl.LightningModule):
             MoCo), by default 4096
         temperature : int, optional
             Temperature parameter for NT-Xent loss, by default 0.1.
+        exclude_momentum_encoder : bool, optional
+            If True, uses primary (teacher) encoders for encoding keys. Defaults
+            to False.
         extract_features : bool, optional
             If True, forward pass returns model output before penultimate layer.
         """
@@ -72,6 +76,8 @@ class MoCo(pl.LightningModule):
         self.projection_head = MoCoProjectionHead(
             input_dim=self.feature_dim, hidden_dim=self.feature_dim,
             output_dim=128)
+
+        # Momentum Encoders
         self.backbone_momentum = copy.deepcopy(self.backbone)
         self.projection_head_momentum = copy.deepcopy(self.projection_head)
 
@@ -132,9 +138,10 @@ class MoCo(pl.LightningModule):
         (x_q, x_k), _ = train_batch
 
         # Update momentum
-        update_momentum(self.backbone, self.backbone_momentum, m=0.99)
-        update_momentum(self.projection_head, self.projection_head_momentum,
-                        m=0.99)
+        if not self.hparams.exclude_momentum_encoder:
+            update_momentum(self.backbone, self.backbone_momentum, m=0.99)
+            update_momentum(self.projection_head, self.projection_head_momentum,
+                            m=0.99)
 
         # (For query), extract embedding 
         q = self.backbone(x_q).flatten(start_dim=1)
@@ -142,8 +149,12 @@ class MoCo(pl.LightningModule):
 
         # Get keys
         k, shuffle = batch_shuffle(x_k)
-        k = self.backbone_momentum(k).flatten(start_dim=1)
-        k = self.projection_head_momentum(k)
+        if not self.hparams.exclude_momentum_encoder:
+            k = self.backbone_momentum(k).flatten(start_dim=1)
+            k = self.projection_head_momentum(k)
+        else:
+            k = self.backbone(k).flatten(start_dim=1)
+            k = self.projection_head(k)
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
@@ -175,9 +186,10 @@ class MoCo(pl.LightningModule):
         (x_q, x_k), _ = val_batch
 
         # Update momentum
-        update_momentum(self.backbone, self.backbone_momentum, m=0.99)
-        update_momentum(self.projection_head, self.projection_head_momentum,
-                        m=0.99)
+        if not self.hparams.exclude_momentum_encoder:
+            update_momentum(self.backbone, self.backbone_momentum, m=0.99)
+            update_momentum(self.projection_head, self.projection_head_momentum,
+                            m=0.99)
 
         # (For query), extract embedding 
         q = self.backbone(x_q).flatten(start_dim=1)
@@ -185,8 +197,12 @@ class MoCo(pl.LightningModule):
 
         # Get keys
         k, shuffle = batch_shuffle(x_k)
-        k = self.backbone_momentum(k).flatten(start_dim=1)
-        k = self.projection_head_momentum(k)
+        if not self.hparams.exclude_momentum_encoder:
+            k = self.backbone_momentum(k).flatten(start_dim=1)
+            k = self.projection_head_momentum(k)
+        else:
+            k = self.backbone(k).flatten(start_dim=1)
+            k = self.projection_head(k)
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss

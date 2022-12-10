@@ -200,3 +200,47 @@ class MoCoDataModule(UltrasoundDataModule):
                           collate_fn=self.collate_fn,
                           sampler=sampler,
                           **self.val_dataloader_params)
+
+
+    def test_dataloader(self):
+        """
+        Returns DataLoader for test set.
+
+        Returns
+        -------
+        torch.utils.data.DataLoader
+            Data loader for test data
+        """
+        df_test = pd.DataFrame({
+            "filename": self.dset_to_paths["test"],
+            "label": self.dset_to_labels["test"]
+        })
+
+        # Add metadata for patient ID, visit number and sequence number
+        df_test = utils.extract_data_from_filename(df_test)
+
+        # Instantiate UltrasoundDatasetDataFrame
+        test_dataset = UltrasoundDatasetDataFrame(
+            df_test, self.img_dir, self.full_seq,
+            img_size=self.img_size,
+            mode=self.mode,
+            label_part=self.label_part)
+
+        # Transform to LightlyDataset
+        test_dataset = LightlyDataset.from_torch_dataset(
+            test_dataset,
+            transform=self.transforms)
+
+        # Choose sampling method
+        sampler = None
+        if self.full_seq:
+            sampler = BatchSampler(SequentialSampler(test_dataset),
+                                   batch_size=1,
+                                   drop_last=False)
+
+        # Create DataLoader with parameters specified
+        return DataLoader(test_dataset,
+                          drop_last=True,
+                          collate_fn=self.collate_fn,
+                          sampler=sampler,
+                          **self.val_dataloader_params)
