@@ -65,7 +65,7 @@ class MoCo(pl.LightningModule):
 
         # Instantiate EfficientNet
         self.model_name = "efficientnet-b0"
-        self.backbone = EfficientNet.from_name(
+        self.conv_backbone = EfficientNet.from_name(
             self.model_name, image_size=img_size, include_top=False)
         self.feature_dim = 1280      # expected feature size from EfficientNetB0
 
@@ -78,11 +78,11 @@ class MoCo(pl.LightningModule):
             output_dim=128)
 
         # Momentum Encoders
-        self.backbone_momentum = copy.deepcopy(self.backbone)
+        self.conv_backbone_momentum = copy.deepcopy(self.conv_backbone)
         self.projection_head_momentum = copy.deepcopy(self.projection_head)
 
         # Set all parameters to disable gradient computation for momentum
-        deactivate_requires_grad(self.backbone_momentum)
+        deactivate_requires_grad(self.conv_backbone_momentum)
         deactivate_requires_grad(self.projection_head_momentum)
 
         # Define loss (NT-Xent Loss with memory bank)
@@ -139,21 +139,22 @@ class MoCo(pl.LightningModule):
 
         # Update momentum
         if not self.hparams.exclude_momentum_encoder:
-            update_momentum(self.backbone, self.backbone_momentum, m=0.99)
+            update_momentum(self.conv_backbone, self.conv_backbone_momentum,
+                            m=0.99)
             update_momentum(self.projection_head, self.projection_head_momentum,
                             m=0.99)
 
         # (For query), extract embedding 
-        q = self.backbone(x_q).flatten(start_dim=1)
+        q = self.conv_backbone(x_q).flatten(start_dim=1)
         q = self.projection_head(q)
 
         # Get keys
         k, shuffle = batch_shuffle(x_k)
         if not self.hparams.exclude_momentum_encoder:
-            k = self.backbone_momentum(k).flatten(start_dim=1)
+            k = self.conv_backbone_momentum(k).flatten(start_dim=1)
             k = self.projection_head_momentum(k)
         else:
-            k = self.backbone(k).flatten(start_dim=1)
+            k = self.conv_backbone(k).flatten(start_dim=1)
             k = self.projection_head(k)
         k = batch_unshuffle(k, shuffle)
 
@@ -187,21 +188,22 @@ class MoCo(pl.LightningModule):
 
         # Update momentum
         if not self.hparams.exclude_momentum_encoder:
-            update_momentum(self.backbone, self.backbone_momentum, m=0.99)
+            update_momentum(self.conv_backbone, self.conv_backbone_momentum,
+                            m=0.99)
             update_momentum(self.projection_head, self.projection_head_momentum,
                             m=0.99)
 
         # (For query), extract embedding 
-        q = self.backbone(x_q).flatten(start_dim=1)
+        q = self.conv_backbone(x_q).flatten(start_dim=1)
         q = self.projection_head(q)
 
         # Get keys
         k, shuffle = batch_shuffle(x_k)
         if not self.hparams.exclude_momentum_encoder:
-            k = self.backbone_momentum(k).flatten(start_dim=1)
+            k = self.conv_backbone_momentum(k).flatten(start_dim=1)
             k = self.projection_head_momentum(k)
         else:
-            k = self.backbone(k).flatten(start_dim=1)
+            k = self.conv_backbone(k).flatten(start_dim=1)
             k = self.projection_head(k)
         k = batch_unshuffle(k, shuffle)
 
@@ -273,7 +275,7 @@ class MoCo(pl.LightningModule):
         numpy.array
             Deep embeddings before final linear layer
         """
-        z = self.backbone(inputs)
+        z = self.conv_backbone(inputs)
 
         # Flatten
         z = z.view(inputs.size()[0], -1)

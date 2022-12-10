@@ -46,7 +46,7 @@ DEFAULT_ARGS = [
     "--batch_size", "16",
     "--num_workers", "4",
     "--pin_memory",
-    "--precision", "32",
+    "--precision", "16",
     "--adam",
     "--lr", "0.001",
     "--stop_epoch", "25",

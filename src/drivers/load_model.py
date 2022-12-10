@@ -33,7 +33,7 @@ from src.models.tclr import TCLR
 ################################################################################
 # Configure logging
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 # Mapping of SSL model name to model class
 SSL_NAME_TO_MODEL_CLS = {
@@ -72,17 +72,32 @@ def get_model_cls(hparams):
         # If evaluating SSL method
         if hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]:
             # NOTE: Pretrained backbone/s, needs to be inserted as an arg.
-            pretrained_model = model_cls.load_from_checkpoint(
-                hparams["ssl_ckpt_path"])
-            
-            if ssl_model == "moco":
-                hparams["conv_backbone"] = pretrained_model.backbone
-            elif ssl_model == "tclr":
-                hparams["conv_backbone"] = pretrained_model.conv_backbone
+            try:
+                pretrained_model = model_cls.load_from_checkpoint(
+                    hparams["ssl_ckpt_path"])
+            except:
+                rename_torch_module(hparams["ssl_ckpt_path"])
+                LOGGER.info("Renamed model module names!")
+                pretrained_model = model_cls.load_from_checkpoint(
+                    checkpoint_path=hparams["ssl_ckpt_path"])
 
-                # Get temporal backbone
+            # Get convolutional backbone
+            for conv_backbone_name in ["conv_backbone", "backbone"]:
+                if hasattr(pretrained_model, conv_backbone_name):
+                    hparams["conv_backbone"] = \
+                        getattr(pretrained_model, conv_backbone_name)
+                    break
+            if "conv_backbone" not in hparams:
+                raise RuntimeError("Could not find `conv_backbone` for model: "
+                                   f"{ssl_model}!")
+
+            # Get temporal backbone (if TCLR)
+            if hasattr(pretrained_model, "temporal_backbone"):
                 temporal_backbone = pretrained_model.temporal_backbone
                 hparams["temporal_backbone"] = temporal_backbone
+            if ssl_model == "tclr" and "conv_backbone" not in hparams:
+                raise RuntimeError("Could not find `temporal_backbone` for "
+                                   f"model: {ssl_model}!")
 
             model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
                 else LinearLSTM
@@ -265,7 +280,6 @@ def load_pretrained_from_model_name(model_name):
     return feature_extractor
 
 
-
 def rename_torch_module(ckpt_path):
     """
     Rename module in a saved model checkpoint
@@ -280,6 +294,7 @@ def rename_torch_module(ckpt_path):
     name_mapping = {
         "conv_conv_backbone.": "conv_backbone.",
         "backbone.": "conv_backbone.",
+        "backbone_momentum.": "conv_backbone_momentum.",
         "lstm_backbone.": "temporal_backbone.",
         "_lstm.": "temporal_backbone.",
     }
