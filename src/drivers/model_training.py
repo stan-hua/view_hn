@@ -65,6 +65,8 @@ def init(parser):
                                 "over the SSL-pretrained model.",
         "freeze_weights": "If flagged, freeze weights when training "
                           "classifier over the SSL-pretrained model.",
+        "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
+                         "from another SSL eval model.",
 
         "exclude_momentum_encoder": "If flagged, do not use Momentum Encoder "
                                     "when possible.",
@@ -136,6 +138,8 @@ def init(parser):
                         help=arg_help["ssl_eval_linear_lstm"])
     parser.add_argument("--freeze_weights", action="store_true",
                         help=arg_help["freeze_weights"])
+    parser.add_argument("--from_ssl_eval", action="store_true",
+                        help=arg_help["from_ssl_eval"])
     # SSL Model MoCo-specific arguments
     parser.add_argument("--exclude_momentum_encoder", action="store_true",
                         help=arg_help["exclude_momentum_encoder"])

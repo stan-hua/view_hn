@@ -1232,12 +1232,13 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
     scores = []
     for p_id, visit in list(df_metadata.groupby(by=["id", "visit"]).groups):
         mask = ((df_metadata["id"] == p_id) & (df_metadata["visit"] == visit))
-        # Ignore, if number of labes < 2
+        # Ignore, if number of labels < 2
         if df_metadata["label"][mask].nunique() < 2:
             continue
         scores.append(skmetrics.silhouette_samples(
             X=df_embeds_only[mask],
-            labels=df_metadata["label"][mask]).mean())
+            labels=df_metadata["label"][mask],
+            metric="cosine").mean())
 
     return np.mean(scores)
 

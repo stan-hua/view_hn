@@ -14,6 +14,7 @@ from pathlib import Path
 # Non-standard libraries
 import torch
 import yaml
+from efficientnet_pytorch import EfficientNet
 from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
@@ -39,6 +40,10 @@ logging.basicConfig(level=logging.INFO)
 SSL_NAME_TO_MODEL_CLS = {
     "moco": MoCo,
     "tclr": TCLR,
+
+    # Evaluation models
+    "linear": LinearClassifier,
+    "linear_lstm": LinearLSTM,
 }
 
 
@@ -68,39 +73,53 @@ def get_model_cls(hparams):
         # If training SSL
         ssl_model = hparams.get("ssl_model", "moco")
         model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
+        # If not evaluating an SSL method
+        if not (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
+            return model_cls
 
-        # If evaluating SSL method
-        if hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]:
-            # NOTE: Pretrained backbone/s, needs to be inserted as an arg.
-            try:
-                pretrained_model = model_cls.load_from_checkpoint(
-                    hparams["ssl_ckpt_path"])
-            except:
-                rename_torch_module(hparams["ssl_ckpt_path"])
-                LOGGER.info("Renamed model module names!")
-                pretrained_model = model_cls.load_from_checkpoint(
-                    checkpoint_path=hparams["ssl_ckpt_path"])
+        # If loading another SSL eval model
+        extra_model_kwargs = {}
+        if hparams.get("from_ssl_eval"):
+            # Instantiate conv. model, if required
+            extra_model_kwargs["conv_backbone"] = EfficientNet.from_name(
+                hparams.get("model_name", "efficientnet-b0"),
+                image_size=hparams.get("img_size", (256, 256)),
+                include_top=False)
 
-            # Get convolutional backbone
-            for conv_backbone_name in ["conv_backbone", "backbone"]:
-                if hasattr(pretrained_model, conv_backbone_name):
-                    hparams["conv_backbone"] = \
-                        getattr(pretrained_model, conv_backbone_name)
-                    break
-            if "conv_backbone" not in hparams:
-                raise RuntimeError("Could not find `conv_backbone` for model: "
-                                   f"{ssl_model}!")
+        # Load pretrained model
+        try:
+            pretrained_model = model_cls.load_from_checkpoint(
+                hparams["ssl_ckpt_path"], **extra_model_kwargs)
+        except Exception as error_msg:
+            LOGGER.warning(error_msg)
+            rename_torch_module(hparams["ssl_ckpt_path"])
+            LOGGER.info("Renamed model module names!")
+            pretrained_model = model_cls.load_from_checkpoint(
+                checkpoint_path=hparams["ssl_ckpt_path"], **extra_model_kwargs)
 
-            # Get temporal backbone (if TCLR)
-            if hasattr(pretrained_model, "temporal_backbone"):
-                temporal_backbone = pretrained_model.temporal_backbone
-                hparams["temporal_backbone"] = temporal_backbone
-            if ssl_model == "tclr" and "conv_backbone" not in hparams:
-                raise RuntimeError("Could not find `temporal_backbone` for "
-                                   f"model: {ssl_model}!")
+        # Get convolutional backbone
+        # NOTE: Pretrained backbone/s, needs to be inserted as an argument
+        for conv_backbone_name in ["conv_backbone", "backbone"]:
+            if hasattr(pretrained_model, conv_backbone_name):
+                hparams["conv_backbone"] = \
+                    getattr(pretrained_model, conv_backbone_name)
+                break
+        if "conv_backbone" not in hparams:
+            raise RuntimeError("Could not find `conv_backbone` for model: "
+                                f"{ssl_model}!")
 
-            model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
-                else LinearLSTM
+        # Get temporal backbone (if TCLR)
+        if hparams["ssl_eval_linear_lstm"] and \
+                hasattr(pretrained_model, "temporal_backbone"):
+            temporal_backbone = pretrained_model.temporal_backbone
+            hparams["temporal_backbone"] = temporal_backbone
+        if ssl_model == "tclr" and "temporal_backbone" not in hparams:
+            raise RuntimeError("Could not find `temporal_backbone` for "
+                                f"model: {ssl_model}!")
+
+        # Specify eval. model to load
+        model_cls = LinearClassifier if hparams["ssl_eval_linear"] \
+            else LinearLSTM
     # For supervised full-sequence model
     elif not hparams.get("self_supervised") and hparams.get("full_seq"):
         model_cls = EfficientNetLSTM
@@ -297,6 +316,7 @@ def rename_torch_module(ckpt_path):
         "backbone_momentum.": "conv_backbone_momentum.",
         "lstm_backbone.": "temporal_backbone.",
         "_lstm.": "temporal_backbone.",
+        "_fc.": "fc.",
     }
     for module_name in list(state_dict.keys()):
         for pre_name in sorted(name_mapping.keys(),

@@ -30,10 +30,13 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
 # Label parts to evaluate
-LABEL_PARTS = ["side", "plane"]
+LABEL_PARTS = ["plane"]  # side, plane
 
 # Model types to evaluate
-MODEL_TYPES = ["linear", "linear_lstm"]
+MODEL_TYPES = ["linear_lstm"]   # linear, linear_lstm
+
+# Options to train eval. models with/without fine-tuning backbones
+FREEZE_WEIGHTS = [False]    # True, False
 
 # Default args for `model_training.py` when evaluating SSL models
 DEFAULT_ARGS = [
@@ -73,10 +76,14 @@ def init(parser):
     """
     arg_help = {
         "exp_name": "Base name of experiment (for SSL trained)",
+        "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
+                         "from another SSL eval model.",
     }
 
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         required=True)
+    parser.add_argument("--from_ssl_eval", action="store_true",
+                        help=arg_help["from_ssl_eval"])
 
 
 def train_model_with_kwargs(exp_name, **extra_args):
@@ -126,7 +133,7 @@ def train_model_with_kwargs(exp_name, **extra_args):
         raise error_msg
 
 
-def train_eval_models(exp_name):
+def train_eval_models(exp_name, **kwargs):
     """
     Train all possible evaluation models
 
@@ -134,21 +141,33 @@ def train_eval_models(exp_name):
     ----------
     exp_name : str
         Base SSL experiment name
+    **kwargs : dict, optional
+        Keyword arguments to pass into `model_training.main()`
     """
-    # Get path to base experiment best model checkpoint
-    ckpt_path = find_best_ckpt_path(os.path.join(constants.DIR_RESULTS,
-                                                 exp_name))
+    # 0. Get experiment directory, where model was trained
+    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+    if not os.path.exists(model_dir):
+        raise RuntimeError("`exp_name` provided does not lead to a valid model "
+                           "training directory")
 
-    # Determine SSL model type
-    ssl_model = None
-    for model_name in load_model.SSL_NAME_TO_MODEL_CLS.keys():
-        if model_name in exp_name:
-            ssl_model = model_name
+    # 1. Get path to base experiment best model checkpoint
+    ckpt_path = find_best_ckpt_path(model_dir)
 
-    # Train models on side/plane prediction with/without fine-tuning
+    # 2. Get experiment hyperparameters
+    hparams = load_model.get_hyperparameters(model_dir)
+
+    # 3. Determine SSL model type
+    ssl_model = hparams["ssl_model"]
+    # 3.1 Update model type, if loaded model was an eval model
+    if hparams.get("ssl_eval_linear"):
+        ssl_model = "linear"
+    elif hparams.get("ssl_eval_linear_lstm"):
+        ssl_model = "linear_lstm"
+
+    # 4. Train models on side/plane prediction with/without fine-tuning
     for model_type in MODEL_TYPES:
         for label_part in LABEL_PARTS:
-            for freeze_weights in (True, False):
+            for freeze_weights in FREEZE_WEIGHTS:
                 exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
                     exp_name=exp_name,
                     model_type=model_type,
@@ -171,6 +190,7 @@ def train_eval_models(exp_name):
                     ssl_ckpt_path=ckpt_path,
                     ssl_model=ssl_model,
                     full_seq=full_seq,
+                    **kwargs,
                     **{f"ssl_eval_{model_type}": True})
 
 
@@ -187,7 +207,7 @@ def analyze_preds(exp_name):
     # Evaluate each model separately
     for model_type in MODEL_TYPES:
         for label_part in LABEL_PARTS:
-            for freeze_weights in (True, False):
+            for freeze_weights in FREEZE_WEIGHTS:
                 exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
                         exp_name=exp_name,
                         model_type=model_type,
@@ -253,8 +273,11 @@ def main(args):
         raise RuntimeError("`exp_name` provided does not lead to a SSL-trained "
                            "model directory!")
 
+    # Get othe keyword arguments for SSL eval model training
+    train_kwargs = {k:v for k,v in vars(args).items() if k != "exp_name"}
+
     # Train all evaluation models for pretrained SSL model
-    train_eval_models(args.exp_name)
+    train_eval_models(args.exp_name, **train_kwargs)
 
     # Analyze results of evaluation models
     analyze_preds(args.exp_name)
