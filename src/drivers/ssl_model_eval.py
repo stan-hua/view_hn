@@ -30,13 +30,13 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
 # Label parts to evaluate
-LABEL_PARTS = ["plane"]  # side, plane
+LABEL_PARTS = ["side", "plane"]  # side, plane
 
 # Model types to evaluate
-MODEL_TYPES = ["linear_lstm"]   # linear, linear_lstm
+MODEL_TYPES = ["linear", "linear_lstm"]   # linear, linear_lstm
 
 # Options to train eval. models with/without fine-tuning backbones
-FREEZE_WEIGHTS = [False]    # True, False
+FREEZE_WEIGHTS = [True, False]    # True, False
 
 # Default args for `model_training.py` when evaluating SSL models
 DEFAULT_ARGS = [
