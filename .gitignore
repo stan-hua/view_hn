@@ -2,4 +2,3 @@ src/data
 *.pyc
 .vscode
 .pytest_cache
-src/models/siamnet.py
