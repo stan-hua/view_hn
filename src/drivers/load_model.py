@@ -86,6 +86,10 @@ def get_model_cls(hparams):
                 image_size=hparams.get("img_size", (256, 256)),
                 include_top=False)
 
+        # If no SSL checkpoint path provided, assume MoCo
+        if not hparams["ssl_ckpt_path"]:
+            hparams["ssl_ckpt_path"] = constants.MOCO_CKPT_PATH
+
         # Load pretrained model
         try:
             pretrained_model = model_cls.load_from_checkpoint(

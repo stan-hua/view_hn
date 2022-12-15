@@ -130,7 +130,7 @@ def init(parser):
                         choices=load_model.SSL_NAME_TO_MODEL_CLS.keys(),
                         default="moco",
                         help=arg_help["ssl_model"])
-    parser.add_argument("--ssl_ckpt_path", default=constants.MOCO_CKPT_PATH,
+    parser.add_argument("--ssl_ckpt_path", default=None,
                         help=arg_help["ssl_ckpt_path"])
     parser.add_argument("--ssl_eval_linear", action="store_true",
                         help=arg_help["ssl_eval_linear"])

@@ -157,7 +157,7 @@ def train_eval_models(exp_name, **kwargs):
     hparams = load_model.get_hyperparameters(model_dir)
 
     # 3. Determine SSL model type
-    ssl_model = hparams["ssl_model"]
+    ssl_model = hparams.get("ssl_model", "moco")
     # 3.1 Update model type, if loaded model was an eval model
     if hparams.get("ssl_eval_linear"):
         ssl_model = "linear"
