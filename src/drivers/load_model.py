@@ -25,7 +25,6 @@ from src.models.efficientnet_pl import EfficientNetPL
 from src.models.linear_classifier import LinearClassifier
 from src.models.linear_lstm import LinearLSTM
 from src.models.moco import MoCo
-from src.models.siamnet import load_siamnet
 from src.models.tclr import TCLR
 
 
@@ -288,8 +287,6 @@ def load_pretrained_from_model_name(model_name):
     elif model_name == "imagenet":
         feature_extractor = EfficientNetPL.from_pretrained(
             model_name="efficientnet-b0")
-    elif model_name == "hn":
-        feature_extractor = load_siamnet()
     elif model_name == "cpc":
         feature_extractor = CPC.load_from_checkpoint(weights)
     elif model_name == "moco":
