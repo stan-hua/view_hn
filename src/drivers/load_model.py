@@ -21,6 +21,7 @@ from tensorflow.keras.applications.efficientnet import EfficientNetB0
 from src.data import constants
 from src.models.cpc import CPC
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
+from src.models.efficientnet_lstm_multi import EfficientNetLSTMMulti
 from src.models.efficientnet_pl import EfficientNetPL
 from src.models.linear_classifier import LinearClassifier
 from src.models.linear_lstm import LinearLSTM
@@ -125,11 +126,18 @@ def get_model_cls(hparams):
             else LinearLSTM
     # For supervised full-sequence model
     elif not hparams.get("self_supervised") and hparams.get("full_seq"):
-        model_cls = EfficientNetLSTM
+        # If multi-output
+        if hparams.get("multi_output"):
+            model_cls = EfficientNetLSTMMulti
+        else:
+            model_cls = EfficientNetLSTM
     # For supervised image-based model
     else:
+        # NOTE: Multi-output single-image model is not implemented
+        if hparams.get("multi_output"):
+            raise NotImplementedError("Supervised Multi-output model is not "
+                                      "implemented for single images!")
         model_cls = EfficientNetPL
-
     return model_cls
 
 

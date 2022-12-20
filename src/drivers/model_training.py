@@ -83,6 +83,7 @@ def init(parser):
         "lr": "Learning rate of optimizer",
         "momentum": "Optimizer momentum",
         "weight_decay": "Weight decay during training",
+        "multi_output": "If flagged, train multi-output supervised model.",
 
         "memory_bank_size": "Size of MoCo memory bank. Defaults to 4096.",
         "temperature": "Temperature parameter for NT-Xent loss. Defaults "
@@ -156,6 +157,10 @@ def init(parser):
                         help=arg_help["momentum"])
     parser.add_argument("--weight_decay", default=0.0005, type=float,
                         help=arg_help["weight_decay"])
+    # Supervised model arguments
+    parser.add_argument("--multi_output", action="store_true",
+                        help=arg_help["multi_output"])
+
     # Self-supervised model arguments
     parser.add_argument("--memory_bank_size", default=4096, type=int,
                         help=arg_help["memory_bank_size"])
