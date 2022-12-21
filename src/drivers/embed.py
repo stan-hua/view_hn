@@ -387,7 +387,7 @@ def extract_embeds_from_model_name(raw=False, segmented=False, reverse_mask=Fals
 ################################################################################
 #                              Loading Embeddings                              #
 ################################################################################
-def get_embeds(name, raw=False, segmented=False, reverse_mask=False):
+def get_embeds(name, **kwargs):
     """
     Retrieve extracted deep embeddings using model specified.
 
@@ -396,27 +396,23 @@ def get_embeds(name, raw=False, segmented=False, reverse_mask=False):
     name : str or list
         Model/experiment name, or list of model/experiment names to concatenate
         embeddings.
-    raw : bool, optional
-        If True, gets extracted embeddings for raw images. Otherwise, uses
-        preprocessed images, by default False.
-    segmented : bool, optional
-        If True, gets extracted embeddings for segmented images, by default False.
-    reverse_mask : bool, optional
-        If True, gets extracted embeddings where segmentation masks are
-        reversed, by default False
+    **kwargs : Keyword arguments for `get_save_path`
+        raw : bool, optional
+        segmented : bool, optional
+        reverse_mask : bool, optional
     """
     assert isinstance(name, (str, list)), "Invalid type for `name`!"
 
     # If getting embeddings for 1 model
     if isinstance(name, str):
-        embed_path = get_save_path(name, raw, segmented, reverse_mask)
+        embed_path = get_save_path(name, **kwargs)
         df_embeds = pd.read_hdf(embed_path, "embeds")
         return df_embeds
 
     # If getting embeddings for 1+ models
     embed_lst = []
     for name_i in name:
-        embed_path = get_save_path(name_i, raw, segmented, reverse_mask)
+        embed_path = get_save_path(name_i, **kwargs)
         df_embed_i = pd.read_hdf(embed_path, "embeds")
         embed_lst.append(df_embed_i)
     df_embeds = pd.concat(embed_lst, axis=1)
@@ -471,7 +467,8 @@ def init(parser):
                         help=arg_help["segmented"])
 
 
-def get_save_path(name, raw=False, segmented=False, reverse_mask=False):
+def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
+                  dset=None):
     """
     Create expected save path from model name and parameters.
 
@@ -486,6 +483,8 @@ def get_save_path(name, raw=False, segmented=False, reverse_mask=False):
         If True, extracts embeddings for segmented images, by default False.
     reverse_mask : bool, optional
         If True, reverses mask for segmented images, by default False
+    dset : str, optional
+        Dataset split to perform inference on, by default None
 
     Returns
     -------
@@ -495,7 +494,9 @@ def get_save_path(name, raw=False, segmented=False, reverse_mask=False):
     embed_suffix = EMBED_SUFFIX_RAW if raw else EMBED_SUFFIX
     segmented_suffix = f"_segmented{'_reverse' if reverse_mask else ''}"
     save_path = f"{constants.DIR_EMBEDS}/{name}"\
-                f"{segmented_suffix if segmented else ''}{embed_suffix}"
+                f"{segmented_suffix if segmented else ''}"\
+                f"{f'({dset})' if dset else ''}"\
+                f"{embed_suffix}"
 
     return save_path
 

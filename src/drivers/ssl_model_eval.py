@@ -78,12 +78,16 @@ def init(parser):
         "exp_name": "Base name of experiment (for SSL trained)",
         "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
                          "from another SSL eval model.",
+        "dset": "Specific split of data available during training. One of "
+                "(train/val/test)",
     }
 
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         required=True)
     parser.add_argument("--from_ssl_eval", action="store_true",
                         help=arg_help["from_ssl_eval"])
+    parser.add_argument("--dset", default=constants.DEFAULT_EVAL_DSET,
+                        help=arg_help["dset"])
 
 
 def train_model_with_kwargs(exp_name, **extra_args):
@@ -194,7 +198,7 @@ def train_eval_models(exp_name, **kwargs):
                     **{f"ssl_eval_{model_type}": True})
 
 
-def analyze_preds(exp_name):
+def analyze_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     """
     Perform test prediction analysis from `model_eval` on trained evaluations
     models
@@ -203,6 +207,9 @@ def analyze_preds(exp_name):
     ----------
     exp_name : str
         Base SSL experiment name
+    dset : str, optional
+        Dataset split to perform inference on, by default
+        constants.DEFAULT_EVAL_DSET
     """
     # Evaluate each model separately
     for model_type in MODEL_TYPES:
@@ -214,9 +221,9 @@ def analyze_preds(exp_name):
                         label_part=label_part,
                         freeze_weights=freeze_weights)
 
-                model_eval.infer_dset(exp_eval_name)
-                model_eval.embed_dset(exp_eval_name)
-                model_eval.analyze_dset_preds(exp_eval_name)
+                model_eval.infer_dset(exp_eval_name, dset=dset)
+                model_eval.embed_dset(exp_eval_name, dset=dset)
+                model_eval.analyze_dset_preds(exp_eval_name, dset=dset)
 
 
 ################################################################################
@@ -280,7 +287,7 @@ def main(args):
     train_eval_models(args.exp_name, **train_kwargs)
 
     # Analyze results of evaluation models
-    analyze_preds(args.exp_name)
+    analyze_preds(args.exp_name, dset=args.dset)
 
 
 if __name__ == "__main__":

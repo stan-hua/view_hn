@@ -19,6 +19,7 @@ import numpy as np
 import seaborn as sns
 import torch
 import torchvision.transforms as T
+from arch.bootstrap import IIDBootstrap
 from scipy.stats import pearsonr
 from sklearn import metrics as skmetrics
 from torchvision.io import read_image, ImageReadMode
@@ -53,9 +54,6 @@ DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
                 "Transverse_Right": 3, "Sagittal_Right": 4, "Other": 5}
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
-
-# Default dataset to perform inference on
-DEFAULT_DSET = "val"
 
 # Plot theme (light/dark)
 THEME = "light"
@@ -114,13 +112,14 @@ def init(parser):
                 "(train/val/test)",
     }
     parser.add_argument("--exp_name", help=arg_help["exp_name"], required=True)
-    parser.add_argument("--dset", default=DEFAULT_DSET, help=arg_help["dset"])
+    parser.add_argument("--dset", default=constants.DEFAULT_EVAL_DSET,
+                        help=arg_help["dset"])
 
 
 ################################################################################
 #                             Inference - Related                              #
 ################################################################################
-def get_dset_metadata(dm, dset=DEFAULT_DSET):
+def get_dset_metadata(dm, dset=constants.DEFAULT_EVAL_DSET):
     """
     Get metadata table containing (filename, label) for each image in the
     specified set (train/val/test).
@@ -132,7 +131,7 @@ def get_dset_metadata(dm, dset=DEFAULT_DSET):
         split.
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        DEFAULT_DSET.
+        constants.DEFAULT_EVAL_DSET.
 
     Returns
     -------
@@ -892,7 +891,7 @@ def plot_rolling_accuracy(df_pred, window_size=15, max_seq_num=75,
     return plt.gca()
 
 
-def calculate_metrics(df_pred):
+def calculate_metrics(df_pred, ci=False, **ci_kwargs):
     """
     Calculate important metrics given prediction and labels
 
@@ -900,27 +899,51 @@ def calculate_metrics(df_pred):
     ----------
     df_pred : pd.DataFrame
         Model predictions and labels
+    ci : bool, optional
+        If True, add bootstrapped confidence interval, by default False.
+    **ci_kwargs : dict, optional
+        Keyword arguments to pass into `bootstrap_metric` if `ci` is True
 
     Returns
     -------
     pd.DataFrame
         Table containing metrics
     """
+    # Accumulate exact metric, and confidence interval bounds (if specified)
     metrics = OrderedDict()
 
     # Accuracy by class
     unique_labels = sorted(df_pred["label"].unique())
     for label in unique_labels:
         df_pred_filtered = df_pred[df_pred.label == label]
-        metrics[f"Label Accuracy ({label})"] = round(
-            (df_pred_filtered["label"] == df_pred_filtered["pred"]).mean(), 4)
+        metrics[f"Label Accuracy ({label})"] = \
+            round(skmetrics.accuracy_score(
+                df_pred_filtered["label"], df_pred_filtered["pred"]),
+                4)
+
+        # Bootstrap confidence interval
+        if ci:
+            point, (lower, upper) = bootstrap_metric(
+                df_pred=df_pred_filtered,
+                metric_func=skmetrics.accuracy_score,
+                **ci_kwargs)
+            metrics[f"Label Accuracy ({label})"] = f"{point} ({lower}, {upper})"
+
     # Overall accuracy
-    metrics["Overall Accuracy"] = round(
-        (df_pred["label"] == df_pred["pred"]).mean(), 4)
+    metrics["Overall Accuracy"] = \
+        round(skmetrics.accuracy_score(df_pred["label"], df_pred["pred"]), 4)
+    # Bootstrap confidence interval
+    if ci:
+        point, (lower, upper) = bootstrap_metric(
+            df_pred=df_pred,
+            metric_func=skmetrics.accuracy_score,
+            **ci_kwargs)
+        metrics[f"Overall Accuracy"] = f"{point} ({lower}, {upper})"
 
     # F1 Score by class
     # NOTE: Overall F1 Score isn't calculated because it's equal to 
     #       Overall Accuracy in multi-label problems.
+    # TODO: Implement wrapper function to allow bootstrapping f1_score
     f1_scores = skmetrics.f1_score(df_pred["label"], df_pred["pred"],
                                    labels=unique_labels,
                                    average=None)
@@ -928,6 +951,56 @@ def calculate_metrics(df_pred):
         metrics[f"Label F1-Score ({unique_labels[i]})"] = round(f1_score, 4)
 
     return pd.Series(metrics)
+
+
+def bootstrap_metric(df_pred,
+                     metric_func=skmetrics.accuracy_score,
+                     alpha=0.05,
+                     n_bootstrap=12000,
+                     seed=constants.SEED):
+    """
+    Perform BCa bootstrap on table of predictions to calculate metric with a
+    bootstrapped confidence interval.
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Table of validation/test predictions with `label` and `pred` columns
+    metric_func : function, optional
+        Reference to function that can be used to calculate a metric given the
+        (label, predictions), by default sklearn.metrics.accuracy_score
+    alpha : float, optional
+        Desired significance level, by default 0.05
+    n_bootstrap : int, optional
+        Sample size for each bootstrap iteration
+    seed : int, optional
+        Random seed
+
+    Returns
+    -------
+    tuple of (exact, (lower_bound, upper_bound))
+        Output of `func` with 95% confidence interval ends
+    """
+    # Calculate exact point metric
+    # NOTE: Assumes function takes in (label, pred)
+    exact_metric = round(metric_func(df_pred["label"], df_pred["pred"]), 4)
+
+    # Initialize bootstrap
+    bootstrap = IIDBootstrap(
+        df_pred["label"], df_pred["pred"],
+        seed=seed)
+
+    # Calculate empirical CI bounds
+    ci_bounds = bootstrap.conf_int(
+        func=metric_func,
+        reps=n_bootstrap,
+        method='bca',
+        size=1-alpha,
+        tail='two').flatten()
+    # Round to 4 decimal places
+    ci_bounds = np.round(ci_bounds, 4)
+
+    return exact_metric, tuple(ci_bounds)
 
 
 ################################################################################
@@ -1147,7 +1220,7 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False,
         print(colored_pred_str)
 
 
-def create_save_path(exp_name, dset=DEFAULT_DSET, **extra_flags):
+def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
     """
     Create file path to dset predictions, based on experiment name and keyword
     arguments
@@ -1158,7 +1231,7 @@ def create_save_path(exp_name, dset=DEFAULT_DSET, **extra_flags):
         Name of experiment
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        DEFAULT_DSET.
+        constants.DEFAULT_EVAL_DSET.
     **extra_flags : dict, optional
         Keyword arguments, specifying extra flags used during inference
 
@@ -1246,7 +1319,9 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
-def infer_dset(exp_name, dset=DEFAULT_DSET, seq_number_limit=None,
+def infer_dset(exp_name,
+               dset=constants.DEFAULT_EVAL_DSET,
+               seq_number_limit=None,
                **overwrite_hparams):
     """
     Perform inference on dset, and saves results
@@ -1257,7 +1332,7 @@ def infer_dset(exp_name, dset=DEFAULT_DSET, seq_number_limit=None,
         Name of experiment
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        DEFAULT_DSET.
+        constants.DEFAULT_EVAL_DSET.
     seq_number_limit : int, optional
         If provided, filters out dset split samples with sequence numbers higher
         than this value, by default None.
@@ -1329,7 +1404,7 @@ def infer_dset(exp_name, dset=DEFAULT_DSET, seq_number_limit=None,
     df_metadata.to_csv(pred_save_path, index=False)
 
 
-def embed_dset(exp_name, dset=DEFAULT_DSET, **overwrite_hparams):
+def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
     """
     Extract embeddings on dset.
 
@@ -1339,7 +1414,7 @@ def embed_dset(exp_name, dset=DEFAULT_DSET, **overwrite_hparams):
         Name of experiment
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        DEFAULT_DSET.
+        constants.DEFAULT_EVAL_DSET.
     overwrite_hparams : dict, optional
         Keyword arguments to overwrite experiment hyperparameters
 
@@ -1349,7 +1424,7 @@ def embed_dset(exp_name, dset=DEFAULT_DSET, **overwrite_hparams):
         If `exp_name` does not lead to a valid training directory
     """
     # 0. Create path to save embeddings
-    embed_save_path = embed.get_save_path(exp_name)
+    embed_save_path = embed.get_save_path(exp_name, dset=dset)
 
     # Early return, if embeddings already made
     if os.path.isfile(embed_save_path):
@@ -1390,7 +1465,7 @@ def embed_dset(exp_name, dset=DEFAULT_DSET, **overwrite_hparams):
         device=DEVICE)
 
 
-def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
+def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     """
     Analyze dset split predictions
 
@@ -1400,7 +1475,7 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
         Name of experiment
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        DEFAULT_DSET.
+        constants.DEFAULT_EVAL_DSET.
 
     Raises
     ------
@@ -1434,10 +1509,10 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
 
     # 4. Calculate metrics
     # 4.1.1 For all samples
-    df_metrics_all = calculate_metrics(df_pred)
+    df_metrics_all = calculate_metrics(df_pred, ci=True)
     df_metrics_all.name = "All"
 
-    # 4.1.2 (Optional) Add Per-Sequence Silhouette Score
+    # 4.1.3 (Optional) Add Per-Sequence Silhouette Score
     if hparams.get("label_part") == "side":
         df_metrics_all["Silhouette Score (Left vs. Right)"] = \
             calculate_per_seq_silhouette_score(exp_name)
@@ -1501,7 +1576,10 @@ def analyze_dset_preds(exp_name, dset=DEFAULT_DSET):
                                   label_part=hparams.get("label_part"))
 
     # 9. Plot embeddings with labels
-    plot_umap.main(exp_name, label_part=hparams.get("label_part"))
+    plot_umap.main(
+        exp_name,
+        label_part=hparams.get("label_part"),
+        dset=dset)
 
     # 10. Close all open figures
     plt.close("all")
