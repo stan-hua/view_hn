@@ -1257,7 +1257,8 @@ def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
 
 
 def calculate_per_seq_silhouette_score(exp_name, label_part="side",
-                                       exclude_labels=("None",)):
+                                       exclude_labels=("None",),
+                                       dset=constants.DEFAULT_EVAL_DSET):
     """
     Calculate a per - ultrasound sequence Silhouette score.
 
@@ -1271,6 +1272,9 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
     exclude_labels : list or array-like, optional
         List of labels whose matching samples will be excluded when calculating
         the Silhouette score, by default ("None",)
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        constants.DEFAULT_EVAL_DSET.
 
     Returns
     -------
@@ -1278,7 +1282,7 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
         Mean Silhouette Score across unique ultrasound sequences
     """
     # Load embeddings
-    df_embeds = embed.get_embeds(exp_name)
+    df_embeds = embed.get_embeds(exp_name, dset=dset)
     df_embeds = df_embeds.rename(columns={"paths": "files"})    # legacy name
 
     # Extract metadata from image file paths
@@ -1512,11 +1516,6 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     df_metrics_all = calculate_metrics(df_pred, ci=True)
     df_metrics_all.name = "All"
 
-    # 4.1.3 (Optional) Add Per-Sequence Silhouette Score
-    if hparams.get("label_part") == "side":
-        df_metrics_all["Silhouette Score (Left vs. Right)"] = \
-            calculate_per_seq_silhouette_score(exp_name)
-
     # 4.2 Stratify patients w/ HN and w/o HN
     df_metrics_w_hn = calculate_metrics(df_pred[df_pred.hn == 1])
     df_metrics_w_hn.name = "With HN"
@@ -1564,13 +1563,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
         check_misclassifications(df_pred,
                                  relative_side=hparams.get("relative_side"))
 
-    # 7. Plot accuracy over sequence number windows
-    plot_rolling_accuracy(
-        df_pred,
-        update_seq_num=True,
-        save_path=os.path.join(inference_dir, f"{dset}_rolling_accuracy.png"))
-
-    # 8. Show randomly chosen side predictions for full sequences
+    # 7. Show randomly chosen side predictions for full sequences
     show_example_side_predictions(df_pred,
                                   relative_side=hparams.get("relative_side"),
                                   label_part=hparams.get("label_part"))
