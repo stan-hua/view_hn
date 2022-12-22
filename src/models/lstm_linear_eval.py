@@ -1,5 +1,5 @@
 """
-linear_lstm.py
+lstm_linear_eval.py
 
 Description: Used to provide a lstm + linear classification evaluation over
              pretrained convolutional backbones.
@@ -13,9 +13,9 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
-class LinearLSTM(pl.LightningModule):
+class LSTMLinearEval(pl.LightningModule):
     """
-    LinearLSTM object, wrapping over convolutional backbone.
+    LSTMLinearEval object, wrapping over convolutional backbone.
     """
     def __init__(self, conv_backbone,
                  temporal_backbone=None,
@@ -28,7 +28,7 @@ class LinearLSTM(pl.LightningModule):
                  extract_features=False,
                  *args, **kwargs):
         """
-        Initialize LinearLSTM object.
+        Initialize LSTMLinearEval object.
 
         Parameters
         ----------

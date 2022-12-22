@@ -1,5 +1,5 @@
 """
-linear_classifier.py
+linear_eval.py
 
 Description: Used to provide a linear classification evaluation over pretrained
              convolutional backbones.
@@ -13,9 +13,9 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
-class LinearClassifier(pl.LightningModule):
+class LinearEval(pl.LightningModule):
     """
-    Linear classifier object, wrapping over convolutional backbone.
+    LinearEval classifier object, wrapping over convolutional backbone.
     """
     def __init__(self, conv_backbone,
                  freeze_weights=True,
@@ -24,7 +24,7 @@ class LinearClassifier(pl.LightningModule):
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  *args, **kwargs):
         """
-        Initialize LinearClassifier object.
+        Initialize LinearEval object.
 
         Parameters
         ----------

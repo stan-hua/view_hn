@@ -62,7 +62,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         self.save_hyperparameters()
 
         # Define LSTM layers
-        self._lstm = torch.nn.LSTM(
+        self.temporal_backbone = torch.nn.LSTM(
             feature_dim, self.hparams.hidden_dim, batch_first=True,
             num_layers=self.hparams.n_lstm_layers,
             bidirectional=self.hparams.bidirectional)
@@ -70,7 +70,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         # Define classification layer
         multiplier = 2 if self.hparams.bidirectional else 1
         size_after_lstm = self.hparams.hidden_dim * multiplier
-        self._fc = torch.nn.Linear(size_after_lstm, self.hparams.num_classes)
+        self.fc = torch.nn.Linear(size_after_lstm, self.hparams.num_classes)
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
@@ -109,10 +109,10 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         # LSTM layers
         seq_len = x.size()[0]
         x = x.view(1, seq_len, -1)
-        x, _ = self._lstm(x)
+        x, _ = self.temporal_backbone(x)
 
         if not self.hparams.extract_features:
-            x = self._fc(x)
+            x = self.fc(x)
 
         # Remove extra dimension added for LSTM
         x = x.squeeze(dim=0)
@@ -417,7 +417,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         z = z.view(1, T, -1)
 
         # Extract temporal features
-        c = self._lstm(z)[0]
+        c = self.temporal_backbone(z)[0]
         c = c.view(T, -1)
 
         return c.detach().cpu().numpy()

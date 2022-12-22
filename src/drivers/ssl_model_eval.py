@@ -3,7 +3,7 @@ ssl_model_eval.py
 
 Description: Used to automatically evaluate a SSL-trained model by
     (1) Training a Linear model on side and plane, separately
-    (2) Training a LinearLSTM model on side and plane, separately
+    (2) Training a LSTM + Linear model on side and plane, separately
     (3) Evaluate each of the 4+ models
 """
 

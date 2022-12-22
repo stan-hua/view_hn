@@ -73,19 +73,19 @@ MODEL_TYPE_TO_CKPT = OrderedDict({
 
     # Checkpoint of MoCo Linear Classifier
     "five_view_moco": "moco_linear_eval_4/0/last.ckpt",
-    # Checkpoint of MoCo LinearLSTM Classifier
+    # Checkpoint of MoCo LSTM + Linear Classifier
     "five_view_moco_seq": "moco_linear_lstm_eval_0/0/epoch=12-step=129.ckpt",
 
     # Checkpoint of MoCo (Stanford train) Linear Classifier
     "five_view_moco_su": "moco_linear_eval_su_to_sk_1/0/epoch=0-step=396.ckpt",
-    # Checkpoint of MoCo (Stanford train) LinearLSTM Classifier
+    # Checkpoint of MoCo (Stanford train) LSTM + Linear Classifier
     "five_view_moco_seq_su": "moco_linear_lstm_eval_su_to_sk_1/0/"
                              "epoch=9-step=99.ckpt",
 
     # Checkpoint of MoCo (SickKids All) Linear Classifier
     "five_view_moco_sk_all": "moco_linear_eval_sk_all/0/"
                              "epoch=24-step=9924.ckpt",
-    # Checkpoint MoCo (SickKids All) LinearLSTM
+    # Checkpoint MoCo (SickKids All) LSTM + Linear
     "five_view_moco_seq_sk_all": "moco_linear_lstm_eval_sk_all/0/"
                                  "epoch=22-step=229.ckpt",
 })
