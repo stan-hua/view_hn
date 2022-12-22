@@ -753,7 +753,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         metadata["label"] = class_to_idx.get(self.labels[index], -1)
         # If specified, split label into side/plane, and store separately
         if self.split_label and not self.label_part:
-            for label_part in ["side", "plane"]:
+            for label_part in constants.LABEL_PARTS:
                 metadata[label_part] = utils.extract_from_label(
                     self.labels[index], label_part)
 
@@ -822,7 +822,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # 6.1 If specified, split label into side/plane, and store separately
         if self.split_label and not self.label_part:
-            for label_part in ["side", "plane"]:
+            for label_part in constants.LABEL_PARTS:
                 # Extract side/plane from label
                 extracted_labels = [utils.extract_from_label(label, label_part)
                     for label in labels]

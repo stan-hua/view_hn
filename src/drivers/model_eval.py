@@ -151,6 +151,7 @@ def get_dset_metadata(dm, dset=constants.DEFAULT_EVAL_DSET):
     return df_dset
 
 
+@torch.no_grad()
 def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
                       **hparams):
     """
@@ -170,9 +171,11 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
 
     Returns
     -------
-    tuple of np.array
-        (prediction for each image, probability of each prediction,
-         raw model output)
+    pandas.DataFrame
+        For each image, contains
+            - prediction for each image,
+            - probability of each prediction,
+            - raw model output
     """
     # Get mapping of index to class
     label_part = hparams.get("label_part")
@@ -182,44 +185,51 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
     model.eval()
 
     # Predict on each images one-by-one
-    with torch.no_grad():
-        preds = []
-        probs = []
-        outs = []
+    preds = []
+    probs = []
+    outs = []
 
-        for filename in tqdm(filenames):
-            img_path = filename if img_dir is None else f"{img_dir}/{filename}"
+    for filename in tqdm(filenames):
+        img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
-            # Load image as expected by model
-            img = read_image(img_path, ImageReadMode.RGB)
-            img = img / 255.
-            img = transform_image(img)
-            img = np.expand_dims(img, axis=0)
+        # Load image as expected by model
+        img = read_image(img_path, ImageReadMode.RGB)
+        img = img / 255.
+        img = transform_image(img)
+        img = np.expand_dims(img, axis=0)
 
-            # Convert to tensor and send to device
-            img = torch.FloatTensor(img).to(DEVICE)
+        # Convert to tensor and send to device
+        img = torch.FloatTensor(img).to(DEVICE)
 
-            # Perform inference
-            out = model(img)
-            pred = torch.argmax(out, dim=1)
-            pred = int(pred.detach().cpu())
+        # Perform inference
+        out = model(img)
+        pred = torch.argmax(out, dim=1)
+        pred = int(pred.detach().cpu())
 
-            # Get probability
-            prob = torch.nn.functional.softmax(out, dim=1)
-            prob = prob.detach().cpu().numpy().max()
-            probs.append(prob)
+        # Get probability
+        prob = torch.nn.functional.softmax(out, dim=1)
+        prob = prob.detach().cpu().numpy().max()
+        probs.append(prob)
 
-            # Get maximum activation
-            out = float(out.max().detach().cpu())
-            outs.append(out)
+        # Get maximum activation
+        out = float(out.max().detach().cpu())
+        outs.append(out)
 
-            # Convert from encoded label to label name
-            pred_label = idx_to_class[pred]
-            preds.append(pred_label)
+        # Convert from encoded label to label name
+        pred_label = idx_to_class[pred]
+        preds.append(pred_label)
 
-    return np.array(preds), np.array(probs), np.array(outs)
+    # Pack into dataframe
+    df_preds = pd.DataFrame({
+        "pred": preds,
+        "prob": probs,
+        "out": outs,
+    })
+
+    return df_preds
 
 
+@torch.no_grad()
 def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
                          **hparams):
     """
@@ -239,9 +249,11 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
 
     Returns
     -------
-    tuple of np.array
-        (prediction for each image, probability of each prediction,
-         raw model output)
+    pandas.DataFrame
+        For each frame in the sequence, contains
+            - prediction for each image,
+            - probability of each prediction,
+            - raw model output
     """
     # Get mapping of index to class
     label_part = hparams.get("label_part")
@@ -251,25 +263,98 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
     model.eval()
 
     # Predict on each images one-by-one
-    with torch.no_grad():
-        imgs = []
-        for filename in filenames:
-            img_path = filename if img_dir is None else f"{img_dir}/{filename}"
+    imgs = []
+    for filename in filenames:
+        img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
-            # Load image as expected by model
-            img = read_image(img_path, ImageReadMode.RGB)
-            img = img / 255.
-            img = transform_image(img)
-            imgs.append(img)
+        # Load image as expected by model
+        img = read_image(img_path, ImageReadMode.RGB)
+        img = img / 255.
+        img = transform_image(img)
+        imgs.append(img)
 
-        imgs = np.stack(imgs, axis=0)
+    imgs = np.stack(imgs, axis=0)
 
-        # Convert to tensor and send to device
-        imgs = torch.FloatTensor(imgs).to(DEVICE)
+    # Convert to tensor and send to device
+    imgs = torch.FloatTensor(imgs).to(DEVICE)
 
-        # Perform inference
-        outs = model(imgs)
-        outs = outs.detach().cpu()
+    # Perform inference
+    outs = model(imgs)
+    outs = outs.detach().cpu()
+    preds = torch.argmax(outs, dim=1).numpy()
+
+    # Get probability
+    probs = torch.nn.functional.softmax(outs, dim=1)
+    probs = torch.max(probs, dim=1).values.numpy()
+
+    # Get maximum activation
+    outs = torch.max(outs, dim=1).values.numpy()
+
+    # Convert from encoded label to label name
+    preds = np.vectorize(idx_to_class.__getitem__)(preds)
+
+    # Pack into dataframe
+    df_preds = pd.DataFrame({
+        "pred": preds,
+        "prob": probs,
+        "out": outs,
+    })
+
+    return df_preds
+
+
+@torch.no_grad()
+def multi_predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
+                               **hparams):
+    """
+    Performs inference on a full ultrasound sequence specified with a
+    multi-output model. Returns predictions, probabilities and raw model output.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        A trained multi-output model (EfficientNetLSTMMulti).
+    filenames : np.array or array-like
+        Filenames (or full paths) to images from one unique sequence to infer.
+    img_dir : str, optional
+        Path to directory containing images, by default constants.DIR_IMAGES
+    hparams : dict, optional
+        Keyword arguments for experiment hyperparameters
+
+    Returns
+    -------
+    pandas.DataFrame
+        For each frame in the sequence and for each side, contains
+            - prediction for each image,
+            - probability of each prediction,
+            - raw model output
+    """
+    # Set to evaluation mode
+    model.eval()
+
+    # Predict on each images one-by-one
+    imgs = []
+    for filename in filenames:
+        img_path = filename if img_dir is None else f"{img_dir}/{filename}"
+
+        # Load image as expected by model
+        img = read_image(img_path, ImageReadMode.RGB)
+        img = img / 255.
+        img = transform_image(img)
+        imgs.append(img)
+
+    imgs = np.stack(imgs, axis=0)
+
+    # Convert to tensor and send to device
+    imgs = torch.FloatTensor(imgs).to(DEVICE)
+
+    # Perform inference to get both side/plane raw output
+    out_dict = model(imgs)
+
+    # Accumulate prediction, probability and raw output for each label
+    label_to_results = {}
+    for label_part in out_dict.keys():
+        outs = out_dict[label_part].detach().cpu()
         preds = torch.argmax(outs, dim=1).numpy()
 
         # Get probability
@@ -279,10 +364,19 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
         # Get maximum activation
         outs = torch.max(outs, dim=1).values.numpy()
 
+        # Get mapping of index to class
+        idx_to_class = \
+            constants.LABEL_PART_TO_CLASSES[label_part]["idx_to_class"]
+
         # Convert from encoded label to label name
         preds = np.vectorize(idx_to_class.__getitem__)(preds)
 
-    return preds, probs, outs
+        # Store results
+        label_to_results[f"{label_part}_out"] = outs
+        label_to_results[f"{label_part}_prob"] = probs
+        label_to_results[f"{label_part}_pred"] = preds
+
+    return pd.DataFrame(label_to_results)
 
 
 ################################################################################
@@ -965,7 +1059,8 @@ def bootstrap_metric(df_pred,
     Parameters
     ----------
     df_pred : pandas.DataFrame
-        Table of validation/test predictions with `label` and `pred` columns
+        Model predictions. Each row contains a label,
+        prediction, and other patient and sequence-related metadata.
     metric_func : function, optional
         Reference to function that can be used to calculate a metric given the
         (label, predictions), by default sklearn.metrics.accuracy_score
@@ -1001,6 +1096,98 @@ def bootstrap_metric(df_pred,
     ci_bounds = np.round(ci_bounds, 4)
 
     return exact_metric, tuple(ci_bounds)
+
+
+def eval_calculate_all_metrics(df_pred):
+    """
+    Calculates all eval. metrics in a proper table format
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Model predictions. Each row contains a label,
+        prediction, and other patient and sequence-related metadata.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Table of formatted metrics
+    """
+    # 1. Calculate metrics
+    # 1.1.1 For all samples
+    df_metrics_all = calculate_metrics(df_pred, ci=True)
+    df_metrics_all.name = "All"
+
+    # 1.2 Stratify patients w/ HN and w/o HN
+    df_metrics_w_hn = calculate_metrics(df_pred[df_pred.hn == 1])
+    df_metrics_w_hn.name = "With HN"
+    df_metrics_wo_hn = calculate_metrics(df_pred[df_pred.hn == 0])
+    df_metrics_wo_hn.name = "Without HN"
+
+    # 1.3 For images at label boundaries
+    df_metrics_at_boundary = calculate_metrics(
+        df_pred[df_pred["at_label_boundary"]])
+    df_metrics_at_boundary.name = "At Label Boundary"
+
+    # Filler columns
+    filler = df_metrics_all.copy()
+    filler[:] = ""
+    filler.name = ""
+
+    # 2. Combine
+    df_metrics = pd.concat([
+        df_metrics_all,
+        filler,
+        df_metrics_w_hn, df_metrics_wo_hn,
+        filler,
+        df_metrics_at_boundary,
+        ], axis=1)
+
+    return df_metrics
+
+
+def eval_create_plots(df_pred, hparams, inference_dir,
+                      dset=constants.DEFAULT_EVAL_DSET):
+    """
+    Visual evaluation of model performance
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Model predictions. Each row contains a label,
+        prediction, and other patient and sequence-related metadata.
+    hparams : dict
+        Keyword arguments for experiment hyperparameters
+    inference_dir : str
+        Path to experiment-specific inference directory
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        constants.DEFAULT_EVAL_DSET.
+    """
+    # 0. Reset theme
+    viz_utils.set_theme(THEME)
+
+    # 1. Create confusion matrix plot
+    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+    # 1.1 Plot confusion matrix for most confident predictions
+    plot_confusion_matrix(df_pred, filter_confident=True, ax=ax1, **hparams)
+    # 1.2 Plot confusion matrix for all predictions
+    plot_confusion_matrix(df_pred, filter_confident=False, ax=ax2, **hparams)
+    plt.tight_layout()
+    plt.savefig(os.path.join(inference_dir, f"{dset}_confusion_matrix.png"))
+
+    # 1.3 Print confusion matrix for all predictions
+    print_confusion_matrix(df_pred, **hparams)
+
+    # 2. Print reasons for misclassification of most confident predictions
+    if not hparams.get("label_part"):
+        check_misclassifications(df_pred,
+                                 relative_side=hparams.get("relative_side"))
+
+    # 3. Show randomly chosen side predictions for full sequences
+    show_example_side_predictions(df_pred,
+                                  relative_side=hparams.get("relative_side"),
+                                  label_part=hparams.get("label_part"))
 
 
 ################################################################################
@@ -1384,27 +1571,41 @@ def infer_dset(exp_name,
     df_metadata = df_metadata.sort_values(by=["id", "visit"], ignore_index=True)
 
     # 4. Predict on dset split
-    if not hparams["full_seq"]:
-        filenames = df_metadata.filename.tolist()
-        preds, probs, outs = predict_on_images(model=model, filenames=filenames,
-                                            img_dir=None, **hparams)
-    else:
+    # If multi-output model
+    if hparams.get("multi_output"):
+        if not hparams["full_seq"]:
+            raise NotImplementedError("Multi-output model is not implemented "
+                                      "for single-images!")
         # Perform inference one sequence at a time
-        ret = df_metadata.groupby(by=["id", "visit"]).progress_apply(
-            lambda df: predict_on_sequences(
+        df_preds = df_metadata.groupby(by=["id", "visit"]).progress_apply(
+            lambda df: multi_predict_on_sequences(
                 model=model, filenames=df.filename.tolist(), img_dir=None,
                 **hparams)
         )
+        # Remove groupby index
+        df_preds = df_preds.reset_index(drop=True)
+    else:
+        # If temporal model
+        if hparams["full_seq"]:
+            # Perform inference one sequence at a time
+            df_preds = df_metadata.groupby(by=["id", "visit"]).progress_apply(
+                lambda df: predict_on_sequences(
+                    model=model, filenames=df.filename.tolist(), img_dir=None,
+                    **hparams)
+            )
+            # Remove groupby index
+            df_preds = df_preds.reset_index(drop=True)
+        else:
+            filenames = df_metadata.filename.tolist()
+            df_preds = predict_on_images(
+                model=model,
+                filenames=filenames,
+                img_dir=None, **hparams)
 
-        # Flatten predictions, probs and model outputs from all sequences
-        preds = np.concatenate(ret.map(lambda x: x[0]).to_numpy())
-        probs = np.concatenate(ret.map(lambda x: x[1]).to_numpy())
-        outs = np.concatenate(ret.map(lambda x: x[2]).to_numpy())
+    # Join to metadata. NOTE: This works because of earlier sorting
+    df_metadata = pd.concat([df_metadata, df_preds], axis=1)
 
     # 5. Save predictions on dset split
-    df_metadata["pred"] = preds
-    df_metadata["prob"] = probs
-    df_metadata["out"] = outs
     df_metadata.to_csv(pred_save_path, index=False)
 
 
@@ -1471,7 +1672,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
 
 def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     """
-    Analyze dset split predictions
+    Analyze dset split predictions.
 
     Parameters
     ----------
@@ -1495,86 +1696,62 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
 
-    # 2. Load metadata
+    # 2. Load inference
     save_path = create_save_path(exp_name, dset=dset)
     df_pred = pd.read_csv(save_path)
-    # 2.1 Add HN labels, if not already exists
+    # 2.1 Add side/plane label, if not present
+    for label_part in constants.LABEL_PARTS:
+        if label_part not in df_pred.columns:
+            df_pred[label_part] = utils.get_labels_for_filenames(
+                df_pred["filename"].tolist(), label_part=label_part)
+    # 2.2 Add HN labels, if not already exists. NOTE: Needs side label to work
     if "hn" not in df_pred.columns:
-        # Add side label, if not present
-        if "side" not in df_pred.columns:
-            df_pred["side"] = utils.get_labels_for_filenames(
-                df_pred["filename"].tolist(), label_part="side")
         df_pred = utils.extract_hn_labels(df_pred)
-    # 2.2 Specify which images are at label boundaries
+    # 2.3 Specify which images are at label boundaries
     df_pred["at_label_boundary"] = utils.get_label_boundaries(df_pred)
 
-    # 3. Experiment-specific inference directory, to store figures
-    inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
+    # If multi-output, evaluate each label part, separately
+    label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
+        else [hparams.get("label_part")]
+    for label_part in label_parts:
+        temp_exp_name = exp_name
 
-    # 4. Calculate metrics
-    # 4.1.1 For all samples
-    df_metrics_all = calculate_metrics(df_pred, ci=True)
-    df_metrics_all.name = "All"
+        # If multi-output, make temporary changes to hparams
+        orig_label_part = hparams.get("label_part")
+        if hparams.get("multi_output"):
+            # Change experiment name to create different folders
+            temp_exp_name += f"__{label_part}"
+            # Force to be a specific label part
+            hparams["label_part"] = label_part
+            df_pred["label"] = df_pred[label_part]
+            df_pred["pred"] = df_pred[f"{label_part}_pred"]
+            df_pred["prob"] = df_pred[f"{label_part}_prob"]
+            df_pred["out"] = df_pred[f"{label_part}_out"]
 
-    # 4.2 Stratify patients w/ HN and w/o HN
-    df_metrics_w_hn = calculate_metrics(df_pred[df_pred.hn == 1])
-    df_metrics_w_hn.name = "With HN"
-    df_metrics_wo_hn = calculate_metrics(df_pred[df_pred.hn == 0])
-    df_metrics_wo_hn.name = "Without HN"
+        # Experiment-specific inference directory, to store figures
+        inference_dir = os.path.join(constants.DIR_INFERENCE, temp_exp_name)
+        if not os.path.isdir(inference_dir):
+            os.mkdir(inference_dir)
 
-    # 4.3 For images at label boundaries
-    df_metrics_at_boundary = calculate_metrics(
-        df_pred[df_pred["at_label_boundary"]])
-    df_metrics_at_boundary.name = "At Label Boundary"
+        # 4. Calculate metrics
+        df_metrics = eval_calculate_all_metrics(df_pred)
+        df_metrics.to_csv(os.path.join(inference_dir, f"{dset}_metrics.csv"))
 
-    # Filler columns
-    filler = df_metrics_all.copy()
-    filler[:] = ""
-    filler.name = ""
+        # 5. Create plots for visual evaluation
+        eval_create_plots(df_pred, hparams, inference_dir, dset=dset)
 
-    # 5. Combine
-    df_metrics = pd.concat([
-        df_metrics_all,
-        filler,
-        df_metrics_w_hn, df_metrics_wo_hn,
-        filler,
-        df_metrics_at_boundary,
-        ], axis=1)
+        # Revert temporary changes
+        hparams["label_part"] = orig_label_part
+        df_pred = df_pred.drop(columns=["label", "pred", "prob", "out"])
 
-    df_metrics.to_csv(os.path.join(inference_dir, f"{dset}_metrics.csv"))
-
-    # 5.0. Reset theme
-    viz_utils.set_theme(THEME)
-
-    # 5. Create confusion matrix plot
-    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-    # 5.1 Plot confusion matrix for most confident predictions
-    plot_confusion_matrix(df_pred, filter_confident=True, ax=ax1, **hparams)
-    # 5.2 Plot confusion matrix for all predictions
-    plot_confusion_matrix(df_pred, filter_confident=False, ax=ax2, **hparams)
-    plt.tight_layout()
-    plt.savefig(os.path.join(inference_dir, f"{dset}_confusion_matrix.png"))
-
-    # 5.3 Print confusion matrix for all predictions
-    print_confusion_matrix(df_pred, **hparams)
-
-    # 6. Print reasons for misclassification of most confident predictions
-    if not hparams.get("label_part"):
-        check_misclassifications(df_pred,
-                                 relative_side=hparams.get("relative_side"))
-
-    # 7. Show randomly chosen side predictions for full sequences
-    show_example_side_predictions(df_pred,
-                                  relative_side=hparams.get("relative_side"),
-                                  label_part=hparams.get("label_part"))
-
-    # 9. Plot embeddings with labels
+    # Plot embeddings with labels
+    # NOTE: Disabled for now
     plot_umap.main(
         exp_name,
         label_part=hparams.get("label_part"),
         dset=dset)
 
-    # 10. Close all open figures
+    # Close all open figures
     plt.close("all")
 
 

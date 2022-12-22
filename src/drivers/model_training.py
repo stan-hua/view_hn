@@ -176,7 +176,7 @@ def init(parser):
 
     # Data arguments
     parser.add_argument("--label_part", default=None,
-                        choices=("side", "plane"),
+                        choices=constants.LABEL_PARTS,
                         help=arg_help["label_part"])
     parser.add_argument("--hospital", default="sickkids",
                         choices=constants.HOSPITALS,

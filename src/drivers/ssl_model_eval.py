@@ -281,7 +281,9 @@ def main(args):
                            "model directory!")
 
     # Get othe keyword arguments for SSL eval model training
-    train_kwargs = {k:v for k,v in vars(args).items() if k != "exp_name"}
+    train_kwargs = {
+        k:v for k,v in vars(args).items() if k not in ["exp_name", "dset"]
+    }
 
     # Train all evaluation models for pretrained SSL model
     train_eval_models(args.exp_name, **train_kwargs)
