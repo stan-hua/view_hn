@@ -78,15 +78,15 @@ def init(parser):
         "exp_name": "Base name of experiment (for SSL trained)",
         "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
                          "from another SSL eval model.",
-        "dset": "Specific split of data available during training. One of "
-                "(train/val/test)",
+        "dset": "List of dataset split or test dataset name to evaluate",
     }
 
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         required=True)
     parser.add_argument("--from_ssl_eval", action="store_true",
                         help=arg_help["from_ssl_eval"])
-    parser.add_argument("--dset", default=constants.DEFAULT_EVAL_DSET,
+    parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
+                        nargs='+',
                         help=arg_help["dset"])
 
 
@@ -289,7 +289,8 @@ def main(args):
     train_eval_models(args.exp_name, **train_kwargs)
 
     # Analyze results of evaluation models
-    analyze_preds(args.exp_name, dset=args.dset)
+    for dset in args.dset:
+        analyze_preds(args.exp_name, dset=dset)
 
 
 if __name__ == "__main__":

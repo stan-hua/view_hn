@@ -579,7 +579,7 @@ def main(model,
     label_part : str, optional
         Specific part of view label (e.g., plane/side), by default None.
     dset : str, optional
-        Dataset split whose embeddings to plot, by default
+        Dataset split or test dataset name, whose embeddings to plot, by default
         constants.DEFAULT_EVAL_DSET
     """
     # Load embeddings

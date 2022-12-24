@@ -128,16 +128,23 @@ def get_dset_metadata(dm, dset=constants.DEFAULT_EVAL_DSET):
     ----------
     dm : pl.LightningDataModule
         Hyperparameters used in model training run, used to load exact dset
-        split.
+        split
     dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        Specific split of dataset, or name of test set. If not one of (train,
+        val, test), assume "train"., by default constants.DEFAULT_EVAL_DSET.
 
     Returns
     -------
     pandas.DataFrame
         Metadata of each image in the dset split
     """
+    # Coerce to train, if not valid
+    # NOTE: This case is for non-standard dset names (i.e., external test sets)
+    if dset not in ("train", "val", "test"):
+        LOGGER.warning(f"`{dset}` is not a valid data split. Assuming train "
+                       "set is desired...")
+        dset = "train"
+
     # Get filename and label of dset split data from data module
     df_dset = pd.DataFrame({
         "filename": dm.dset_to_paths[dset],
@@ -1085,15 +1092,18 @@ def bootstrap_metric(df_pred,
         df_pred["label"], df_pred["pred"],
         seed=seed)
 
-    # Calculate empirical CI bounds
-    ci_bounds = bootstrap.conf_int(
-        func=metric_func,
-        reps=n_bootstrap,
-        method='bca',
-        size=1-alpha,
-        tail='two').flatten()
-    # Round to 4 decimal places
-    ci_bounds = np.round(ci_bounds, 4)
+    try:
+        # Calculate empirical CI bounds
+        ci_bounds = bootstrap.conf_int(
+            func=metric_func,
+            reps=n_bootstrap,
+            method='bca',
+            size=1-alpha,
+            tail='two').flatten()
+        # Round to 4 decimal places
+        ci_bounds = np.round(ci_bounds, 4)
+    except RuntimeError: # NOTE: May occur if all labels are predicted correctly
+        ci_bounds = np.nan, np.nan
 
     return exact_metric, tuple(ci_bounds)
 
@@ -1507,6 +1517,34 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
     return np.mean(scores)
 
 
+def create_overwrite_hparams(dset):
+    """
+    If `dset` provided is for an external test set, return hyperparameters to
+    overwrite experiment hyperparameters to load test data for evaluation.
+
+    Parameters
+    ----------
+    dset : str
+        Dataset split (train/val/test), or test dataset name (stanford)
+
+    Returns
+    -------
+    dict
+        Contains hyperparameters to overwrite, if necessary
+    """
+    overwrite_hparams = {}
+
+    if dset == "stanford":
+        overwrite_hparams = {
+            "hospital": "stanford",
+            "train_val_split": 1.0,
+            "train_test_split": 1.0,
+            "test": False,
+        }
+
+    return overwrite_hparams
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -1655,12 +1693,12 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
     dm = model_training.setup_data_module(hparams, self_supervised=False)
 
     # 4. Create a DataLoader
-    if dset == "train":
-        dataloader = dm.train_dataloader()
+    if dset == "test":
+        dataloader = dm.test_dataloader()
     elif dset == "val":
         dataloader = dm.val_dataloader()
     else:
-        dataloader = dm.test_dataloader()
+        dataloader = dm.train_dataloader()
 
     # 5. Extract embeddings and save them
     embed.extract_embeds(
@@ -1746,10 +1784,13 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
 
     # Plot embeddings with labels
     # NOTE: Disabled for now
-    plot_umap.main(
-        exp_name,
-        label_part=hparams.get("label_part"),
-        dset=dset)
+    # plot_umap.main(
+    #     exp_name,
+    #     label_part=hparams.get("label_part"),
+    #     dset=dset,
+    #     sickkids=(dset in ("train", "val", "test")),
+    #     stanford=(dset == "stanford"),
+    # )
 
     # Close all open figures
     plt.close("all")
@@ -1763,11 +1804,14 @@ if __name__ == '__main__':
     # 1. Parse arguments
     ARGS = PARSER.parse_args()
 
-    # 2. Perform inference
-    infer_dset(exp_name=ARGS.exp_name, dset=ARGS.dset)
+    # 2. If dset is "stanford", overwrite parameters
+    OVERWRITE_HPARAMS = create_overwrite_hparams(ARGS.dset)
 
-    # 3. Extract embeddings
-    embed_dset(exp_name=ARGS.exp_name, dset=ARGS.dset)
+    # 3. Perform inference
+    infer_dset(exp_name=ARGS.exp_name, dset=ARGS.dset, **OVERWRITE_HPARAMS)
 
-    # 4. Evaluate predictions and embeddings
+    # 4. Extract embeddings
+    embed_dset(exp_name=ARGS.exp_name, dset=ARGS.dset, **OVERWRITE_HPARAMS)
+
+    # 5. Evaluate predictions and embeddings
     analyze_dset_preds(exp_name=ARGS.exp_name, dset=ARGS.dset)
