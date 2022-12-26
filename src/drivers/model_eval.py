@@ -108,11 +108,11 @@ def init(parser):
     """
     arg_help = {
         "exp_name": "Name of experiment (to evaluate)",
-        "dset": "Specific split of data available during training. One of "
-                "(train/val/test)",
+        "dset": "List of dataset split or test dataset name to evaluate",
     }
     parser.add_argument("--exp_name", help=arg_help["exp_name"], required=True)
-    parser.add_argument("--dset", default=constants.DEFAULT_EVAL_DSET,
+    parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
+                        nargs='+',
                         help=arg_help["dset"])
 
 
@@ -1804,14 +1804,17 @@ if __name__ == '__main__':
     # 1. Parse arguments
     ARGS = PARSER.parse_args()
 
-    # 2. If dset is "stanford", overwrite parameters
-    OVERWRITE_HPARAMS = create_overwrite_hparams(ARGS.dset)
+    # Iterate over all specified eval dsets
+    for DSET in ARGS.dset:
+        # 2. If dset is "stanford", overwrite parameters
+        OVERWRITE_HPARAMS = create_overwrite_hparams(DSET)
 
-    # 3. Perform inference
-    infer_dset(exp_name=ARGS.exp_name, dset=ARGS.dset, **OVERWRITE_HPARAMS)
+        # 3. Perform inference
+        infer_dset(exp_name=ARGS.exp_name, dset=DSET, **OVERWRITE_HPARAMS)
 
-    # 4. Extract embeddings
-    embed_dset(exp_name=ARGS.exp_name, dset=ARGS.dset, **OVERWRITE_HPARAMS)
+        # 4. Extract embeddings
+        # NOTE: Disabled for now
+        # embed_dset(exp_name=ARGS.exp_name, dset=DSET, **OVERWRITE_HPARAMS)
 
-    # 5. Evaluate predictions and embeddings
-    analyze_dset_preds(exp_name=ARGS.exp_name, dset=ARGS.dset)
+        # 5. Evaluate predictions and embeddings
+        analyze_dset_preds(exp_name=ARGS.exp_name, dset=DSET)
