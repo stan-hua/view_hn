@@ -87,7 +87,9 @@ class MoCoDataModule(UltrasoundDataModule):
         # NOTE: If same label, each batch must be images from the same sequence
         if self.same_label:
             full_seq = True
-            # NOTE: Sampler conflicts with shuffle=True
+
+        # NOTE: Sampler conflicts with shuffle=True
+        if full_seq:
             default_dataloader_params["shuffle"] = False
 
         # Pass UltrasoundDataModule arguments

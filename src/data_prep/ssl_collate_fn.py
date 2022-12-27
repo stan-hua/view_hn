@@ -48,8 +48,17 @@ class SimCLRCollateFunction(lightly.data.collate.BaseCollateFunction):
                     metadata_accum[key] = []
                 metadata_accum[key].append(val)
 
+        # Get images
+        # CASE 1: If batch is 1 US sequence, containing multiple US images
+        if len(batch) == 1 and len(batch[0][0]) > 1:
+            imgs = batch[0][0]
+            batch_size = len(batch[0][0])
+        # CASE 2: If batch is random US images from multiple seqs
+        else:
+            imgs = [data[0] for data in batch]
+
         # Perform random augmentation on each image twice
-        X_transformed = [self.transform(batch[i % batch_size][0]).unsqueeze_(0)
+        X_transformed = [self.transform(imgs[i % batch_size]).unsqueeze_(0)
             for i in range(2 * batch_size)]
 
         # Tuple of paired transforms
