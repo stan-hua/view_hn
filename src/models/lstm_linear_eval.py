@@ -25,7 +25,6 @@ class LSTMLinearEval(pl.LightningModule):
                  img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=512, bidirectional=True,
-                 extract_features=False,
                  *args, **kwargs):
         """
         Initialize LSTMLinearEval object.
@@ -63,15 +62,13 @@ class LSTMLinearEval(pl.LightningModule):
             Dimension/size of hidden layers, by default 512
         bidirectional : bool, optional
             If True, trains a bidirectional LSTM, by default True
-        extract_features : bool, optional
-            If True, forward pass returns model output after LSTM.
         """
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
         self.save_hyperparameters(
             "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
-            "n_lstm_layers", "hidden_dim", "bidirectional", "extract_features",
+            "n_lstm_layers", "hidden_dim", "bidirectional",
             "conv_backbone_output_dim", "freeze_weights",
              *list([k for k,v in kwargs.items() if \
                 not isinstance(v, torch.nn.Module)]))
@@ -98,7 +95,7 @@ class LSTMLinearEval(pl.LightningModule):
         # Define classification layer
         multiplier = 2 if self.hparams.bidirectional else 1
         size_after_lstm = self.hparams.hidden_dim * multiplier
-        self._fc = torch.nn.Linear(size_after_lstm, num_classes)
+        self.fc = torch.nn.Linear(size_after_lstm, num_classes)
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
@@ -158,8 +155,8 @@ class LSTMLinearEval(pl.LightningModule):
         x = x.view(1, seq_len, -1)
         x, _ = self.temporal_backbone(x)
 
-        if not self.hparams.extract_features:
-            x = self._fc(x)
+        # Linear layer
+        x = self.fc(x)
 
         # Remove extra dimension added for LSTM
         x = x.squeeze(dim=0)
