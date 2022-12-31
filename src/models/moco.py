@@ -17,6 +17,9 @@ from lightly.models.modules.heads import MoCoProjectionHead
 from lightly.models.utils import (batch_shuffle, batch_unshuffle, 
                                   deactivate_requires_grad, update_momentum)
 
+# Custom libraries
+from src.loss.soft_ntx_ent_loss import SoftNTXentLoss
+
 
 ################################################################################
 #                               MoCo Model Class                               #
@@ -31,6 +34,7 @@ class MoCo(pl.LightningModule):
                  momentum=0.9, weight_decay=0.0005,
                  memory_bank_size=4096, temperature=0.1,
                  exclude_momentum_encoder=False,
+                 same_label=False,
                  extract_features=False, *args, **kwargs):
         """
         Initialize MoCo object.
@@ -58,10 +62,16 @@ class MoCo(pl.LightningModule):
         exclude_momentum_encoder : bool, optional
             If True, uses primary (teacher) encoders for encoding keys. Defaults
             to False.
+        same_label : bool, optional
+            If True, uses labels to mark same-label samples as positives instead
+            of supposed negatives. Defaults to False.
         extract_features : bool, optional
             If True, forward pass returns model output before penultimate layer.
         """
         super().__init__()
+
+        # Flag, if same-label sampling
+        self.same_label = same_label
 
         # Instantiate EfficientNet
         self.model_name = "efficientnet-b0"
@@ -86,9 +96,15 @@ class MoCo(pl.LightningModule):
         deactivate_requires_grad(self.projection_head_momentum)
 
         # Define loss (NT-Xent Loss with memory bank)
-        self.loss = lightly.loss.NTXentLoss(
-            temperature=temperature,
-            memory_bank_size=memory_bank_size)
+        if not self.same_label:
+            self.loss = lightly.loss.NTXentLoss(
+                temperature=temperature,
+                memory_bank_size=memory_bank_size)
+        else:
+            # NOTE: With same-label positive sampling, attempts to learn
+            #       features, such that any sample of the same label are
+            #       equally likely distinguished
+            self.loss = SoftNTXentLoss(temperature=temperature)
 
 
     def configure_optimizers(self):
@@ -135,7 +151,7 @@ class MoCo(pl.LightningModule):
         torch.FloatTensor
             Loss for training batch
         """
-        (x_q, x_k), _ = train_batch
+        (x_q, x_k), metadata = train_batch
 
         # Update momentum
         if not self.hparams.exclude_momentum_encoder:
@@ -159,7 +175,12 @@ class MoCo(pl.LightningModule):
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
-        loss = self.loss(q, k)
+        if not self.same_label:
+            loss = self.loss(q, k)
+        else:
+            # Get label
+            labels = metadata["label"]
+            loss = self.loss(q, k, labels)
 
         self.log("train_loss", loss)
 
@@ -184,7 +205,7 @@ class MoCo(pl.LightningModule):
         torch.FloatTensor
             Loss for validation batch
         """
-        (x_q, x_k), _ = val_batch
+        (x_q, x_k), metadata = val_batch
 
         # Update momentum
         if not self.hparams.exclude_momentum_encoder:
@@ -208,7 +229,12 @@ class MoCo(pl.LightningModule):
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
-        loss = self.loss(q, k)
+        if not self.same_label:
+            loss = self.loss(q, k)
+        else:
+            # Get label
+            labels = metadata["label"]
+            loss = self.loss(q, k, labels)
 
         self.log("val_loss", loss)
 

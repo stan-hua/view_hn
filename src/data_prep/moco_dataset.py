@@ -107,13 +107,15 @@ class MoCoDataModule(UltrasoundDataModule):
         ])
 
         # Determine collate function
-        if self.same_label:
-            self.collate_fn = ssl_collate_fn.SameLabelCollateFunction(
-                self.transforms)
-        else:
-            # Creates two augmentation from the same image
-            self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
-                self.transforms)
+        # TODO: Remove this, if SoftNTXentLoss works fine
+        # if self.same_label:
+        #     self.collate_fn = ssl_collate_fn.SameLabelCollateFunction(
+        #         self.transforms)
+        # else:
+
+        # Creates two augmentation from the same image
+        self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
+            self.transforms)
 
 
     def train_dataloader(self):

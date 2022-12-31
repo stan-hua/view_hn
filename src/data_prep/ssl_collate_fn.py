@@ -46,7 +46,21 @@ class SimCLRCollateFunction(lightly.data.collate.BaseCollateFunction):
             for key, val in metadata.items():
                 if key not in metadata_accum:
                     metadata_accum[key] = []
-                metadata_accum[key].append(val)
+
+                if not isinstance(val, str):
+                    try:
+                        metadata_accum[key].extend(val)
+                    except:
+                        metadata_accum[key].append(val)
+                else:
+                    metadata_accum[key].append(val)
+
+        # Convert metadata lists to torch tensors
+        for key, val_list in metadata_accum.items():
+            try:
+                metadata_accum[key] = torch.Tensor(val_list)
+            except:
+                metadata_accum[key] = np.array(val_list)
 
         # Get images
         # CASE 1: If batch is 1 US sequence, containing multiple US images
@@ -115,9 +129,12 @@ class SameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
                 else:
                     metadata_accum[key].append(val)
 
-        # Convert metadata lists to arrays
+        # Convert metadata lists to torch tensors
         for key, val_list in metadata_accum.items():
-            metadata_accum[key] = np.array(val_list)
+            try:
+                metadata_accum[key] = torch.Tensor(val_list)
+            except:
+                metadata_accum[key] = np.array(val_list)
 
         # Group by label
         # NOTE: Precondition that label exists

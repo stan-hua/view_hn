@@ -42,9 +42,6 @@ class SoftNTXentLoss:
 
     """
 
-    # TODO: Add flag to set soft vs. hard labeling
-    #       Hard labels only sets 1 value as the label
-    #       Soft labels sets all possible labels with an equal probability
     def __init__(self, temperature: float = 0.5):
         self.temperature = temperature
         self.cross_entropy = nn.CrossEntropyLoss(reduction="mean")
@@ -52,6 +49,14 @@ class SoftNTXentLoss:
         if abs(self.temperature) < 1e-8:
             raise ValueError('Illegal temperature: abs({}) < 1e-8'
                              .format(self.temperature))
+
+
+    def __call__(self, *args, **kwargs):
+        """
+        Redirect to function for forward pass.
+        """
+        return self.forward(*args, **kwargs)
+
 
     def forward(self, out0, out1, labels):
         """
@@ -97,8 +102,7 @@ class SoftNTXentLoss:
             equal_prob = 1 / same_label_mask.sum()
 
             # Create soft labels
-            soft_labels_i = torch.FloatTensor([0.] * len(same_label_mask),
-                                              device=device)
+            soft_labels_i = torch.zeros(len(same_label_mask), device=device)
             soft_labels_i[same_label_mask] = equal_prob
 
             # Store soft labels
@@ -110,17 +114,3 @@ class SoftNTXentLoss:
         loss = self.cross_entropy(logits, soft_labels)
 
         return loss
-
-
-if __name__ == "__main__":
-    # Example data
-    out1 = torch.stack([torch.Tensor([i] * 32) for i in range(6)])
-    out2 = torch.stack([torch.Tensor([i] * 32) for i in range(6)])
-    out2[3:5, :] = 0.
-    labels = torch.Tensor([0, 1, 2, 0, 0, 5])
-
-    # Instantiate loss function
-    loss_fn = SoftNTXentLoss()
-
-    # Calculate soft label loss
-    loss_fn.forward(out1, out2, labels)
