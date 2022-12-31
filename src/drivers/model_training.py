@@ -275,7 +275,7 @@ def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
-def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
+def run(hparams, dm, results_dir, train=True, test=True, fold=0,
         checkpoint=True, early_stopping=False, version_name="1"):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
@@ -287,8 +287,6 @@ def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
         testing
     dm : pl.LightningDataModule
         Data module, which already called .setup()
-    model_cls : class
-        Class reference to model, used to instantiate a pl.LightningModule
     results_dir : str
         Path to directory containing trained model and/or test results
     train : bool, optional
@@ -316,8 +314,10 @@ def run(hparams, dm, model_cls, results_dir, train=True, test=True, fold=0,
     # Directory for current experiment
     experiment_dir = f"{results_dir}/{version_name}/{fold}"
 
+    # Get model class
+    model_cls, model_cls_kwargs = load_model.get_model_cls(hparams)
     # Instantiate model
-    model = model_cls(**hparams)
+    model = model_cls(**hparams, **model_cls_kwargs)
 
     # Loggers
     csv_logger = FriendlyCSVLogger(results_dir, name=version_name,
@@ -389,7 +389,8 @@ def main(args):
     # 0. Set up hyperparameters
     hparams = {
         "img_size": constants.IMG_SIZE,
-        "num_classes": len(constants.LABEL_PART_TO_CLASSES[args.label_part])}
+        "num_classes": \
+            len(constants.LABEL_PART_TO_CLASSES[args.label_part]["classes"])}
     hparams.update(vars(args))
 
     # 0. Arguments for experiment
@@ -405,17 +406,14 @@ def main(args):
     # 1. Set up data module
     dm = setup_data_module(hparams)
 
-    # 2. Specify model class
-    model_cls = load_model.get_model_cls(hparams)
-
-    # 3.1 Run experiment
+    # 2.1 Run experiment
     if hparams["cross_val_folds"] == 1:
-        run(hparams, dm, model_cls, constants.DIR_RESULTS, **experiment_hparams)
-    # 3.2 Run experiment  w/ kfold cross-validation)
+        run(hparams, dm, constants.DIR_RESULTS, **experiment_hparams)
+    # 2.2 Run experiment  w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)
-            run(hparams, dm, model_cls, constants.DIR_RESULTS, fold=fold_idx,
+            run(hparams, dm, constants.DIR_RESULTS, fold=fold_idx,
                 **experiment_hparams)
 
 

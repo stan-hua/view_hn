@@ -9,6 +9,7 @@ Note: `hparams` is a direct dependence on arguments in `model_training.py`.
 # Standard libraries
 import logging
 import os
+from collections import defaultdict
 from pathlib import Path
 
 # Non-standard libraries
@@ -23,6 +24,7 @@ from src.models.cpc import CPC
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_lstm_multi import EfficientNetLSTMMulti
 from src.models.efficientnet_pl import EfficientNetPL
+from src.models.ensemble_lstm_linear_eval import EnsembleLSTMLinear
 from src.models.linear_eval import LinearEval
 from src.models.lstm_linear_eval import LSTMLinearEval
 from src.models.moco import MoCo
@@ -44,6 +46,7 @@ SSL_NAME_TO_MODEL_CLS = {
     # Evaluation models
     "linear": LinearEval,
     "linear_lstm": LSTMLinearEval,
+    "ensemble_linear_lstm": EnsembleLSTMLinear,
 }
 
 
@@ -65,65 +68,45 @@ def get_model_cls(hparams):
 
     Returns
     -------
-    class
-        Model class
+    tuple of (class, dict) 
+        Model class, and dict of keyword arguments needed to instantiate class
     """
+    # Accumulate arguments, needed to instantiate class
+    model_cls_kwargs = {}
+
     # For self-supervised (SSL) image-based model
     if hparams.get("self_supervised"):
-        # If training SSL
         ssl_model = hparams.get("ssl_model", "moco")
         model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
-        # If not evaluating an SSL method
+
+        # If training SSL (not evaluating an SSL-pretrained model)
         if not (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
-            return model_cls
+            return model_cls, model_cls_kwargs
 
-        # If loading another SSL eval model
-        extra_model_kwargs = {}
-        if hparams.get("from_ssl_eval"):
-            # Instantiate conv. model, if required
-            extra_model_kwargs["conv_backbone"] = EfficientNet.from_name(
-                hparams.get("model_name", "efficientnet-b0"),
-                image_size=hparams.get("img_size", (256, 256)),
-                include_top=False)
+        # Check if loading backbones from multipe SSL-finetuned models
+        multi_backbone = isinstance(hparams["ssl_ckpt_path"], list) and \
+            len(hparams["ssl_ckpt_path"]) > 1
 
-        # If no SSL checkpoint path provided, assume MoCo
-        if not hparams["ssl_ckpt_path"]:
-            hparams["ssl_ckpt_path"] = constants.MOCO_CKPT_PATH
+        # Load backbones from ssl checkpoint path/s, provided in hyperparameters
+        backbone_dict = extract_backbones_from_ssl(hparams)
 
-        # Load pretrained model
-        try:
-            pretrained_model = model_cls.load_from_checkpoint(
-                hparams["ssl_ckpt_path"], **extra_model_kwargs)
-        except Exception as error_msg:
-            LOGGER.warning(error_msg)
-            rename_torch_module(hparams["ssl_ckpt_path"])
-            LOGGER.info("Renamed model module names!")
-            pretrained_model = model_cls.load_from_checkpoint(
-                checkpoint_path=hparams["ssl_ckpt_path"], **extra_model_kwargs)
-
-        # Get convolutional backbone
-        # NOTE: Pretrained backbone/s, needs to be inserted as an argument
-        for conv_backbone_name in ["conv_backbone", "backbone"]:
-            if hasattr(pretrained_model, conv_backbone_name):
-                hparams["conv_backbone"] = \
-                    getattr(pretrained_model, conv_backbone_name)
-                break
-        if "conv_backbone" not in hparams:
-            raise RuntimeError("Could not find `conv_backbone` for model: "
-                                f"{ssl_model}!")
-
-        # Get temporal backbone (if TCLR)
-        if hparams["ssl_eval_linear_lstm"] and \
-                hasattr(pretrained_model, "temporal_backbone"):
-            temporal_backbone = pretrained_model.temporal_backbone
-            hparams["temporal_backbone"] = temporal_backbone
-        if ssl_model == "tclr" and "temporal_backbone" not in hparams:
-            raise RuntimeError("Could not find `temporal_backbone` for "
-                                f"model: {ssl_model}!")
+        # Check temporal backbone (if TCLR)
+        if ssl_model == "tclr" and \
+                hparams["ssl_eval_linear_lstm"] and \
+                "temporal_backbone" not in backbone_dict:
+            raise RuntimeError("Could not find `temporal_backbone` for model!")
 
         # Specify eval. model to load
-        model_cls = LinearEval if hparams["ssl_eval_linear"] \
-            else LSTMLinearEval
+        if hparams["ssl_eval_linear"]:
+            model_cls = LinearEval
+        elif multi_backbone:
+            model_cls = EnsembleLSTMLinear
+        else:
+            model_cls = LSTMLinearEval
+
+        # NOTE: Backbones need to be added to load the model
+        model_cls_kwargs.update(backbone_dict)
+
     # For supervised full-sequence model
     elif not hparams.get("self_supervised") and hparams.get("full_seq"):
         # If multi-output
@@ -138,7 +121,7 @@ def get_model_cls(hparams):
             raise NotImplementedError("Supervised Multi-output model is not "
                                       "implemented for single images!")
         model_cls = EfficientNetPL
-    return model_cls
+    return model_cls, model_cls_kwargs
 
 
 def get_hyperparameters(hparam_dir=None, filename="hparams.yaml"):
@@ -248,15 +231,12 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     # 2.1 Get checkpoint path
     ckpt_path = find_best_ckpt_path(model_dir)
     # 2.2 Get model class and extra parameters for loading from checkpoint
-    hparams_copy = hparams.copy()
-    model_cls = get_model_cls(hparams)
-    extra_ckpt_params = {k:v for k,v in hparams.items() \
-        if k not in hparams_copy}
+    model_cls, model_cls_kwargs = get_model_cls(hparams)
     # 2.3 Load model
     try:
         model = model_cls.load_from_checkpoint(
             checkpoint_path=ckpt_path,
-            **extra_ckpt_params)
+            **model_cls_kwargs)
     except:
         rename_torch_module(ckpt_path)
         LOGGER.info("Renamed model module names!")
@@ -265,6 +245,132 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
             **extra_ckpt_params)
 
     return model
+
+
+def extract_backbones_from_ssl(hparams):
+    """
+    Given experiment hyperparameters with 1+ specified SSL checkpoints, extract
+    their conv. backbone and temporal backbone, if available.
+
+    Parameters
+    ----------
+    hparams : dict
+        Experiment parameters, containing 1+ SSL-pretrained model ckpt paths
+
+    Returns
+    -------
+    dict
+        Contains mapping of name to backbones (conv_backbone or
+        temporal_backbone)
+    """
+    hparams = hparams.copy()
+    ssl_ckpt_paths = hparams["ssl_ckpt_path"]
+
+    # If only one SSL ckpt path provided
+    if isinstance(ssl_ckpt_paths, list) and len(ssl_ckpt_paths) == 1:
+        hparams["ssl_ckpt_path"] = ssl_ckpt_paths[0]
+    if isinstance(hparams["ssl_ckpt_path"], str):
+        return extract_backbones_from_ssl_single(hparams)
+
+    # If multiple SSL ckpt path provided
+    backbone_dict = defaultdict(list)
+    for ssl_ckpt_path in ssl_ckpt_paths:
+        # Create copy of hyperparameters
+        hparams_copy = hparams.copy()
+        hparams_copy["ssl_ckpt_path"] = ssl_ckpt_path
+
+        # Extract backbones
+        backbone_dict_i = extract_backbones_from_ssl_single(hparams_copy)
+
+        # Accumulate backbones
+        for backbone_name in ["conv_backbone", "temporal_backbone"]:
+            if backbone_name in backbone_dict_i:
+                backbone_dict[f"{backbone_name}s"].append(
+                    backbone_dict_i[backbone_name])
+
+    return dict(backbone_dict)
+
+
+
+def extract_backbones_from_ssl_single(hparams):
+    """
+    Given experiment hyperparameters for 1 SSL-pretrained model, extract its
+    conv. backbone and temporal backbone, if available.
+
+    Parameters
+    ----------
+    hparams : dict
+        Experiment parameters
+
+    Returns
+    -------
+    dict
+        Contains mapping of name to backbones (conv_backbone or
+        temporal_backbone)
+    """
+    # If no SSL model class provided, assume MoCo
+    model_cls = SSL_NAME_TO_MODEL_CLS[hparams.get("ssl_model", "moco")]
+
+    # If no SSL checkpoint path provided, assume MoCo
+    ssl_ckpt_path = hparams.get("ssl_ckpt_path", constants.MOCO_CKPT_PATH)
+
+    # If loading another SSL eval model, instantiate required conv. backbones
+    extra_model_kwargs = {}
+    if hparams.get("from_ssl_eval"):
+        extra_model_kwargs["conv_backbone"] = create_conv_backbone(hparams)
+
+    # Accumulate backbones
+    backbone_dict = {}
+
+    # Load pretrained model
+    try:
+        pretrained_model = model_cls.load_from_checkpoint(
+            ssl_ckpt_path, **extra_model_kwargs)
+    except Exception as error_msg:
+        LOGGER.warning(error_msg)
+        rename_torch_module(ssl_ckpt_path)
+        LOGGER.info("Renamed model module names!")
+        pretrained_model = model_cls.load_from_checkpoint(
+            checkpoint_path=ssl_ckpt_path, **extra_model_kwargs)
+
+    # Get convolutional backbone
+    # NOTE: Pretrained backbone/s, needs to be inserted as an argument
+    for conv_backbone_name in ["conv_backbone", "backbone"]:
+        if hasattr(pretrained_model, conv_backbone_name):
+            backbone_dict["conv_backbone"] = \
+                getattr(pretrained_model, conv_backbone_name)
+            break
+    if "conv_backbone" not in hparams:
+        raise RuntimeError("Could not find `conv_backbone` for model!")
+
+    # Get temporal backbone
+    if hasattr(pretrained_model, "temporal_backbone"):
+        temporal_backbone = pretrained_model.temporal_backbone
+        backbone_dict["temporal_backbone"] = temporal_backbone
+
+    return backbone_dict
+
+
+def create_conv_backbone(hparams):
+    """
+    Return base EfficientNet convolutional backbone, based on parameters.
+
+    Parameters
+    ----------
+    hparams : dict
+        Experiment parameters
+
+    Returns
+    -------
+    torch.nn.Module
+        EfficientNet convolutional backbone
+    """
+    conv_backbone = EfficientNet.from_name(
+        hparams.get("model_name", "efficientnet-b0"),
+        image_size=hparams.get("img_size", (256, 256)),
+        include_top=False)
+
+    return conv_backbone
 
 
 ################################################################################
