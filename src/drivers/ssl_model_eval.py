@@ -30,7 +30,7 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
 # Label parts to evaluate
-LABEL_PARTS = ["side", "plane"]  # side, plane
+LABEL_PARTS = ["side", "plane"]  # side, plane, None
 
 # Model types to evaluate
 MODEL_TYPES = ["linear_lstm"]   # linear, linear_lstm
@@ -118,7 +118,14 @@ def train_model_with_kwargs(exp_name, **extra_args):
             continue
 
         args_list.append(f"--{name}")
-        if not isinstance(value, bool):
+        # If boolean, no need to add value
+        if isinstance(value, bool):
+            continue
+        # If list
+        if isinstance(value, list):
+            args_list.extend([str(v) for v in value])
+        # If any other type
+        else:
             args_list.append(str(value))
 
     # Parse arguments
