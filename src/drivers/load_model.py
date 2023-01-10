@@ -242,7 +242,7 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
         LOGGER.info("Renamed model module names!")
         model = model_cls.load_from_checkpoint(
             checkpoint_path=ckpt_path,
-            **extra_ckpt_params)
+            **model_cls_kwargs)
 
     return model
 
@@ -340,7 +340,7 @@ def extract_backbones_from_ssl_single(hparams):
             backbone_dict["conv_backbone"] = \
                 getattr(pretrained_model, conv_backbone_name)
             break
-    if "conv_backbone" not in hparams:
+    if "conv_backbone" not in backbone_dict:
         raise RuntimeError("Could not find `conv_backbone` for model!")
 
     # Get temporal backbone
