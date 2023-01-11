@@ -1022,14 +1022,6 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
                 df_pred_filtered["label"], df_pred_filtered["pred"]),
                 4)
 
-        # Bootstrap confidence interval
-        if ci:
-            point, (lower, upper) = bootstrap_metric(
-                df_pred=df_pred_filtered,
-                metric_func=skmetrics.accuracy_score,
-                **ci_kwargs)
-            metrics[f"Label Accuracy ({label})"] = f"{point} ({lower}, {upper})"
-
     # Overall accuracy
     metrics["Overall Accuracy"] = \
         round(skmetrics.accuracy_score(df_pred["label"], df_pred["pred"]), 4)
@@ -1052,6 +1044,60 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
         metrics[f"Label F1-Score ({unique_labels[i]})"] = round(f1_score, 4)
 
     return pd.Series(metrics)
+
+
+def calculate_metric_by_groups(df_pred, group_cols,
+                               metric_func=skmetrics.accuracy_score):
+    """
+    Group predictions by patient/sequence ID, calculate metric on each group
+    and get the average prediction
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Model predictions and labels
+    group_cols : list
+        List of columns in `df_pred` to group by
+    metric_func : function, optional
+        Reference to function that can be used to calculate a metric given the
+        (label, predictions), by default sklearn.metrics.accuracy_score
+
+    Returns
+    -------
+    str
+        Contains mean and standard deviation of calculated metric across groups
+    """
+    # Calculate metric on each group
+    grp_metrics = df_pred.groupby(by=group_cols).apply(
+        lambda df_grp: metric_func(df_grp["label"], df_grp["pred"]))
+
+    # Calculate average across groups
+    mean = round(grp_metrics.mean(), 4)
+    sd = round(grp_metrics.std(), 4)
+
+    return f"{mean} +/- {sd}"
+
+
+def calculate_hn_corr(df_pred):
+    """
+    Compute correlation between correct predictions and HN
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Model predictions. Each row contains a label,
+        prediction, and other patient and sequence-related metadata.
+
+    Returns
+    -------
+    float
+        Correlation between correctly predicted label and HN
+    """
+    # Filter for samples with HN label
+    df_hn = df_pred.dropna(subset=["hn"])
+    df_hn["correct"] = (df_hn.label == df_hn.pred)
+
+    return pearsonr(df_hn["hn"], df_hn["correct"])[0]
 
 
 def bootstrap_metric(df_pred,
@@ -1139,6 +1185,19 @@ def eval_calculate_all_metrics(df_pred):
         df_pred[df_pred["at_label_boundary"]])
     df_metrics_at_boundary.name = "At Label Boundary"
 
+    # 1.4 Most confident view (per label) in each sequence
+    df_confident = filter_most_confident(df_pred, local=False)
+    df_metrics_confident = calculate_metrics(df_confident, ci=True)
+    df_metrics_confident.name = "Most Confident"
+
+    # 1.5 Accuracy, grouped by patient
+    df_metrics_all["Accuracy (By Patient)"] = \
+        calculate_metric_by_groups(df_pred, ["id"])
+
+    # 1.6 Accuracy, grouped by sequence
+    df_metrics_all["Accuracy (By Seq)"] = \
+        calculate_metric_by_groups(df_pred, ["id", "visit"])
+
     # Filler columns
     filler = df_metrics_all.copy()
     filler[:] = ""
@@ -1151,6 +1210,8 @@ def eval_calculate_all_metrics(df_pred):
         df_metrics_w_hn, df_metrics_wo_hn,
         filler,
         df_metrics_at_boundary,
+        filler,
+        df_metrics_confident,
         ], axis=1)
 
     return df_metrics

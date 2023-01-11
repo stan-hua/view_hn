@@ -228,6 +228,32 @@ def gridplot_images_from_paths(paths, filename, title=None):
     gridplot_images(imgs, filename, title)
 
 
+def plot_hn_dist_by_side(df_metadata, title="(Side vs HN)"):
+    """
+    Creates count plot for number of images with HN vs w/o HN (stratified by
+    kidney side)
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image. This must include
+        side and HN.
+    title : str, optional
+        Optional title for plot, by default (Side vs HN)
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+    """
+    sns.countplot(
+        data=df_metadata[~df_metadata.hn.isna()],
+        x="side", hue="hn", order=["Left", "Right"])
+    plt.xlabel("Side")
+    plt.ylabel("Count")
+    plt.title(title)
+
+    return plt.gca()
+
 ################################################################################
 #                                    Tables                                    #
 ################################################################################
