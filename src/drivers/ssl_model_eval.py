@@ -82,6 +82,7 @@ def init(parser):
     }
 
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
+                        nargs="+",
                         required=True)
     parser.add_argument("--from_ssl_eval", action="store_true",
                         help=arg_help["from_ssl_eval"])
@@ -228,8 +229,22 @@ def analyze_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
                         label_part=label_part,
                         freeze_weights=freeze_weights)
 
-                model_eval.infer_dset(exp_eval_name, dset=dset)
-                model_eval.embed_dset(exp_eval_name, dset=dset)
+                # Create overwriting parameters, if external dataset desired
+                overwrite_hparams = model_eval.create_overwrite_hparams(dset)
+
+                # 1. Perform inference on dataset
+                model_eval.infer_dset(
+                    exp_eval_name,
+                    dset=dset,
+                    **overwrite_hparams)
+
+                # 2. Embed dataset
+                # model_eval.embed_dset(
+                #     exp_eval_name,
+                #     dset=dset,
+                #     **overwrite_hparams)
+
+                # 3. Analyze predictions
                 model_eval.analyze_dset_preds(exp_eval_name, dset=dset)
 
 
@@ -282,22 +297,25 @@ def main(args):
     args : argparse.Namespace
         Parsed arguments
     """
-    # Check that exp_name leads to a valid directory
-    if not os.path.exists(os.path.join(constants.DIR_RESULTS, args.exp_name)):
-        raise RuntimeError("`exp_name` provided does not lead to a SSL-trained "
-                           "model directory!")
+    # For each base SSL experiment name provided,
+    for exp_name in args.exp_name:
+        # Check that exp_name leads to a valid directory
+        if not os.path.exists(os.path.join(
+                constants.DIR_RESULTS, exp_name)):
+            raise RuntimeError("`exp_name` provided does not lead to a SSL-trained "
+                            "model directory!")
 
-    # Get othe keyword arguments for SSL eval model training
-    train_kwargs = {
-        k:v for k,v in vars(args).items() if k not in ["exp_name", "dset"]
-    }
+        # Get othe keyword arguments for SSL eval model training
+        train_kwargs = {
+            k:v for k,v in vars(args).items() if k not in ["exp_name", "dset"]
+        }
 
-    # Train all evaluation models for pretrained SSL model
-    train_eval_models(args.exp_name, **train_kwargs)
+        # Train all evaluation models for pretrained SSL model
+        train_eval_models(exp_name, **train_kwargs)
 
-    # Analyze results of evaluation models
-    for dset in args.dset:
-        analyze_preds(args.exp_name, dset=dset)
+        # Analyze results of evaluation models
+        for dset in args.dset:
+            analyze_preds(exp_name, dset=dset)
 
 
 if __name__ == "__main__":

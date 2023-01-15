@@ -291,7 +291,6 @@ def extract_backbones_from_ssl(hparams):
     return dict(backbone_dict)
 
 
-
 def extract_backbones_from_ssl_single(hparams):
     """
     Given experiment hyperparameters for 1 SSL-pretrained model, extract its
