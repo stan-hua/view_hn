@@ -9,7 +9,8 @@ Description: CNN-LSTM using an EfficientNet convolutional backbone. PyTorch
 import pytorch_lightning as pl
 import torch
 import torchmetrics
-from efficientnet_pytorch import EfficientNet, get_model_params
+from efficientnet_pytorch import (EfficientNet,
+    get_model_params, utils)
 from torch.nn import functional as F
 
 
@@ -20,7 +21,8 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
     def __init__(self, num_classes=5, img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=512, bidirectional=True,
-                 extract_features=False, *args, **kwargs):
+                 from_imagenet=False,
+                 *args, **kwargs):
         """
         Initialize EfficientNetLSTM object.
 
@@ -47,8 +49,8 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
             Dimension/size of hidden layers, by default 512
         bidirectional : bool, optional
             If True, trains a bidirectional LSTM, by default True
-        extract_features : bool, optional
-            If True, forward pass returns model output after LSTM.
+        from_imagenet : bool, optional
+            If True, load ImageNet pretrained weights, by default False.
         """
         # Instantiate EfficientNet
         self.model_name = "efficientnet-b0"
@@ -86,6 +88,17 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
                 exec(f"self.{dset}_auprc = torchmetrics.AveragePrecision()")
 
 
+    def load_imagenet_weights(self):
+        """
+        Load imagenet weights for convolutional backbone.
+        """
+        # NOTE: Modified utility function to ignore missing keys
+        utils.load_pretrained_weights(
+            self, self.model_name,
+            load_fc=False,
+            advprop=False)
+
+
     def forward(self, inputs):
         """
         Modified EfficientNet + LSTM forward pass.
@@ -111,8 +124,8 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         x = x.view(1, seq_len, -1)
         x, _ = self.temporal_backbone(x)
 
-        if not self.hparams.extract_features:
-            x = self.fc(x)
+        # Linear layer
+        x = self.fc(x)
 
         # Remove extra dimension added for LSTM
         x = x.squeeze(dim=0)

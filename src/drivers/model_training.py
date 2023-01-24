@@ -68,6 +68,9 @@ def init(parser):
         "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
                          "from another SSL eval model.",
 
+        "memory_bank_size": "Size of MoCo memory bank. Defaults to 4096.",
+        "temperature": "Temperature parameter for NT-Xent loss. Defaults "
+                       "to 0.1",
         "exclude_momentum_encoder": "If flagged, do not use Momentum Encoder "
                                     "when possible.",
 
@@ -84,10 +87,8 @@ def init(parser):
         "momentum": "Optimizer momentum",
         "weight_decay": "Weight decay during training",
         "multi_output": "If flagged, train multi-output supervised model.",
-
-        "memory_bank_size": "Size of MoCo memory bank. Defaults to 4096.",
-        "temperature": "Temperature parameter for NT-Xent loss. Defaults "
-                       "to 0.1",
+        "from_imagenet": "If flagged and supervised sequence model, trains "
+                         "model from ImageNet weights",
 
         "n_lstm_layers": "Number of LSTM layers",
         "hidden_dim": "Number of nodes in each LSTM hidden layer",
@@ -141,6 +142,11 @@ def init(parser):
                         help=arg_help["freeze_weights"])
     parser.add_argument("--from_ssl_eval", action="store_true",
                         help=arg_help["from_ssl_eval"])
+    # SSL Model arguments
+    parser.add_argument("--memory_bank_size", default=4096, type=int,
+                        help=arg_help["memory_bank_size"])
+    parser.add_argument("--temperature", default=0.1, type=float,
+                        help=arg_help["temperature"])
     # SSL Model MoCo-specific arguments
     parser.add_argument("--exclude_momentum_encoder", action="store_true",
                         help=arg_help["exclude_momentum_encoder"])
@@ -160,12 +166,9 @@ def init(parser):
     # Supervised model arguments
     parser.add_argument("--multi_output", action="store_true",
                         help=arg_help["multi_output"])
+    parser.add_argument("--from_imagenet", action="store_true",
+                        help=arg_help["from_imagenet"])
 
-    # Self-supervised model arguments
-    parser.add_argument("--memory_bank_size", default=4096, type=int,
-                        help=arg_help["memory_bank_size"])
-    parser.add_argument("--temperature", default=0.1, type=float,
-                        help=arg_help["temperature"])
     # LSTM-specific model arguments
     parser.add_argument("--n_lstm_layers", default=1, type=int,
                         help=arg_help["n_lstm_layers"])
@@ -318,6 +321,10 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
     model_cls, model_cls_kwargs = load_model.get_model_cls(hparams)
     # Instantiate model
     model = model_cls(**hparams, **model_cls_kwargs)
+
+    # If specified, attempt to load ImageNet pretrained weights
+    if hparams.get("from_imagenet") and hasattr(model, "load_imagenet_weights"):
+        model.load_imagenet_weights()
 
     # Loggers
     csv_logger = FriendlyCSVLogger(results_dir, name=version_name,
