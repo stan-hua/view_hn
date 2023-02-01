@@ -37,6 +37,7 @@ class MoCo(pl.LightningModule):
                  exclude_momentum_encoder=False,
                  same_label=False,
                  custom_ssl_loss=None,
+                 multi_objective=False,
                  *args, **kwargs):
         """
         Initialize MoCo object.
@@ -70,6 +71,9 @@ class MoCo(pl.LightningModule):
         custom_ssl_loss : str, optional
             One of (None, "soft", "same_label"). Specifies custom SSL loss to
             use. Defaults to None.
+        multi_objective : bool, optional
+            If True, optimizes for both supervised loss and SSL loss. Defaults
+            to False.
         """
         super().__init__()
 
@@ -99,21 +103,29 @@ class MoCo(pl.LightningModule):
         deactivate_requires_grad(self.projection_head_momentum)
 
         # Define loss (NT-Xent Loss with memory bank)
-        if not self.same_label or custom_ssl_loss is None:
+        if not self.same_label or self.hparams.custom_ssl_loss is None:
             self.loss = lightly.loss.NTXentLoss(
                 temperature=temperature,
                 memory_bank_size=memory_bank_size)
         # Below are custom losses for same-label contrastive learning
-        elif custom_ssl_loss == "soft":
+        elif self.hparams.custom_ssl_loss == "soft":
             # NOTE: With same-label positive sampling, attempts to learn
             #       features, such that any sample of the same label are
             #       equally likely distinguished
             self.loss = SoftNTXentLoss(temperature=temperature)
-        elif custom_ssl_loss == "same_label":
+        elif self.hparams.custom_ssl_loss == "same_label":
             self.loss = SameLabelConLoss()
         else:
             raise NotImplementedError(f"`custom_ssl_loss` must be one of (None, "
                                       "'soft', 'same_label')!")
+
+        # If multi-objective, add supervised loss + classification layer
+        if self.hparams.multi_objective:
+            # Define supervisd loss
+            self.cross_entropy_loss = torch.nn.CrossEntropy(reduction="mean")
+            # Define classification layer
+            num_classes = kwargs.get("num_classes", 5)
+            self.fc_1 = torch.nn.Linear(self.feature_dim, num_classes)
 
 
     def configure_optimizers(self):
@@ -184,12 +196,30 @@ class MoCo(pl.LightningModule):
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
+        # 1. SSL loss
         if not self.same_label or self.hparams.custom_ssl_loss is None:
             loss = self.loss(q, k)
         else:
             # Get label
             labels = metadata["label"]
             loss = self.loss(q, k, labels)
+
+        # 2. Optionally, include supervised loss
+        if self.hparams.multi_objective:
+            # First log SSL loss
+            self.log("train_ssl_loss", loss)
+
+            # NOTE: Supervised loss is calculated from both augmented batches
+            x = torch.concatenate([q, k])
+            x = self.fc_1(x)
+            sup_labels = torch.concatenate([metadata["label"]] * 2)
+
+            # Compute supervised loss
+            sup_loss = self.cross_entropy(x, sup_labels)
+            self.log("train_sup_loss", loss)
+
+            # Add to total loss
+            loss += sup_loss
 
         self.log("train_loss", loss)
 
@@ -238,12 +268,30 @@ class MoCo(pl.LightningModule):
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
+        # 1. SSL Loss
         if not self.same_label or self.hparams.custom_ssl_loss is None:
             loss = self.loss(q, k)
         else:
             # Get label
             labels = metadata["label"]
             loss = self.loss(q, k, labels)
+
+        # 2. Optionally, include supervised loss
+        if self.hparams.multi_objective:
+            # First log SSL loss
+            self.log("val_ssl_loss", loss)
+
+            # NOTE: Supervised loss is calculated from both augmented batches
+            x = torch.concatenate([q, k])
+            x = self.fc_1(x)
+            sup_labels = torch.concatenate([metadata["label"]] * 2)
+
+            # Compute supervised loss
+            sup_loss = self.cross_entropy(x, sup_labels)
+            self.log("val_sup_loss", loss)
+
+            # Add to total loss
+            loss += sup_loss
 
         self.log("val_loss", loss)
 
