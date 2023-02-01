@@ -80,6 +80,11 @@ def init(parser):
         "same_label": "If flagged, positive samples in SSL pretraining "
                       "are same-patient images with the same label. NOTE: This "
                       "logic conflicts with `memory_bank_size` > 0.",
+        "custom_collate": "Custom collate function to use for SSL pretraining. "
+                          "One of (None, 'same_label'). 'same_label' pairs "
+                          "images of the same label",
+        "custom_ssl_loss": "Custom SSL loss to use for pretraining. One of "
+                           "(None, 'soft', 'same_label')",
 
         "adam": "If flagged, uses Adam optimizer during training. Otherwise, "
                 "uses Stochastic Gradient Descent (SGD).",
@@ -150,6 +155,10 @@ def init(parser):
     # SSL Model MoCo-specific arguments
     parser.add_argument("--exclude_momentum_encoder", action="store_true",
                         help=arg_help["exclude_momentum_encoder"])
+    parser.add_argument("--custom_collate", default=None,
+                        help=arg_help["custom_collate"])
+    parser.add_argument("--custom_ssl_loss", default=None,
+                        help=arg_help["custom_ssl_loss"])
     # SSL Data - related arguments
     parser.add_argument("--full_seq", action="store_true",
                         help=arg_help["full_seq"])

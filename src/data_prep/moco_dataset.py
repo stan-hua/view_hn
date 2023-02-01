@@ -31,6 +31,7 @@ class MoCoDataModule(UltrasoundDataModule):
     def __init__(self, dataloader_params=None, df=None, img_dir=None,
                  full_seq=False, mode=3,
                  same_label=False,
+                 custom_collate=None,
                  **kwargs):
         """
         Initialize MoCoDataModule object.
@@ -60,6 +61,10 @@ class MoCoDataModule(UltrasoundDataModule):
         same_label : bool, optional
             If True, positive samples are same-patient images with the same
             label, by default False.
+        custom_collate : str, optional
+            One of (None, "same_label"). "same_label" pairs images of the same
+            label. Defaults to None, which is the regular SimCLR collate
+            function.
         **kwargs : dict
             Optional keyword arguments:
                 img_size : int or tuple of ints, optional
@@ -87,6 +92,10 @@ class MoCoDataModule(UltrasoundDataModule):
         # NOTE: If same label, each batch must be images from the same sequence
         if self.same_label:
             full_seq = True
+        # Ensure custom collate function is as expected
+        assert custom_collate in (None, "same_label"), \
+            "Invalid `custom_collate` provided! (%s)" % (custom_collate,)
+        self.custom_collate = custom_collate
 
         # NOTE: Sampler conflicts with shuffle=True
         if full_seq:
@@ -107,15 +116,16 @@ class MoCoDataModule(UltrasoundDataModule):
         ])
 
         # Determine collate function
-        # TODO: Remove this, if SoftNTXentLoss works fine
-        # if self.same_label:
-        #     self.collate_fn = ssl_collate_fn.SameLabelCollateFunction(
-        #         self.transforms)
-        # else:
-
-        # Creates two augmentation from the same image
-        self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
-            self.transforms)
+        # 1. Pairs same-label images
+        # NOTE: If a custom loss is enabled, this should be turned off
+        if self.same_label and self.custom_collate == "same_label" \
+                and not kwargs.get("custom_ssl_loss"):
+            self.collate_fn = ssl_collate_fn.SameLabelCollateFunction(
+                self.transforms)
+        else:
+        # 2. Pairs same-image pairs (different augmentation)
+            self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
+                self.transforms)
 
 
     def train_dataloader(self):

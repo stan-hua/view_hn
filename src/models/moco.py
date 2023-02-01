@@ -19,6 +19,7 @@ from lightly.models.utils import (batch_shuffle, batch_unshuffle,
 
 # Custom libraries
 from src.loss.soft_ntx_ent_loss import SoftNTXentLoss
+from src.loss.same_label_con_loss import SameLabelConLoss
 
 
 ################################################################################
@@ -35,7 +36,8 @@ class MoCo(pl.LightningModule):
                  memory_bank_size=4096, temperature=0.1,
                  exclude_momentum_encoder=False,
                  same_label=False,
-                 extract_features=False, *args, **kwargs):
+                 custom_ssl_loss=None,
+                 *args, **kwargs):
         """
         Initialize MoCo object.
 
@@ -65,8 +67,9 @@ class MoCo(pl.LightningModule):
         same_label : bool, optional
             If True, uses labels to mark same-label samples as positives instead
             of supposed negatives. Defaults to False.
-        extract_features : bool, optional
-            If True, forward pass returns model output before penultimate layer.
+        custom_ssl_loss : str, optional
+            One of (None, "soft", "same_label"). Specifies custom SSL loss to
+            use. Defaults to None.
         """
         super().__init__()
 
@@ -96,15 +99,21 @@ class MoCo(pl.LightningModule):
         deactivate_requires_grad(self.projection_head_momentum)
 
         # Define loss (NT-Xent Loss with memory bank)
-        if not self.same_label:
+        if not self.same_label or custom_ssl_loss is None:
             self.loss = lightly.loss.NTXentLoss(
                 temperature=temperature,
                 memory_bank_size=memory_bank_size)
-        else:
+        # Below are custom losses for same-label contrastive learning
+        elif custom_ssl_loss == "soft":
             # NOTE: With same-label positive sampling, attempts to learn
             #       features, such that any sample of the same label are
             #       equally likely distinguished
             self.loss = SoftNTXentLoss(temperature=temperature)
+        elif custom_ssl_loss == "same_label":
+            self.loss = SameLabelConLoss()
+        else:
+            raise NotImplementedError(f"`custom_ssl_loss` must be one of (None, "
+                                      "'soft', 'same_label')!")
 
 
     def configure_optimizers(self):
@@ -175,7 +184,7 @@ class MoCo(pl.LightningModule):
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
-        if not self.same_label:
+        if not self.same_label or self.hparams.custom_ssl_loss is None:
             loss = self.loss(q, k)
         else:
             # Get label
@@ -229,7 +238,7 @@ class MoCo(pl.LightningModule):
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
-        if not self.same_label:
+        if not self.same_label or self.hparams.custom_ssl_loss is None:
             loss = self.loss(q, k)
         else:
             # Get label
