@@ -6,7 +6,7 @@
 
 ## Package Layout
 
-**TIP**: For each model, see bottom-most functions to look at more high-level code.
+**TIP**: For each file, see bottom-most functions to look at more high-level code.
 
 **EXTRA TIP**: Modules under `...` are not required for the current training/evaluation flow.
 
