@@ -1248,7 +1248,11 @@ def eval_create_plots(df_pred, hparams, inference_dir,
     plt.savefig(os.path.join(inference_dir, f"{dset}_confusion_matrix.png"))
 
     # 1.3 Print confusion matrix for all predictions
-    print_confusion_matrix(df_pred, **hparams)
+    # NOTE: May error if the same label is predicted for all samples
+    try:
+        print_confusion_matrix(df_pred, **hparams)
+    except:
+        pass
 
     # 2. Print reasons for misclassification of most confident predictions
     if not hparams.get("label_part"):

@@ -8,10 +8,12 @@ Description: Used to train PyTorch models.
 import argparse
 import logging
 import os
+import random
 from datetime import datetime
 
 # Non-standard libraries
-import numpy as np 
+import numpy as np
+import torch
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
@@ -39,6 +41,9 @@ SSL_NAME_TO_DATA_MODULE = {
     "tclr": TCLRDataModule,
 }
 
+# Default random seed
+SEED = 20230201
+
 
 ################################################################################
 #                                Initialization                                #
@@ -55,6 +60,7 @@ def init(parser):
     # Help messages
     arg_help = {
         "exp_name": "Name of experiment",
+        "seed": "Random seed",
 
         "self_supervised": "If flagged, trains a MoCo model on US images.",
         "ssl_model": "Name of SSL model",
@@ -129,6 +135,8 @@ def init(parser):
     # General arguments
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         default=datetime.now().strftime("%m-%d-%Y %H-%M"))
+    parser.add_argument("--seed", help=arg_help["seed"],
+                        default=SEED)
 
     # SSL Model arguments
     parser.add_argument("--self_supervised", action="store_true",
@@ -284,6 +292,21 @@ def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
     return dm
 
 
+def set_seed(seed=0):
+    """
+    Set random seed for all models.
+
+    Parameters
+    ----------
+    seed : int
+        Random seed
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    LOGGER.info(f"Success! Set random seed: {seed}")
+
+
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
@@ -402,6 +425,9 @@ def main(args):
     args : argparse.Namespace
         Contains arguments needed to run experiments
     """
+    # 0. Set random seed
+    set_seed(args.seed)
+
     # 0. Set up hyperparameters
     hparams = {
         "img_size": constants.IMG_SIZE,

@@ -78,7 +78,10 @@ class SameLabelConLoss:
         Returns:
             Contrastive Cross Entropy Loss value.
         """
+        # Device
         device = out0.device
+        # Batch size
+        B = out0.size(dim=0)
 
         # Normalize the output to length 1
         # NOTE: This makes dot product on (out1, out2) -> cosine similarity
