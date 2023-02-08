@@ -89,9 +89,6 @@ class MoCoDataModule(UltrasoundDataModule):
 
         # Extra SSL flags
         self.same_label = same_label
-        # NOTE: If same label, each batch must be images from the same sequence
-        if self.same_label:
-            full_seq = True
         # Ensure custom collate function is as expected
         assert custom_collate in (None, "same_label"), \
             "Invalid `custom_collate` provided! (%s)" % (custom_collate,)
