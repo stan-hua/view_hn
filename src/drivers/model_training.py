@@ -305,9 +305,16 @@ def set_seed(seed=0):
     seed : int
         Random seed
     """
+    # Set random seeds
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+
+    # cudnn deterministic
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     LOGGER.info(f"Success! Set random seed: {seed}")
 
 
