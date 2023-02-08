@@ -73,6 +73,8 @@ def init(parser):
                           "classifier over the SSL-pretrained model.",
         "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
                          "from another SSL eval model.",
+        "from_exp_name": "If starting training from a pretrained model, provide"
+                         " model's experiment name.",
 
         "memory_bank_size": "Size of MoCo memory bank. Defaults to 4096.",
         "temperature": "Temperature parameter for NT-Xent loss. Defaults "
@@ -84,8 +86,8 @@ def init(parser):
         "relative_side": "If flagged, relabels side Left/Right to First/Second "
                          "based on which appeared first per sequence.",
         "same_label": "If flagged, positive samples in SSL pretraining "
-                      "are same-patient images with the same label. NOTE: This "
-                      "logic conflicts with `memory_bank_size` > 0.",
+                      "are images with the same label. NOTE: This logic "
+                      "conflicts with `memory_bank_size` > 0.",
         "custom_collate": "Custom collate function to use for SSL pretraining. "
                           "One of (None, 'same_label'). 'same_label' pairs "
                           "images of the same label",
@@ -155,6 +157,8 @@ def init(parser):
                         help=arg_help["freeze_weights"])
     parser.add_argument("--from_ssl_eval", action="store_true",
                         help=arg_help["from_ssl_eval"])
+    parser.add_argument("--from_exp_name",
+                        help=arg_help["from_exp_name"])
     # SSL Model arguments
     parser.add_argument("--memory_bank_size", default=4096, type=int,
                         help=arg_help["memory_bank_size"])
@@ -357,6 +361,32 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
     # If specified, attempt to load ImageNet pretrained weights
     if hparams.get("from_imagenet") and hasattr(model, "load_imagenet_weights"):
         model.load_imagenet_weights()
+    # If specified, start from a previously trained model
+    elif hparams.get("from_exp_name"):
+        pretrained_model = load_model.load_pretrained_from_exp_name(
+            hparams.get("from_exp_name"),
+            **model_cls_kwargs)
+        # CASE 1: If pretrained model is the same, replace with existing model
+        if type(model) == type(pretrained_model):
+            load_model.overwrite_model(model, src_model=pretrained_model)
+        # CASE 2: Update model weights with those from pretrained model
+        # CASE 2.1: Model weight names don't need to be changed
+        elif hparams.get("self_supervised"):
+            pretrained_state_dict = pretrained_model.state_dict()
+            # NOTE: SSL conv. backbone weights are prefixed by "conv_backbone."
+            pattern = r"(conv_backbone\..*)|(temporal_backbone\..*)|(fc\..*)"
+            pretrained_state_dict = load_model.prepend_prefix(
+                pretrained_state_dict, "conv_backbone.",
+                exclude_regex=pattern)
+            model = load_model.overwrite_model(
+                model,
+                src_state_dict=pretrained_state_dict)
+        # UNKNOWN CASE: Not supported case
+        else:
+            raise NotImplementedError
+
+    # TODO: Compile model for speed-up
+    # model = torch.compile(model)
 
     # Loggers
     csv_logger = FriendlyCSVLogger(results_dir, name=version_name,

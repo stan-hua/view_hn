@@ -9,6 +9,7 @@ Note: `hparams` is a direct dependence on arguments in `model_training.py`.
 # Standard libraries
 import logging
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -372,6 +373,95 @@ def create_conv_backbone(hparams):
     return conv_backbone
 
 
+def overwrite_model(dst_model, src_model=None, src_state_dict=None):
+    """
+    Given a (new) model, overwrite its existing parameters based on a source
+    model or its provided state dict.
+
+    Note
+    ----
+    One of `src_model` or `src_state_dict` must be provided.
+
+    Parameters
+    ----------
+    dst_model : torch.nn.Module
+        Model whose weights to overwrite
+    src_model : torch.nn.Module, optional
+        Pretrained model whose weights to use in overwriting, by default None
+    src_state_dict : dict, optional
+        Pretrained model's state dict, by default None
+
+    Returns
+    -------
+    torch.nn.Module
+        Model whose weights were overwritten (in-place)
+    """
+    # INPUT: Ensure at least one of `src_model` or `src_state_dict` is provided
+    assert src_model is not None or src_state_dict is not None, \
+        "At least one of `src_model` or `src_state_dict` must be provided!"
+
+    # Get model state dicts
+    pretrained_weights = src_state_dict if src_state_dict is not None \
+        else src_model.state_dict()
+    new_weights = dst_model.state_dict()
+
+    # Get names of overlapping weights
+    pretrained_weight_names = set(pretrained_weights.keys())
+    new_weight_names = set(new_weights.keys())
+    overlapping_weights = pretrained_weight_names.intersection(new_weight_names)
+
+    # Log skipped weights, due to incompatibility
+    missing_weights = list(pretrained_weight_names.difference(new_weight_names))
+    if missing_weights:
+        LOGGER.warning("Loading pretrained model, where the following weights "
+                       "were incompatible: \n\t%s",
+                       "\n\t".join(missing_weights))
+
+    # Overwrite overlapping weights with pretrained
+    for weight_name in list(overlapping_weights):
+        new_weights[weight_name] = pretrained_weights[weight_name]
+
+    # Update the model's weights
+    dst_model.load_state_dict(new_weights)
+
+    LOGGER.info("Loaded weights from pretrained model successfully!")
+    return dst_model
+
+
+def prepend_prefix(state_dict, prefix, exclude_regex=None):
+    """
+    Given a state dict, prepend prefix to every weight name.
+
+    Parameters
+    ----------
+    state_dict : dict
+        Model state dict for a torch.nn.Module object
+    prefix : str
+        Prefix to prepend to each weight name
+    exclude_regex : str, optional
+        Regex for weights to exclude, by default None
+
+    Returns
+    -------
+    dict
+        Modified state dict
+    """
+    # Create copy to avoid in-place modification
+    state_dict = state_dict.copy()
+
+    # Compile regex if provided
+    exclude_regex_pattern = re.compile(exclude_regex)
+
+    # Prepend prefix, for valid weight names
+    for weight_name in list(state_dict.keys()):
+        if exclude_regex_pattern.match(weight_name) is not None:
+            continue
+        new_weight_name = prefix + weight_name
+        state_dict[new_weight_name] = state_dict.pop(weight_name)
+
+    return state_dict
+
+
 ################################################################################
 #                                  Deprecated                                  #
 ################################################################################
@@ -393,24 +483,27 @@ def load_pretrained_from_model_name(model_name):
     weights = constants.MODEL_NAME_TO_WEIGHTS.get(model_name)
 
     if model_name == "cytoimagenet":
-        feature_extractor = EfficientNetB0(weights=weights,
+        model = EfficientNetB0(weights=weights,
                                            include_top=False,
                                            input_shape=(None, None, 3),
                                            pooling="avg")
     elif model_name == "imagenet":
-        feature_extractor = EfficientNetPL.from_pretrained(
+        model = EfficientNetPL.from_pretrained(
             model_name="efficientnet-b0")
     elif model_name == "cpc":
-        feature_extractor = CPC.load_from_checkpoint(weights)
+        model = CPC.load_from_checkpoint(weights)
     elif model_name == "moco":
-        feature_extractor = MoCo.load_from_checkpoint(weights)
+        model = MoCo.load_from_checkpoint(weights)
     elif model_name == "random":
         # Randomly initialized EfficientNet model
-        feature_extractor = EfficientNetPL()
+        model = EfficientNetPL()
     else:
         raise RuntimeError("Invalid model_name specified!")
 
-    return feature_extractor
+    # TODO: Compile for speed-up
+    # model = torch.compile(model)
+
+    return model
 
 
 def rename_torch_module(ckpt_path):
