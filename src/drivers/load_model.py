@@ -198,8 +198,8 @@ def find_best_ckpt_path(path_exp_dir):
         raise RuntimeError("No best epoch model checkpoint (.ckpt) found!")
 
     if len(ckpt_paths) > 1:
-        LOGGER.warning("More than 1 checkpoint file (.ckpt) found besides "
-                       "last.ckpt!")
+        raise RuntimeError("More than 1 checkpoint file (.ckpt) found besides "
+                           "last.ckpt!")
 
     return ckpt_paths[0]
 
