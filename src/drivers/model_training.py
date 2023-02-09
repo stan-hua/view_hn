@@ -99,6 +99,8 @@ def init(parser):
         "lr": "Learning rate of optimizer",
         "momentum": "Optimizer momentum",
         "weight_decay": "Weight decay during training",
+        "augment_training": "If flagged, add MoCo random augmentations.",
+
         "multi_output": "If flagged, train multi-output supervised model.",
         "from_imagenet": "If flagged and supervised sequence model, trains "
                          "model from ImageNet weights",
@@ -184,6 +186,8 @@ def init(parser):
                         help=arg_help["momentum"])
     parser.add_argument("--weight_decay", default=0.0005, type=float,
                         help=arg_help["weight_decay"])
+    parser.add_argument("--augment_training", action="store_true",
+                        help=arg_help["augment_training"])
     # Supervised model arguments
     parser.add_argument("--multi_output", action="store_true",
                         help=arg_help["multi_output"])
@@ -296,14 +300,17 @@ def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
     return dm
 
 
-def set_seed(seed=0):
+def set_seed(seed=0, include_algos=False):
     """
     Set random seed for all models.
 
     Parameters
     ----------
-    seed : int
-        Random seed
+    seed : int, optional
+        Random seed, by default 0
+    include_algos : bool, optional
+        If True, forces usage of deterministic algorithms at the cost of
+        performance, by default False.
     """
     # Set random seeds
     random.seed(seed)
@@ -311,9 +318,11 @@ def set_seed(seed=0):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
-    # cudnn deterministic
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    # Force deterministic algorithms
+    if include_algos:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.use_deterministic_algorithms(True)
 
     LOGGER.info(f"Success! Set random seed: {seed}")
 

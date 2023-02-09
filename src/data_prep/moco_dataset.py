@@ -32,6 +32,7 @@ class MoCoDataModule(UltrasoundDataModule):
                  full_seq=False, mode=3,
                  same_label=False,
                  custom_collate=None,
+                 augment_training=True,
                  **kwargs):
         """
         Initialize MoCoDataModule object.
@@ -65,6 +66,8 @@ class MoCoDataModule(UltrasoundDataModule):
             One of (None, "same_label"). "same_label" pairs images of the same
             label. Defaults to None, which is the regular SimCLR collate
             function.
+        augment_training : bool
+            If True, add random augmentations during training, by default True.
         **kwargs : dict
             Optional keyword arguments:
                 img_size : int or tuple of ints, optional
@@ -99,18 +102,12 @@ class MoCoDataModule(UltrasoundDataModule):
             default_dataloader_params["shuffle"] = False
 
         # Pass UltrasoundDataModule arguments
-        super().__init__(default_dataloader_params, df, img_dir, full_seq, mode,
-                         **kwargs)
+        super().__init__(
+            default_dataloader_params, df, img_dir, full_seq, mode,
+            augment_training=augment_training,
+            **kwargs)
         self.val_dataloader_params["batch_size"] = \
             default_dataloader_params["batch_size"]
-
-        # Random augmentations
-        self.transforms = T.Compose([
-            T.RandomAdjustSharpness(1.25, p=0.25),
-            T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
-            T.RandomRotation(15),
-            T.RandomResizedCrop(self.img_size, scale=(0.5, 1)),
-        ])
 
         # Determine collate function
         # 1. Pairs same-label images

@@ -87,7 +87,9 @@ class UltrasoundDataModule(pl.LightningDataModule):
     functionalities.
     """
     def __init__(self, dataloader_params=None, df=None, img_dir=None,
-                 full_seq=False, mode=3, **kwargs):
+                 full_seq=False, mode=3,
+                 augment_training=False,
+                 **kwargs):
         """
         Initialize UltrasoundDataModule object.
 
@@ -110,9 +112,11 @@ class UltrasoundDataModule(pl.LightningDataModule):
             If True, each item has all ordered images for one full
             ultrasound sequence (determined by patient ID and visit). If False,
             treats each image under a patient as independent, by default False.
-        mode : int
+        mode : int, optional
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
+        augment_training : bool, optional
+            If True, add random augmentations during training, by default False.
         **kwargs : dict
             Optional keyword arguments:
                 img_size : int or tuple of ints, optional
@@ -136,6 +140,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         self.dataset = None
         self.full_seq = full_seq
         self.mode = mode
+        self.augment_training = augment_training
         self.img_size = kwargs.get("img_size", 258)
         self.no_label = (self.df is None)   # flag to use UltrasoundDatasetDir
         self.label_part = kwargs.get("label_part")
@@ -210,6 +215,19 @@ class UltrasoundDataModule(pl.LightningDataModule):
             # Stores list of (train_idx, val_idx) for each fold
             self.cross_fold_indices = None
 
+        ########################################################################
+        #                            Augmentations                             #
+        ########################################################################
+        augmentations = []
+        if self.augment_training:
+            augmentations.extend([
+                T.RandomAdjustSharpness(1.25, p=0.25),
+                T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
+                T.RandomRotation(15),
+                T.RandomResizedCrop(self.img_size, scale=(0.5, 1)),
+            ])
+        self.transforms = T.Compose(augmentations)
+
 
     def setup(self, stage="fit"):
         """
@@ -266,6 +284,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
             mode=self.mode,
             label_part=self.label_part,
             split_label=self.split_label,
+            transforms=self.transforms,
         )
 
         # Create DataLoader with parameters specified
@@ -482,7 +501,8 @@ class UltrasoundDatasetDir(UltrasoundDataset):
     """
     Dataset to load images from a directory.
     """
-    def __init__(self, img_dir, full_seq=False, img_size=None, mode=3):
+    def __init__(self, img_dir, full_seq=False, img_size=None, mode=3,
+                 transforms=None):
         """
         Initialize UltrasoundDatasetDir object.
 
@@ -501,6 +521,8 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         mode : int
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
+        transforms : torchvision.transforms.Compose or Transforms, optional
+            If provided, perform transform on images loaded, by default None.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
@@ -530,9 +552,9 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         ########################################################################
         #                           Image Transforms                           #
         ########################################################################
-        transforms = []
+        transforms = [transforms] if transforms is not None else []
         if img_size:
-            transforms.append(T.Resize(img_size))
+            transforms.insert(0, T.Resize(img_size))
 
         self.transforms = T.Compose(transforms)
 
@@ -636,7 +658,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     Dataset to load images and labels from a DataFrame.
     """
     def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
-                 label_part=None, split_label=False):
+                 label_part=None, split_label=False,
+                 transforms=None):
         """
         Initialize UltrasoundDatasetDataFrame object.
 
@@ -669,6 +692,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         split_label : bool, optional
             If True, additionally provide both side/plane separately in metadata
             dict, by default False.
+        transforms : torchvision.transforms.Compose or Transforms, optional
+            If provided, perform transform on images loaded, by default None.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
@@ -713,9 +738,9 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         ########################################################################
         #                           Image Transforms                           #
         ########################################################################
-        transforms = []
+        transforms = [transforms] if transforms is not None else []
         if img_size:
-            transforms.append(T.Resize(img_size))
+            transforms.insert(0, T.Resize(img_size))
 
         # TODO: Try standardizing image
         # transforms.append(T.Normalize(mean=[0.5, 0.5, 0.5],
