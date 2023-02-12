@@ -164,6 +164,12 @@ class SameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         else:
             imgs = [data[0] for data in batch]
 
+            # Get shape of each image
+            shape = imgs[0].size()
+            # Expects image (1, 3, W, H)
+            if len(shape) == 5 and shape[0] == 1:
+                imgs = [img[0] for img in imgs]
+
         # Perform random augmentation on each image twice
         batch_size = len(imgs)
         X_transformed = [
