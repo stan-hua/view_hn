@@ -42,7 +42,7 @@ SSL_NAME_TO_DATA_MODULE = {
 }
 
 # Default random seed
-SEED = 20230201
+SEED = None
 
 
 ################################################################################
@@ -300,18 +300,23 @@ def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
     return dm
 
 
-def set_seed(seed=0, include_algos=False):
+def set_seed(seed=SEED, include_algos=False):
     """
     Set random seed for all models.
 
     Parameters
     ----------
     seed : int, optional
-        Random seed, by default 0
+        Random seed. If None, don't set seed, by default SEED
     include_algos : bool, optional
         If True, forces usage of deterministic algorithms at the cost of
         performance, by default False.
     """
+    # If seed is None, don't set seed
+    if seed is None:
+        LOGGER.warning(f"Random seed is not set!")
+        return
+
     # Set random seeds
     random.seed(seed)
     np.random.seed(seed)
