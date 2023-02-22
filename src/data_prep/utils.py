@@ -56,6 +56,7 @@ def load_metadata(hospital, **kwargs):
     return hospital_to_func[hospital](**kwargs)
 
 
+# TODO: Add second test path
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            extract=False,
@@ -1002,6 +1003,7 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     np.array
         Preprocessed image.
     """
+    # If specified, crop image
     if not ignore_crop:
         height, width = img.shape[0], img.shape[1]
 
@@ -1014,13 +1016,11 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
         half_crop_height, half_crop_width = int(crop_width/2), int(crop_height/2)
 
         # Crop image
-        crop_img = img[mid_y-half_crop_width:mid_y+half_crop_width,
-                    mid_x-half_crop_height:mid_x+half_crop_height]
+        img = img[mid_y-half_crop_width:mid_y+half_crop_width,
+                  mid_x-half_crop_height:mid_x+half_crop_height]
 
-        # Resize cropped image
-        resized_img = cv2.resize(crop_img, resize_dims)
-    else:
-        resized_img = img
+    # Resize image
+    resized_img = cv2.resize(img, resize_dims)
 
     # Histogram normalize images
     equalized_img = equalize_hist(resized_img)
