@@ -50,6 +50,9 @@ LOGGER = logging.getLogger(__name__)
 # Flag to use GPU or not
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+# Flag to mask out Bladder prediction or not
+MASK_BLADDER = True
+
 # Map label to encoded integer (for visualization)
 CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
                 "Transverse_Right": 3, "Sagittal_Right": 4, "Other": 5}
@@ -121,7 +124,7 @@ def init(parser):
 ################################################################################
 #                             Inference - Related                              #
 ################################################################################
-def get_dset_metadata(dm, dset=constants.DEFAULT_EVAL_DSET):
+def get_dset_metadata(dm, hparams, dset=constants.DEFAULT_EVAL_DSET):
     """
     Get metadata table containing (filename, label) for each image in the
     specified set (train/val/test).
@@ -131,6 +134,8 @@ def get_dset_metadata(dm, dset=constants.DEFAULT_EVAL_DSET):
     dm : pl.LightningDataModule
         Hyperparameters used in model training run, used to load exact dset
         split
+    hparams : dict
+        Experiment hyperparameters
     dset : str, optional
         Specific split of dataset, or name of test set. If not one of (train,
         val, test), assume "train"., by default constants.DEFAULT_EVAL_DSET.
@@ -142,26 +147,48 @@ def get_dset_metadata(dm, dset=constants.DEFAULT_EVAL_DSET):
     """
     # Coerce to train, if not valid
     # NOTE: This case is for non-standard dset names (i.e., external test sets)
+    hospital = "sickkids"
     if dset not in ("train", "val", "test"):
         LOGGER.warning(f"`{dset}` is not a valid data split. Assuming train "
                        "set is desired...")
+        hospital = dset
         dset = "train"
 
     # Get filename and label of dset split data from data module
     df_dset = pd.DataFrame({
         "filename": dm.dset_to_paths[dset],
-        "label": dm.dset_to_labels[dset]})
+        "label": dm.dset_to_labels[dset],
+    })
 
-    # Extract other metadata from filename
-    df_dset["orig_filename"] = df_dset.filename.map(lambda x: x.split("\\")[-1])
-    df_dset = utils.extract_data_from_filename(df_dset, col="orig_filename")
-    df_dset = df_dset.drop(columns=["orig_filename"])
+    # Extract filename from full path
+    df_dset["fname"] = df_dset.filename.map(lambda x: os.path.basename(x))
+
+    # Get all metadata for hospital
+    df_hospital_metadata = utils.load_metadata(
+        hospital=hospital,
+        extract=True,
+        label_part=hparams.get("label_part"),
+    )
+
+    # Join to existing data
+    df_dset = df_dset.set_index(["fname"])
+    df_hospital_metadata["fname"] = df_hospital_metadata["filename"]
+    df_hospital_metadata = df_hospital_metadata.set_index(["fname"])
+    df_dset = df_dset.join(df_hospital_metadata, rsuffix="_drop")
+
+    # Drop duplicate columns
+    cols_to_drop = [col for col in df_dset.columns if col.endswith("_drop")]
+    df_dset = df_dset.drop(columns=cols_to_drop)
+
+    # Reset index (removing only filename)
+    df_dset = df_dset.reset_index(drop=True)
 
     return df_dset
 
 
 @torch.no_grad()
 def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
+                      mask_bladder=False,
                       **hparams):
     """
     Performs inference on images specified. Returns predictions, probabilities
@@ -175,6 +202,9 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
         Filenames (or full paths) to images to infer on.
     img_dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
+    mask_bladder : bool, optional
+        If True, mask out predictions on bladder/middle side, leaving only
+        kidney labels. Defaults to False.
     hparams : dict, optional
         Keyword arguments for experiment hyperparameters
 
@@ -212,6 +242,13 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
 
         # Perform inference
         out = model(img)
+
+        # If specified, remove Bladder/None as a possible prediction
+        # NOTE: Assumes model predicts bladder/none as the 3rd index
+        if mask_bladder:
+            outs = outs[:, :2]
+
+        # Get index of predicted label
         pred = torch.argmax(out, dim=1)
         pred = int(pred.detach().cpu())
 
@@ -240,6 +277,7 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
 
 @torch.no_grad()
 def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
+                         mask_bladder=False,
                          **hparams):
     """
     Performs inference on a full ultrasound sequence specified. Returns
@@ -253,6 +291,9 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
         Filenames (or full paths) to images from one unique sequence to infer.
     img_dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
+    mask_bladder : bool, optional
+        If True, mask out predictions on bladder/middle side, leaving only
+        kidney labels. Defaults to False.
     hparams : dict, optional
         Keyword arguments for experiment hyperparameters
 
@@ -290,6 +331,13 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
     # Perform inference
     outs = model(imgs)
     outs = outs.detach().cpu()
+
+    # If specified, remove Bladder/None as a possible prediction
+    # NOTE: Assumes model predicts bladder/none as the 3rd index
+    if mask_bladder:
+        outs = outs[:, :2]
+
+    # Compute index of predicted label
     preds = torch.argmax(outs, dim=1).numpy()
 
     # Get probability
@@ -1514,7 +1562,7 @@ def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
         os.mkdir(inference_dir)
 
     # Expected path to dset inference
-    fname = f"{dset}_set_results({exp_name}).csv"
+    fname = f"{dset}_set_results.csv"
     save_path = os.path.join(inference_dir, fname)
 
     return save_path
@@ -1601,9 +1649,10 @@ def create_overwrite_hparams(dset):
     """
     overwrite_hparams = {}
 
-    if dset == "stanford":
+    if dset not in ("sickkids", "train", "val", "test") \
+            and dset in constants.HOSPITAL_TO_IMG_DIR:
         overwrite_hparams = {
-            "hospital": "stanford",
+            "hospital": dset,
             "train_val_split": 1.0,
             "train_test_split": 1.0,
             "test": False,
@@ -1618,6 +1667,7 @@ def create_overwrite_hparams(dset):
 def infer_dset(exp_name,
                dset=constants.DEFAULT_EVAL_DSET,
                seq_number_limit=None,
+               mask_bladder=False,
                **overwrite_hparams):
     """
     Perform inference on dset, and saves results
@@ -1632,6 +1682,9 @@ def infer_dset(exp_name,
     seq_number_limit : int, optional
         If provided, filters out dset split samples with sequence numbers higher
         than this value, by default None.
+    mask_bladder : bool, optional
+        If True, mask out predictions on bladder/middle side, leaving only
+        kidney labels. Defaults to False.
     overwrite_hparams : dict, optional
         Keyword arguments to overwrite experiment hyperparameters
 
@@ -1642,7 +1695,8 @@ def infer_dset(exp_name,
     """
     # 0. Create path to save predictions
     pred_save_path = create_save_path(exp_name, dset=dset,
-                                      seq_number_limit=seq_number_limit)
+                                      seq_number_limit=seq_number_limit,
+                                      mask_bladder=mask_bladder)
     # Early return, if prediction already made
     if os.path.isfile(pred_save_path):
         return
@@ -1650,8 +1704,8 @@ def infer_dset(exp_name,
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
     if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` provided does not lead to a valid model "
-                           "training directory")
+        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
+                           "model training directory", exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
@@ -1667,7 +1721,7 @@ def infer_dset(exp_name,
     dm = model_training.setup_data_module(hparams, self_supervised=False)
 
     # 3.1 Get metadata (for specified split)
-    df_metadata = get_dset_metadata(dm, dset=dset)
+    df_metadata = get_dset_metadata(dm, hparams, dset=dset)
     # 3.2 If provided, filter out high sequence number images
     if seq_number_limit:
         mask = (df_metadata["seq_number"] <= seq_number_limit)
@@ -1696,6 +1750,7 @@ def infer_dset(exp_name,
             df_preds = df_metadata.groupby(by=["id", "visit"]).progress_apply(
                 lambda df: predict_on_sequences(
                     model=model, filenames=df.filename.tolist(), img_dir=None,
+                    mask_bladder=mask_bladder,
                     **hparams)
             )
             # Remove groupby index
@@ -1705,7 +1760,9 @@ def infer_dset(exp_name,
             df_preds = predict_on_images(
                 model=model,
                 filenames=filenames,
-                img_dir=None, **hparams)
+                img_dir=None,
+                mask_bladder=mask_bladder,
+                **hparams)
 
     # Join to metadata. NOTE: This works because of earlier sorting
     df_metadata = pd.concat([df_metadata, df_preds], axis=1)
@@ -1743,8 +1800,8 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
     if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` provided does not lead to a valid model "
-                           "training directory")
+        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
+                           "model training directory", exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
@@ -1775,7 +1832,8 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
         device=DEVICE)
 
 
-def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
+def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
+                       mask_bladder=False):
     """
     Analyze dset split predictions.
 
@@ -1786,6 +1844,9 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
         constants.DEFAULT_EVAL_DSET.
+    mask_bladder : bool, optional
+        If True, mask out predictions on bladder/middle side, leaving only
+        kidney labels. Defaults to False.
 
     Raises
     ------
@@ -1795,14 +1856,14 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
     if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` provided does not lead to a valid model "
-                           "training directory")
+        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
+                           "model training directory", exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
 
     # 2. Load inference
-    save_path = create_save_path(exp_name, dset=dset)
+    save_path = create_save_path(exp_name, dset=dset, mask_bladder=mask_bladder)
     df_pred = pd.read_csv(save_path)
     # 2.1 Add side/plane label, if not present
     for label_part in constants.LABEL_PARTS:
@@ -1879,11 +1940,14 @@ if __name__ == '__main__':
             OVERWRITE_HPARAMS = create_overwrite_hparams(DSET)
 
             # 3. Perform inference
-            infer_dset(exp_name=EXP_NAME, dset=DSET, **OVERWRITE_HPARAMS)
+            infer_dset(exp_name=EXP_NAME, dset=DSET,
+                       mask_bladder=MASK_BLADDER,
+                       **OVERWRITE_HPARAMS)
 
             # 4. Extract embeddings
             # NOTE: Disabled for now
             # embed_dset(exp_name=EXP_NAME, dset=DSET, **OVERWRITE_HPARAMS)
 
             # 5. Evaluate predictions and embeddings
-            analyze_dset_preds(exp_name=EXP_NAME, dset=DSET)
+            analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,
+                               mask_bladder=MASK_BLADDER)

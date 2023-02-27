@@ -243,8 +243,7 @@ def init(parser):
     parser.add_argument("--debug", action="store_true", help=arg_help["debug"])
 
 
-def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
-                      **overwrite_hparams):
+def setup_data_module(hparams, img_dir=None, **overwrite_hparams):
     """
     Set up data module.
 
@@ -253,7 +252,8 @@ def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
     hparams : dict
         Experiment hyperparameters
     img_dir : str, optional
-        Path to directory containing metadata, by default constants.DIR_IMAGES
+        Path to directory containing images, by default image directory
+        corresponding to hospital (if any).
     **overwrite_hparams : dict, optional
         Keyword arguments to overwrite `hparams`
 
@@ -269,6 +269,11 @@ def setup_data_module(hparams, img_dir=constants.DIR_IMAGES,
     # 0. Create copy and overwrite hparams
     hparams = hparams.copy()
     hparams.update(overwrite_hparams)
+
+    # 0. If no image directory provided, resort to defaults based on hospital
+    #    chosen.
+    img_dir = img_dir if img_dir \
+        else constants.HOSPITAL_TO_IMG_DIR.get(hparams["hospital"])
 
     # 1. Load metadata
     df_metadata = utils.load_metadata(

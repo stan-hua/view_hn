@@ -26,7 +26,7 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(level=logging.DEBUG)
 
 # Default evaluation sets to retrieve
-DSETS = ["val", "test", "stanford"]
+DSETS = ["val", "test", "stanford", "uiowa", "chop"]
 
 # Default tasks to retrieve for
 TASKS = ["side", "plane"]

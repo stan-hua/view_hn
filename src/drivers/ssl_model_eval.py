@@ -56,9 +56,15 @@ DEFAULT_ARGS = [
 ]
 
 # Template for experiment name of a SSL evaluation model
-EVAL_EXP_NAME = "{{ exp_name }}__{{ model_type }}__{{ label_part }}" \
-                "{% if freeze_weights is defined and not freeze_weights %}" \
-                "__finetuned{% endif %}"
+EVAL_EXP_NAME = \
+    """{{ exp_name }}__{{ model_type }}__{{ label_part }}
+        {%- if freeze_weights is defined and not freeze_weights -%}
+            __finetuned
+        {%- endif -%}
+        {%- if augment_training is defined and augment_training -%}
+            __aug
+        {%- endif -%}
+    """
 TEMPLATE_EVAL_EXP_NAME = Environment().from_string(EVAL_EXP_NAME)
 
 
@@ -79,6 +85,8 @@ def init(parser):
         "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
                          "from another SSL eval model.",
         "dset": "List of dataset split or test dataset name to evaluate",
+        "augment_training": "If flagged, use MoCo augmentations during "
+                            "fine-tuning."
     }
 
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
@@ -89,6 +97,9 @@ def init(parser):
     parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
                         nargs='+',
                         help=arg_help["dset"])
+    parser.add_argument("--augment_training",
+                        action="store_true", default=False,
+                        help=arg_help["augment_training"])
 
 
 def train_model_with_kwargs(exp_name, **extra_args):
@@ -107,7 +118,7 @@ def train_model_with_kwargs(exp_name, **extra_args):
     parser = argparse.ArgumentParser()
     model_training.init(parser)
 
-    # Copy default argumeents
+    # Copy default arguments
     args_list = DEFAULT_ARGS.copy()
 
     # Add experiment name
@@ -145,7 +156,7 @@ def train_model_with_kwargs(exp_name, **extra_args):
         raise error_msg
 
 
-def train_eval_models(exp_name, **kwargs):
+def train_eval_models(exp_name, augment_training=False, **kwargs):
     """
     Train all possible evaluation models
 
@@ -153,14 +164,16 @@ def train_eval_models(exp_name, **kwargs):
     ----------
     exp_name : str
         Base SSL experiment name
+    augment_training : bool, optional
+        If True, use augmentation during fine-tuning, by default False.
     **kwargs : dict, optional
         Keyword arguments to pass into `model_training.main()`
     """
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
     if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` provided does not lead to a valid model "
-                           "training directory")
+        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
+                           "model training directory", exp_name)
 
     # 1. Get path to base experiment best model checkpoint
     ckpt_path = find_best_ckpt_path(model_dir)
@@ -184,7 +197,9 @@ def train_eval_models(exp_name, **kwargs):
                     exp_name=exp_name,
                     model_type=model_type,
                     label_part=label_part,
-                    freeze_weights=freeze_weights)
+                    freeze_weights=freeze_weights,
+                    augment_training=augment_training,
+                )
 
                 # Skip if exists
                 if os.path.exists(os.path.join(constants.DIR_RESULTS,
@@ -202,11 +217,13 @@ def train_eval_models(exp_name, **kwargs):
                     ssl_ckpt_path=ckpt_path,
                     ssl_model=ssl_model,
                     full_seq=full_seq,
+                    augment_training=augment_training,
                     **kwargs,
                     **{f"ssl_eval_{model_type}": True})
 
 
-def analyze_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
+def analyze_preds(exp_name, augment_training=False,
+                  dset=constants.DEFAULT_EVAL_DSET):
     """
     Perform test prediction analysis from `model_eval` on trained evaluations
     models
@@ -215,6 +232,9 @@ def analyze_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
     ----------
     exp_name : str
         Base SSL experiment name
+    augment_training : bool, optional
+        If True, check evaluation models fine-tuned WITH augmentation, by
+        default False.
     dset : str, optional
         Dataset split to perform inference on, by default
         constants.DEFAULT_EVAL_DSET
@@ -227,7 +247,9 @@ def analyze_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
                         exp_name=exp_name,
                         model_type=model_type,
                         label_part=label_part,
-                        freeze_weights=freeze_weights)
+                        freeze_weights=freeze_weights,
+                        augment_training=augment_training,
+                )
 
                 # Create overwriting parameters, if external dataset desired
                 overwrite_hparams = model_eval.create_overwrite_hparams(dset)
@@ -236,6 +258,7 @@ def analyze_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
                 model_eval.infer_dset(
                     exp_eval_name,
                     dset=dset,
+                    mask_bladder=model_eval.MASK_BLADDER,
                     **overwrite_hparams)
 
                 # 2. Embed dataset
@@ -245,7 +268,10 @@ def analyze_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET):
                 #     **overwrite_hparams)
 
                 # 3. Analyze predictions
-                model_eval.analyze_dset_preds(exp_eval_name, dset=dset)
+                model_eval.analyze_dset_preds(
+                    exp_eval_name,
+                    dset=dset,
+                    mask_bladder=model_eval.MASK_BLADDER)
 
 
 ################################################################################
@@ -302,8 +328,8 @@ def main(args):
         # Check that exp_name leads to a valid directory
         if not os.path.exists(os.path.join(
                 constants.DIR_RESULTS, exp_name)):
-            raise RuntimeError("`exp_name` provided does not lead to a SSL-trained "
-                            "model directory!")
+            raise RuntimeError("`exp_name` (%s) provided does not lead to a "
+                               "SSL-trained model directory!", exp_name)
 
         # Get othe keyword arguments for SSL eval model training
         train_kwargs = {
@@ -315,7 +341,8 @@ def main(args):
 
         # Analyze results of evaluation models
         for dset in args.dset:
-            analyze_preds(exp_name, dset=dset)
+            analyze_preds(exp_name, dset=dset,
+                          augment_training=args.augment_training)
 
 
 if __name__ == "__main__":

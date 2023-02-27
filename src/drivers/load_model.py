@@ -195,11 +195,12 @@ def find_best_ckpt_path(path_exp_dir):
     ckpt_paths = [path for path in ckpt_paths if "last.ckpt" not in path]
 
     if not ckpt_paths:
-        raise RuntimeError("No best epoch model checkpoint (.ckpt) found!")
+        raise RuntimeError("No best epoch model checkpoint (.ckpt) found! "
+                           f"\nDirectory: {path_exp_dir}")
 
     if len(ckpt_paths) > 1:
         raise RuntimeError("More than 1 checkpoint file (.ckpt) found besides "
-                           "last.ckpt!")
+                           f"last.ckpt! \nDirectory: {path_exp_dir}")
 
     return ckpt_paths[0]
 
@@ -221,8 +222,8 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
     if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` provided does not lead to a valid model "
-                           "training directory")
+        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
+                           "model training directory", exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = get_hyperparameters(model_dir)
