@@ -254,11 +254,14 @@ def analyze_preds(exp_name, augment_training=False,
                 # Create overwriting parameters, if external dataset desired
                 overwrite_hparams = model_eval.create_overwrite_hparams(dset)
 
+                # Specify to mask bladder, if it's a hospital w/o bladder labels
+                mask_bladder = dset in constants.HOSPITAL_MISSING_BLADDER
+
                 # 1. Perform inference on dataset
                 model_eval.infer_dset(
                     exp_eval_name,
                     dset=dset,
-                    mask_bladder=model_eval.MASK_BLADDER,
+                    mask_bladder=mask_bladder,
                     **overwrite_hparams)
 
                 # 2. Embed dataset
@@ -271,7 +274,7 @@ def analyze_preds(exp_name, augment_training=False,
                 model_eval.analyze_dset_preds(
                     exp_eval_name,
                     dset=dset,
-                    mask_bladder=model_eval.MASK_BLADDER)
+                    mask_bladder=mask_bladder)
 
 
 ################################################################################

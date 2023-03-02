@@ -50,9 +50,6 @@ LOGGER = logging.getLogger(__name__)
 # Flag to use GPU or not
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-# Flag to mask out Bladder prediction or not
-MASK_BLADDER = True
-
 # Map label to encoded integer (for visualization)
 CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
                 "Transverse_Right": 3, "Sagittal_Right": 4, "Other": 5}
@@ -1894,6 +1891,10 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
             df_pred["prob"] = df_pred[f"{label_part}_prob"]
             df_pred["out"] = df_pred[f"{label_part}_out"]
 
+        # Add suffix, if predictions mask bladder
+        if mask_bladder:
+            temp_exp_name += "__mask_bladder"
+
         # Experiment-specific inference directory, to store figures
         inference_dir = os.path.join(constants.DIR_INFERENCE, temp_exp_name)
         if not os.path.isdir(inference_dir):
@@ -1936,6 +1937,9 @@ if __name__ == '__main__':
     for EXP_NAME in ARGS.exp_name:
         # Iterate over all specified eval dsets
         for DSET in ARGS.dset:
+            # Specify to mask bladder, if it's a hospital w/o bladder labels
+            MASK_BLADDER = DSET in constants.HOSPITAL_MISSING_BLADDER
+
             # 2. If dset is "stanford", overwrite parameters
             OVERWRITE_HPARAMS = create_overwrite_hparams(DSET)
 

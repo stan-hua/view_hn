@@ -38,7 +38,7 @@ DEFAULT_FNAME = "multiple_exp_summary.csv"
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
-def create_eval_model_dir(exp_name, task):
+def create_eval_model_dir(exp_name, task, dset):
     """
     Given the experiment name and evaluation task, create the path to the
     expected directory.
@@ -49,6 +49,8 @@ def create_eval_model_dir(exp_name, task):
         Name of experiment
     task : str
         Task (side/plane/None) to find models for
+    dset : str
+        Dataset split and/or external dataset evaluated on
 
     Returns
     -------
@@ -63,6 +65,10 @@ def create_eval_model_dir(exp_name, task):
 
     # Fill-in with actual task name
     exp_name = exp_name.replace("(TASK)", task)
+
+    # If UIowa or CHOP, only look at predictions masking bladder
+    if dset in constants.HOSPITAL_MISSING_BLADDER:
+        exp_name += "__mask_bladder"
 
     # Prepend `inference` directory path
     path = os.path.join(constants.DIR_INFERENCE, exp_name)
@@ -141,7 +147,7 @@ def get_eval_metrics(exp_name, dsets=DSETS, tasks=TASKS):
         dset_metrics = OrderedDict()
         for task in tasks:
             # Get path to model eval. directory
-            eval_model_dir = create_eval_model_dir(exp_name, task)
+            eval_model_dir = create_eval_model_dir(exp_name, task, dset)
 
             # Load metrics file for dset
             metrics_path = os.path.join(eval_model_dir, f"{dset}_metrics.csv")
