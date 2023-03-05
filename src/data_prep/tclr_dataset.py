@@ -131,8 +131,10 @@ class TCLRDataModule(UltrasoundDataModule):
             "label": self.dset_to_labels["train"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_train = utils.extract_data_from_filename(df_train)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_train = utils.left_join_filtered_to_source(
+            df_train, self.df,
+            index_cols="filename")
 
         # Ensure US image sequences to have exactly `seq_length` frames
         df_train = utils.restrict_seq_len(df_train, n=self.seq_length)
@@ -173,8 +175,10 @@ class TCLRDataModule(UltrasoundDataModule):
             "label": self.dset_to_labels["val"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_val = utils.extract_data_from_filename(df_val)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_val = utils.left_join_filtered_to_source(
+            df_val, self.df,
+            index_cols="filename")
 
         # Ensure US image sequences to have exactly `seq_length` frames
         df_val = utils.restrict_seq_len(df_val, n=self.seq_length)

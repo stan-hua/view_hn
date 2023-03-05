@@ -278,12 +278,13 @@ class SegmentedUSDataset(torch.utils.data.Dataset):
         patient_id = self.ids[index]
         visit = self.visits[index]
         seq_number = self.seq_numbers[index]
-        # NOTE: ID naming is used to identify hospital
-        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
+        hospital = self.hospitals[index]
 
-        metadata = {"filename": filename, "id": patient_id,
-                    "visit": visit, "seq_number": seq_number,
-                    "hospital": hospital}
+        metadata = {
+            "filename": filename, "id": patient_id,
+            "visit": visit, "seq_number": seq_number,
+            "hospital": hospital
+        }
 
         return X, metadata
 

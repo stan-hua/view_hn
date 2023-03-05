@@ -56,7 +56,11 @@ CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 
 # Plot theme (light/dark)
-THEME = "light"
+THEME = "dark"
+
+# Flag to create embeddings and plot UMAP for each evaluation set
+EMBED = True
+
 
 ################################################################################
 #                               Paths Constants                                #
@@ -1912,14 +1916,14 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
         df_pred = df_pred.drop(columns=["label", "pred", "prob", "out"])
 
     # Plot embeddings with labels
-    # NOTE: Disabled for now
-    # plot_umap.main(
-    #     exp_name,
-    #     label_part=hparams.get("label_part"),
-    #     dset=dset,
-    #     sickkids=(dset in ("train", "val", "test")),
-    #     stanford=(dset == "stanford"),
-    # )
+    if EMBED:
+        plot_umap.main(
+            exp_name,
+            label_part=hparams.get("label_part"),
+            dset=dset,
+            sickkids=(dset in ("train", "val", "test")),
+            stanford=(dset == "stanford"),
+        )
 
     # Close all open figures
     plt.close("all")
@@ -1949,8 +1953,8 @@ if __name__ == '__main__':
                        **OVERWRITE_HPARAMS)
 
             # 4. Extract embeddings
-            # NOTE: Disabled for now
-            # embed_dset(exp_name=EXP_NAME, dset=DSET, **OVERWRITE_HPARAMS)
+            if EMBED:
+                embed_dset(exp_name=EXP_NAME, dset=DSET, **OVERWRITE_HPARAMS)
 
             # 5. Evaluate predictions and embeddings
             analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,

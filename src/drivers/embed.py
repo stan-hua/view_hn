@@ -195,8 +195,8 @@ class ImageEmbedder:
 
         # Save embeddings
         df_features = pd.DataFrame(np.array(all_embeds))
-        df_features["files"] = file_paths
-        df_features["files"] = df_features["files"].str.decode("utf-8")
+        df_features["filename"] = file_paths
+        df_features["filename"] = df_features["filename"].str.decode("utf-8")
         df_features.to_hdf(save_path, "embeds")
 
 
@@ -269,7 +269,7 @@ class ImageEmbedder:
 
         # Save embeddings. Each row is a feature vector
         df_features = pd.DataFrame(np.concatenate(all_embeds))
-        df_features['files'] = np.array(file_paths).flatten()
+        df_features["filename"] = np.array(file_paths).flatten()
         df_features.to_hdf(save_path, "embeds", mode="w")
 
         return df_features

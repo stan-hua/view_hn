@@ -160,12 +160,14 @@ class UltrasoundDataModule(pl.LightningDataModule):
                                "at path! Skipping...")
                 df = df[exists_mask]
 
+            # Get specific metadata for splitting
             self.img_paths = df["filename"].to_numpy()
             self.labels = df["label"].to_numpy()
-            self.patient_ids = utils.get_from_paths(self.img_paths)
+            self.patient_ids = df["id"].to_numpy()
         else:
             self.img_paths = np.array(glob.glob(os.path.join(img_dir, "*")))
             self.labels = np.array([None] * len(self.img_paths))
+            # NOTE: Following may not work for newer hospital data
             self.patient_ids = utils.get_from_paths(self.img_paths)
 
         ########################################################################
@@ -273,8 +275,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "label": self.dset_to_labels["train"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_train = utils.extract_data_from_filename(df_train)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_train = utils.left_join_filtered_to_source(
+            df_train, self.df,
+            index_cols="filename")
 
         # Instantiate UltrasoundDatasetDataFrame
         train_dataset = UltrasoundDatasetDataFrame(
@@ -306,8 +310,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "label": self.dset_to_labels["val"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_val = utils.extract_data_from_filename(df_val)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_val = utils.left_join_filtered_to_source(
+            df_val, self.df,
+            index_cols="filename")
 
         val_dataset = UltrasoundDatasetDataFrame(
             df_val, self.img_dir,
@@ -337,8 +343,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "label": self.dset_to_labels["test"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_test = utils.extract_data_from_filename(df_test)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_test = utils.left_join_filtered_to_source(
+            df_test, self.df,
+            index_cols="filename")
 
         test_dataset = UltrasoundDatasetDataFrame(
             df_test, self.img_dir,
@@ -458,12 +466,15 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         patient_id = self.ids[index]
         visit = self.visits[index]
         seq_number = self.seq_numbers[index]
-        # NOTE: ID naming is used to identify hospital
-        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
+        hospital = self.hospitals[index]
 
-        metadata = {"filename": filename, "id": patient_id,
-                    "visit": visit, "seq_number": seq_number,
-                    "hospital": hospital}
+        metadata = {
+            "filename": filename,
+            "id": patient_id,
+            "visit": visit,
+            "seq_number": seq_number,
+            "hospital": hospital,
+        }
 
         return X, metadata
 
@@ -538,6 +549,10 @@ class UltrasoundDatasetDir(UltrasoundDataset):
 
         # Get number in US sequence
         self.seq_numbers = utils.get_from_paths(self.paths, "seq_number")
+
+        # Add placeholder for hospital
+        # NOTE: This is done for compatibility
+        self.hospitals = np.empty(len(self.paths))
 
         ########################################################################
         #                  For Full US Sequence Data Loading                   #
@@ -711,19 +726,16 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         self.split_label = split_label
 
         # Get all patient IDs
-        self.ids = np.array(utils.get_from_paths(self.paths))
+        self.ids = df["id"].to_numpy()
 
         # Get hospital visit number
-        if "visit" in df.columns:
-            self.visits = df["visit"].to_numpy()
-        else:
-            self.visits = utils.get_from_paths(self.paths, "visit")
+        self.visits = df["visit"].to_numpy()
 
         # Get number in US sequence
-        if "seq_number" in df.columns:
-            self.seq_numbers = df["seq_number"].to_numpy()
-        else:
-            self.seq_numbers = utils.get_from_paths(self.paths, "seq_number")
+        self.seq_numbers = df["seq_number"].to_numpy()
+
+        # Get hospital
+        self.hospitals = df["hospital"].to_numpy()
 
         ########################################################################
         #                  For Full US Sequence Data Loading                   #
@@ -814,6 +826,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         paths = self.paths[mask]
         labels = self.labels[mask]
         seq_numbers = self.seq_numbers[mask]
+        hospital = self.hospitals[mask]
 
         # 3. Order by sequence number
         sort_idx = np.argsort(seq_numbers)
@@ -832,18 +845,20 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         X = torch.stack(imgs)
 
-        # 5. Get metadata (hospital)
-        hospital = "Stanford" if filename.startswith("SU2") else "SickKids"
-
-        # 6. Encode labels to integers (-1, if not found)
+        # 5. Encode labels to integers (-1, if not found)
         class_to_idx = \
             constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
         encoded_labels = torch.LongTensor(
             [class_to_idx.get(label, -1) for label in labels])
 
-        metadata = {"filename": filenames, "label": encoded_labels,
-                    "id": patient_id, "visit": visit, "seq_number": seq_numbers,
-                    "hospital": hospital}
+        metadata = {
+            "filename": filenames,
+            "label": encoded_labels,
+            "id": patient_id,
+            "visit": visit,
+            "seq_number": seq_numbers,
+            "hospital": hospital,
+        }
 
         # 6.1 If specified, split label into side/plane, and store separately
         if self.split_label and not self.label_part:

@@ -136,8 +136,10 @@ class MoCoDataModule(UltrasoundDataModule):
             "label": self.dset_to_labels["train"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_train = utils.extract_data_from_filename(df_train)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_train = utils.left_join_filtered_to_source(
+            df_train, self.df,
+            index_cols="filename")
 
         # Instantiate UltrasoundDatasetDataFrame
         train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
@@ -180,8 +182,10 @@ class MoCoDataModule(UltrasoundDataModule):
             "label": self.dset_to_labels["val"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_val = utils.extract_data_from_filename(df_val)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_val = utils.left_join_filtered_to_source(
+            df_val, self.df,
+            index_cols="filename")
 
         # Instantiate UltrasoundDatasetDataFrame
         val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
@@ -224,8 +228,10 @@ class MoCoDataModule(UltrasoundDataModule):
             "label": self.dset_to_labels["test"]
         })
 
-        # Add metadata for patient ID, visit number and sequence number
-        df_test = utils.extract_data_from_filename(df_test)
+        # Get patient ID, visit number and sequence number, from orig. table
+        df_test = utils.left_join_filtered_to_source(
+            df_test, self.df,
+            index_cols="filename")
 
         # Instantiate UltrasoundDatasetDataFrame
         test_dataset = UltrasoundDatasetDataFrame(

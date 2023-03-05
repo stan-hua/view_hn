@@ -30,7 +30,7 @@ LOGGER = logging.getLogger(__name__)
 ################################################################################
 #                             Metadata Extraction                              #
 ################################################################################
-def load_metadata(hospital, **kwargs):
+def load_metadata(hospital, prepend_img_dir=False, **kwargs):
     """
     Loads metadata for a specific hospital
 
@@ -38,6 +38,11 @@ def load_metadata(hospital, **kwargs):
     ----------
     hospital : str
         One of ("sickkids", "stanford", "uiowa", "chop")
+    prepend_img_dir : bool, optional
+        If True, prepends default image directory for hospital to "filename"
+        column, by default False
+    **kwargs : dict, optional
+        Keyword arguments to pass into specific metadata loading function.
 
     Returns
     -------
@@ -55,7 +60,20 @@ def load_metadata(hospital, **kwargs):
         "chop": load_chop_metadata,
     }
 
-    return hospital_to_func[hospital](**kwargs)
+    # Retrieve metadata
+    df_metadata = hospital_to_func[hospital](**kwargs)
+
+    # If specified, attempt to prepend default image directory to filename
+    if prepend_img_dir:
+        img_dir = constants.HOSPITAL_TO_IMG_DIR[hospital]
+        df_metadata["filename"] = df_metadata["filename"].map(
+            lambda x: os.path.join(img_dir, x)
+        )
+
+    # Attach hospital name to data
+    df_metadata["hospital"] = hospital
+
+    return df_metadata
 
 
 # TODO: Add second test path
@@ -274,6 +292,10 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
                     df.label.tolist()))).to_numpy()
             df_metadata["label"] = relative_labels
 
+    # Drop duplicates
+    # NOTE: Metadata table contains duplicate rows
+    df_metadata = df_metadata.drop_duplicates()
+
     return df_metadata
 
 
@@ -428,7 +450,7 @@ def extract_data_from_filename(df_metadata, col="filename"):
     df_metadata : pandas.DataFrame
         Each row contains metadata for an ultrasound image.
     col : str, optional
-        Name of column containing filename, by default "filename"
+        Name of column containing filename, by default "filename".
 
     Returns
     -------
@@ -446,6 +468,62 @@ def extract_data_from_filename(df_metadata, col="filename"):
     df_metadata["seq_number"] = df_metadata["basename"].map(
         lambda x: int(x.split("_")[2].replace(".jpg", "")))
     df_metadata.drop(columns=["basename"], inplace=True)
+
+    return df_metadata
+
+
+def extract_data_from_filename_and_join(df_metadata, hospital="sickkids",
+                                        **kwargs):
+    """
+    Extract extra metadata
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image, but is missing
+        extra desired metadata
+    hospital : str or list, optional
+        Name of hospital/s in `df_metadata`, by default "sickkids".
+    **kwargs : dict, optional
+        Keyword arguments to pass into `load_metadata`.
+
+    Returns
+    -------
+    Metadata table with additional data extracted
+    """
+    # INPUT: If only 1 hospital provided, ensure its a list
+    hospitals = [hospital] if isinstance(hospital, str) else hospital
+
+    # Create copy to avoid in-place assignment
+    df_metadata = df_metadata.copy()
+
+    # Load metadata from ALL hospitals specified
+    hospitals_metadata = []
+    for hospital in hospitals:
+        curr_metadata = load_metadata(hospital=hospital, extract=True, **kwargs)
+        hospitals_metadata.append(curr_metadata)
+    df_metadata_all = pd.concat(hospitals_metadata)
+
+    # If no overlapping filenames, try loading all metadata WITH image directory
+    if not contains_overlapping_vals(df_metadata, df_metadata_all, "filename"):
+        df_metadata_all = load_metadata(
+            hospital=hospital,
+            extract=True,
+            prepend_img_dir=True)
+
+    # Raise RuntimeError, if filenames still don't overlap
+    if not contains_overlapping_vals(df_metadata, df_metadata_all, "filename"):
+        raise RuntimeError("Filenames in provided metadata table and source "
+                           "metadata table do NOT overlap!")
+
+    # Check columns that can be used for identification
+    idx_cols = ["filename", "id", "visit", "seq_number"]
+    idx_cols = [col for col in idx_cols if col in df_metadata.columns.tolist()]
+
+    # Perform LEFT JOIN on identifying columns
+    df_metadata = left_join_filtered_to_source(
+        df_metadata, df_metadata_all,
+        index_cols=idx_cols)
 
     return df_metadata
 
@@ -1207,3 +1285,67 @@ def argsort_unsort(arr):
     unsort_idx = np.argsort(np.arange(len(arr))[sort_idx])
 
     return sort_idx, unsort_idx
+
+
+def left_join_filtered_to_source(df_filtered, df_full, index_cols=None):
+    """
+    Given the same table (with filtered columns) and its full table, perform a
+    LEFT JOIN to get all columns data from the full table.
+
+    Parameters
+    ----------
+    df_filtered : pd.DataFrame
+        Table with columns removed
+    df_full : pd.DataFrame
+        Source table with all columns present
+    index_cols : list, optional
+        If provided, reindex both tables on this index before joining.
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered table with all columns data
+    """
+    # If specified, set index
+    if index_cols:
+        df_filtered = df_filtered.set_index(index_cols)
+        df_full = df_full.set_index(index_cols)
+
+    # Perform LEFT JOIN
+    df_filtered = df_filtered.join(df_full, how="left", rsuffix="dup__")
+
+    # Remove duplicate columnss
+    drop_cols = [col for col in df_filtered.columns if col.startswith("dup__")]
+    df_filtered = df_filtered.drop(columns=drop_cols)
+
+    # Reset index, if earlier specified
+    if index_cols:
+        df_filtered = df_filtered.reset_index()
+
+    return df_filtered
+
+
+def contains_overlapping_vals(df_a, df_b, column):
+    """
+    Checks if values overlap in column `column` between dataframes.
+
+    Parameters
+    ----------
+    df_a : pd.DataFrame
+        Arbitrary table A with column `column`
+    df_b : pd.DataFrame
+        Arbitrary table B with column `column`
+    column : str
+        Name of column to check for overlapping values
+
+    Returns
+    -------
+    bool
+        Returns True if values overlap between dataframes in column `column`,
+        and False, otherwise.
+    """
+    # Get unique values
+    uniq_vals_a = set(df_a[column])
+    uniq_vals_b = set(df_b[column])
+
+    return len(uniq_vals_a.intersection(uniq_vals_b)) != 0
