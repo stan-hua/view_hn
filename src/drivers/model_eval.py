@@ -1866,6 +1866,9 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     # 2. Load inference
     save_path = create_save_path(exp_name, dset=dset, mask_bladder=mask_bladder)
     df_pred = pd.read_csv(save_path)
+    # 2.0 Ensure no duplicates
+    # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
+    df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
     # 2.1 Add side/plane label, if not present
     for label_part in constants.LABEL_PARTS:
         if label_part not in df_pred.columns:
