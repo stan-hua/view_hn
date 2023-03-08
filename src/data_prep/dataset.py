@@ -134,17 +134,18 @@ class UltrasoundDataModule(pl.LightningDataModule):
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
 
-        # Used to instantiate UltrasoundDataset
+        # General arguments, used to instantiate UltrasoundDataset
         self.df = df
-        self.img_dir = img_dir
-        self.dataset = None
-        self.full_seq = full_seq
-        self.mode = mode
-        self.augment_training = augment_training
         self.img_size = kwargs.get("img_size", 258)
-        self.no_label = (self.df is None)   # flag to use UltrasoundDatasetDir
-        self.label_part = kwargs.get("label_part")
-        self.split_label = kwargs.get("multi_output", False)
+        self.us_dataset_kwargs = {
+            "img_dir": img_dir,
+            "full_seq": full_seq,
+            "mode": mode,
+            "img_size": self.img_size,
+            "label_part": kwargs.get("label_part"),
+            "split_label": kwargs.get("multi_output", False),
+            "full_path": kwargs.get("full_path", False),
+        }
 
         # Get image paths, patient IDs, and labels (and visit)
         if self.df is not None:
@@ -221,7 +222,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
         #                            Augmentations                             #
         ########################################################################
         augmentations = []
-        if self.augment_training:
+        if augment_training:
             augmentations.extend([
                 T.RandomAdjustSharpness(1.25, p=0.25),
                 T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
@@ -282,13 +283,9 @@ class UltrasoundDataModule(pl.LightningDataModule):
 
         # Instantiate UltrasoundDatasetDataFrame
         train_dataset = UltrasoundDatasetDataFrame(
-            df_train, self.img_dir,
-            self.full_seq,
-            img_size=self.img_size,
-            mode=self.mode,
-            label_part=self.label_part,
-            split_label=self.split_label,
+            df_train,
             transforms=self.transforms,
+            **self.us_dataset_kwargs,
         )
 
         # Create DataLoader with parameters specified
@@ -316,12 +313,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
             index_cols="filename")
 
         val_dataset = UltrasoundDatasetDataFrame(
-            df_val, self.img_dir,
-            self.full_seq,
-            img_size=self.img_size,
-            mode=self.mode,
-            label_part=self.label_part,
-            split_label=self.split_label,
+            df_val,
+            **self.us_dataset_kwargs,
         )
 
         # Create DataLoader with parameters specified
@@ -349,12 +342,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
             index_cols="filename")
 
         test_dataset = UltrasoundDatasetDataFrame(
-            df_test, self.img_dir,
-            self.full_seq,
-            img_size=self.img_size,
-            mode=self.mode,
-            label_part=self.label_part,
-            split_label=self.split_label,
+            df_test,
+            **self.us_dataset_kwargs,
         )
 
         # Create DataLoader with parameters specified
@@ -461,8 +450,8 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         # Load image
         X = self.load_image(img_path)
 
-        # Get metadata from filename
-        filename = os.path.basename(img_path)
+        # Get metadata
+        filename = img_path if self.full_path else os.path.basename(img_path)
         patient_id = self.ids[index]
         visit = self.visits[index]
         seq_number = self.seq_numbers[index]
@@ -513,7 +502,9 @@ class UltrasoundDatasetDir(UltrasoundDataset):
     Dataset to load images from a directory.
     """
     def __init__(self, img_dir, full_seq=False, img_size=None, mode=3,
-                 transforms=None):
+                 transforms=None,
+                 full_path=False,
+                ):
         """
         Initialize UltrasoundDatasetDir object.
 
@@ -534,6 +525,9 @@ class UltrasoundDatasetDir(UltrasoundDataset):
             by default 3.
         transforms : torchvision.transforms.Compose or Transforms, optional
             If provided, perform transform on images loaded, by default None.
+        full_path : bool, optional
+            If True, "filename" metadata contains full path to the image/s.
+            Otherwise, contains path basename, by default False.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
@@ -553,6 +547,9 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         # Add placeholder for hospital
         # NOTE: This is done for compatibility
         self.hospitals = np.empty(len(self.paths))
+
+        # Flag if `filename` should be the full path (or the basename)
+        self.full_path = full_path
 
         ########################################################################
         #                  For Full US Sequence Data Loading                   #
@@ -642,8 +639,9 @@ class UltrasoundDatasetDir(UltrasoundDataset):
             X = torch.unsqueeze(X, 0)
 
         # 5. Metadata
-        filenames = [os.path.basename(path) for path in paths]
-        hospital = "Stanford" if filenames[0].startswith("SU2") else "SickKids"
+        filenames = [path if self.full_path else os.path.basename(path)
+                     for path in paths]
+        hospital = None
 
         metadata = {"filename": filenames, "id": patient_id,
                     "visit": visit, "seq_number": seq_numbers,
@@ -674,7 +672,9 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     """
     def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
                  label_part=None, split_label=False,
-                 transforms=None):
+                 transforms=None,
+                 full_path=False,
+                ):
         """
         Initialize UltrasoundDatasetDataFrame object.
 
@@ -709,6 +709,9 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             dict, by default False.
         transforms : torchvision.transforms.Compose or Transforms, optional
             If provided, perform transform on images loaded, by default None.
+        full_path : bool, optional
+            If True, "filename" metadata contains full path to the image/s.
+            Otherwise, contains path basename, by default False.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
@@ -736,6 +739,9 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # Get hospital
         self.hospitals = df["hospital"].to_numpy()
+
+        # Flag if `filename` should be the full path (or the basename)
+        self.full_path = full_path
 
         ########################################################################
         #                  For Full US Sequence Data Loading                   #
@@ -839,8 +845,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         filenames = []
         for path in paths:
             imgs.append(self.load_image(path))
-
-            filename = os.path.basename(path)
+            filename = path if self.full_path else os.path.basename(path)
             filenames.append(filename)
 
         X = torch.stack(imgs)
@@ -854,10 +859,10 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         metadata = {
             "filename": filenames,
             "label": encoded_labels,
-            "id": patient_id,
-            "visit": visit,
-            "seq_number": seq_numbers,
-            "hospital": hospital,
+            "id": list(patient_id.astype(str)),
+            "visit": list(visit.astype(str)),
+            "seq_number": list(seq_numbers),
+            "hospital": list(hospital),
         }
 
         # 6.1 If specified, split label into side/plane, and store separately

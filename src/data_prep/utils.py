@@ -37,7 +37,7 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
     Parameters
     ----------
     hospital : str
-        One of ("sickkids", "stanford", "uiowa", "chop")
+        Hospital (and/or dataset) name
     prepend_img_dir : bool, optional
         If True, prepends default image directory for hospital to "filename"
         column, by default False
@@ -50,15 +50,19 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
         May contain metadata (filename, view label, patient id, visit, sequence
         number).
     """
-    assert hospital in ("sickkids", "stanford", "uiowa", "chop")
-
     # Mapping of hospital to metadata loading function
     hospital_to_func = {
         "sickkids": load_sickkids_metadata,
         "stanford": load_stanford_metadata,
         "uiowa": load_uiowa_metadata,
         "chop": load_chop_metadata,
+        "stanford_non_seq": load_stanford_non_seq_metadata,
+        "sickkids_silent_trial": load_sickkids_silent_trial_metadata,
     }
+    # Ensure hospital specified is implemented
+    if hospital not in hospital_to_func:
+        raise RuntimeError("Metadata loading is NOT implemented for hospital "
+                           f"`{hospital}`!")
 
     # Retrieve metadata
     df_metadata = hospital_to_func[hospital](**kwargs)
@@ -72,6 +76,9 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
 
     # Attach hospital name to data
     df_metadata["hospital"] = hospital
+
+    # Ensure all columns are string type
+    df_metadata = df_metadata.astype(str)
 
     return df_metadata
 
@@ -393,6 +400,148 @@ def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
     ----------
     path : str, optional
         Path to CSV metadata file, by default constants.CHOP_METADATA_FILE
+    label_part : str, optional
+        If specified, either `side` or `plane` is extracted from each label
+        and used as the given label, by default None.
+    extract : bool, optional
+        If True, extracts patient ID, US visit, and sequence number from the
+        filename, by default False.
+    relative_side : bool, optional
+        If True, converts side (Left/Right) to order in which side appeared
+        (First/Second/None). Requires <extract> to be True, by default False.
+
+    Returns
+    -------
+    pandas.DataFrame
+        May contain metadata (filename, view label, patient id, visit, sequence
+        number).
+    """
+    # Raise error, if asked to include unlabeled images
+    if include_unlabeled:
+        raise NotImplementedError("Getting unlabeled images from UIowa is "
+                                  "currently not supported!")
+    # Raise error, if asked to provide surgery labels
+    if include_hn:
+        raise NotImplementedError("CHOP has no HN labels!")
+
+    # Load metadata
+    df_metadata = pd.read_csv(path)
+
+    # Change label to side/plane, if specified
+    if label_part:
+        df_metadata["label"] = df_metadata["label"].map(
+            lambda x: extract_from_label(x, extract=label_part))
+
+    # Since other extracted metadata was already saved to the metadata file,
+    # simply remove extra metadata if not specified
+    if not extract:
+        df_metadata = df_metadata.drop(columns=["id", "visit", "seq_number"])
+    # Convert side (in label) to order of relative appearance (First/Second)
+    elif relative_side:
+        df_metadata = df_metadata.sort_values(
+            by=["id", "visit", "seq_number"])
+        relative_labels = df_metadata.groupby(by=["id", "visit"])\
+            .apply(lambda df: pd.Series(make_side_label_relative(
+                df.label.tolist()))).to_numpy()
+        df_metadata["label"] = relative_labels
+
+    return df_metadata
+
+
+def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
+                                   label_part=None,
+                                   extract=False,
+                                   relative_side=False,
+                                   include_hn=False,
+                                   include_unlabeled=False,
+                                   **kwargs
+                                   ):
+    """
+    Load Stanford (non-sequence) metadata table with filenames and view labels.
+
+    Note
+    ----
+    If <relative_side> is True, the following examples happens:
+        - [Sagittal_Left, Transverse_Right, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
+        - [Sagittal_Right, Transverse_Left, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
+
+    Parameters
+    ----------
+    path : str, optional
+        Path to CSV metadata file, by default constants.SU_NON_SEQ_METADATA_FILE
+    label_part : str, optional
+        If specified, either `side` or `plane` is extracted from each label
+        and used as the given label, by default None.
+    extract : bool, optional
+        If True, extracts patient ID, US visit, and sequence number from the
+        filename, by default False.
+    relative_side : bool, optional
+        If True, converts side (Left/Right) to order in which side appeared
+        (First/Second/None). Requires <extract> to be True, by default False.
+
+    Returns
+    -------
+    pandas.DataFrame
+        May contain metadata (filename, view label, patient id, visit, sequence
+        number).
+    """
+    # Raise error, if asked to include unlabeled images
+    if include_unlabeled:
+        raise NotImplementedError("Getting unlabeled images from UIowa is "
+                                  "currently not supported!")
+    # Raise error, if asked to provide surgery labels
+    if include_hn:
+        raise NotImplementedError("Stanford (Non-Seq) has no HN labels!")
+
+    # Load metadata
+    df_metadata = pd.read_csv(path)
+
+    # Change label to side/plane, if specified
+    if label_part:
+        df_metadata["label"] = df_metadata["label"].map(
+            lambda x: extract_from_label(x, extract=label_part))
+
+    # Since other extracted metadata was already saved to the metadata file,
+    # simply remove extra metadata if not specified
+    if not extract:
+        df_metadata = df_metadata.drop(columns=["id", "visit", "seq_number"])
+    # Convert side (in label) to order of relative appearance (First/Second)
+    elif relative_side:
+        df_metadata = df_metadata.sort_values(
+            by=["id", "visit", "seq_number"])
+        relative_labels = df_metadata.groupby(by=["id", "visit"])\
+            .apply(lambda df: pd.Series(make_side_label_relative(
+                df.label.tolist()))).to_numpy()
+        df_metadata["label"] = relative_labels
+
+    return df_metadata
+
+
+def load_sickkids_silent_trial_metadata(path=constants.SK_ST_METADATA_FILE,
+                                        label_part=None,
+                                        extract=False,
+                                        relative_side=False,
+                                        include_hn=False,
+                                        include_unlabeled=False,
+                                        **kwargs
+                                        ):
+    """
+    Load Stanford (non-sequence) metadata table with filenames and view labels.
+
+    Note
+    ----
+    If <relative_side> is True, the following examples happens:
+        - [Sagittal_Left, Transverse_Right, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
+        - [Sagittal_Right, Transverse_Left, Bladder] ->
+                [Sagittal_First, Transverse_Second, Bladder]
+
+    Parameters
+    ----------
+    path : str, optional
+        Path to CSV metadata file, by default constants.SK_ST_METADATA_FILE
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.

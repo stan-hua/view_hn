@@ -35,6 +35,9 @@ logging.disable()
 # Set random seed
 random.seed(constants.SEED)
 
+# Plot theme (light/dark)
+THEME = "dark"
+
 # Order of labels in plot
 VIEW_LABEL_ORDER = ["Sagittal_Right", "Transverse_Right", "Sagittal_Left",
                     "Transverse_Left", "Bladder"]
@@ -45,7 +48,7 @@ PLANE_LABEL_ORDER = ["Sagittal", "Transverse", "Bladder"]
 ################################################################################
 #                           UMAP Plotting Functions                            #
 ################################################################################
-def plot_umap(embeds, labels, highlight=None, label_order=None, s=5,
+def plot_umap(embeds, labels, highlight=None, label_order=None, s=7,
               line=False, legend=True, title="", palette="tab10",
               save=False, save_dir=constants.DIR_FIGURES, filename="umap",
               filename_suffix=""):
@@ -83,7 +86,7 @@ def plot_umap(embeds, labels, highlight=None, label_order=None, s=5,
         If provided, attach as suffix to filename provided, by default ""
     """
     # Plot configurations
-    viz_utils.set_theme("light")
+    viz_utils.set_theme(THEME)
 
     # Create figure
     plt.figure()
@@ -231,12 +234,14 @@ def plot_umap_by_view(model, view_labels, df_embeds_only,
         "sickkids": "SickKids",
         "stanford": "Stanford",
         "chop": "CHOP",
-        "uiowa": "UIowa"
+        "uiowa": "UIowa",
+        "stanford_non_seq": "Stanford(Non-Seq)",
+        "sickkids_silent_trial": "SickKids (Silent Trial)",
     }
     assert hospital in map_hospital_str
     hospital_str = map_hospital_str[hospital]
 
-    # Filter out image files w/o labels
+    # Filter out image files w/o labels 
     idx_unlabeled = ~pd.isnull(view_labels)
     view_labels = view_labels[idx_unlabeled]
     df_embeds_only = df_embeds_only[idx_unlabeled]
@@ -254,7 +259,7 @@ def plot_umap_by_view(model, view_labels, df_embeds_only,
               label_order=label_order,
               save=True,
               title=f"UMAP ({hospital_str}, colored by view)",
-              filename=f"{model}/{hospital}/{model}_umap_{hospital_str.lower()}"
+              filename=f"{model}/{hospital}/{model}_umap"
                        f"{'_raw' if raw else ''}(views"
                        f"{', highlighted' if highlight is not None else ''})",
               palette="tab10" if len(label_order) < 5 else "tab20",
@@ -552,7 +557,6 @@ def main(exp_name,
          raw=False,
          segmented=False,
          reverse_mask=False,
-         label_part=None,
          hospital_umap=False,
          view_umap=True,
          highlight_label_boundary=False,
@@ -578,8 +582,6 @@ def main(exp_name,
     reverse_mask : bool, optional
         If True, loads embeddings extracted from segmented images where the mask
         is reversed, by default False.
-    label_part : str, optional
-        Specific part of view label (e.g., plane/side), by default None.
     dset : str, optional
         Dataset split or test dataset name, whose embeddings to plot, by default
         constants.DEFAULT_EVAL_DSET
@@ -603,8 +605,8 @@ def main(exp_name,
     df_metadata = utils.extract_data_from_filename_and_join(
         df_metadata,
         hospital=hospital,
-        label_part=label_part,
-        )
+        label_part=None,
+    )
 
     patients = df_metadata["id"]
     patient_visits = df_metadata.apply(
