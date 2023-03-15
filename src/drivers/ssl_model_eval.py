@@ -251,30 +251,33 @@ def analyze_preds(exp_name, augment_training=False,
                         augment_training=augment_training,
                 )
 
-                # Create overwriting parameters, if external dataset desired
-                overwrite_hparams = model_eval.create_overwrite_hparams(dset)
+                dsets = [dset] if isinstance(dset, str) else dset
+                for dset in dsets:
+                    # Create overwriting parameters, if external dataset desired
+                    overwrite_hparams = model_eval.create_overwrite_hparams(
+                        dset)
+                    # Specify to mask bladder, if hospital w/o bladder labels
+                    mask_bladder = dset in constants.HOSPITAL_MISSING_BLADDER
 
-                # Specify to mask bladder, if it's a hospital w/o bladder labels
-                mask_bladder = dset in constants.HOSPITAL_MISSING_BLADDER
+                    # 1. Perform inference on dataset
+                    model_eval.infer_dset(
+                        exp_eval_name,
+                        dset=dset,
+                        mask_bladder=mask_bladder,
+                        **overwrite_hparams)
 
-                # 1. Perform inference on dataset
-                model_eval.infer_dset(
-                    exp_eval_name,
-                    dset=dset,
-                    mask_bladder=mask_bladder,
-                    **overwrite_hparams)
-
-                # 2. Embed dataset
-                # model_eval.embed_dset(
-                #     exp_eval_name,
-                #     dset=dset,
-                #     **overwrite_hparams)
+                    # 2. Embed dataset
+                    model_eval.embed_dset(
+                        exp_eval_name,
+                        dset=dset,
+                        **overwrite_hparams,
+                    )
 
                 # 3. Analyze predictions
                 model_eval.analyze_dset_preds(
                     exp_eval_name,
-                    dset=dset,
-                    mask_bladder=mask_bladder)
+                    dset=dsets,
+                )
 
 
 ################################################################################
@@ -343,9 +346,9 @@ def main(args):
         train_eval_models(exp_name, **train_kwargs)
 
         # Analyze results of evaluation models
-        for dset in args.dset:
-            analyze_preds(exp_name, dset=dset,
-                          augment_training=args.augment_training)
+        # for dset in args.dset:
+        analyze_preds(exp_name, dset=args.dset,
+                        augment_training=args.augment_training)
 
 
 if __name__ == "__main__":

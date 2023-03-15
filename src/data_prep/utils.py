@@ -36,8 +36,8 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
 
     Parameters
     ----------
-    hospital : str
-        Hospital (and/or dataset) name
+    hospital : str or list
+        1+ hospital (and/or dataset) name/s
     prepend_img_dir : bool, optional
         If True, prepends default image directory for hospital to "filename"
         column, by default False
@@ -59,27 +59,35 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
         "stanford_non_seq": load_stanford_non_seq_metadata,
         "sickkids_silent_trial": load_sickkids_silent_trial_metadata,
     }
-    # Ensure hospital specified is implemented
-    if hospital not in hospital_to_func:
-        raise RuntimeError("Metadata loading is NOT implemented for hospital "
-                           f"`{hospital}`!")
+    # INPUT: Ensure `hospital` is a list
+    hospital = [hospital] if isinstance(hospital, str) else hospital
 
-    # Retrieve metadata
-    df_metadata = hospital_to_func[hospital](**kwargs)
+    # Accumulate metadata for each hospital specified
+    metadata_tables = []
+    for hospital_ in hospital:
+        # Ensure hospital specified is implemented
+        if hospital_ not in hospital_to_func:
+            raise RuntimeError("Metadata loading is NOT implemented for "
+                               f"hospital `{hospital_}`!")
 
-    # If specified, attempt to prepend default image directory to filename
-    if prepend_img_dir:
-        img_dir = constants.HOSPITAL_TO_IMG_DIR[hospital]
-        df_metadata["filename"] = df_metadata["filename"].map(
-            lambda x: os.path.join(img_dir, x)
-        )
+        # Retrieve metadata
+        df_metadata_curr = hospital_to_func[hospital_](**kwargs)
 
-    # Attach hospital name to data
-    df_metadata["hospital"] = hospital
+        # If specified, attempt to prepend default image directory to filename
+        if prepend_img_dir:
+            img_dir = constants.HOSPITAL_TO_IMG_DIR[hospital_]
+            df_metadata_curr["filename"] = df_metadata_curr["filename"].map(
+                lambda x: os.path.join(img_dir, x)
+            )
+        # Attach hospital name to data
+        df_metadata_curr["hospital"] = hospital_
+        # Ensure all columns are string type
+        df_metadata_curr = df_metadata_curr.astype(str)
 
-    # Ensure all columns are string type
-    df_metadata = df_metadata.astype(str)
+        metadata_tables.append(df_metadata_curr)
 
+    # Concatenate metadata across hospitals
+    df_metadata = pd.concat(metadata_tables, ignore_index=True)
     return df_metadata
 
 
@@ -643,26 +651,34 @@ def extract_data_from_filename_and_join(df_metadata, hospital="sickkids",
     # INPUT: If only 1 hospital provided, ensure its a list
     hospitals = [hospital] if isinstance(hospital, str) else hospital
 
+    # Ensure hospitals are unique
+    hospitals = sorted(set(hospitals))
+
     # Create copy to avoid in-place assignment
     df_metadata = df_metadata.copy()
+    # Clean path
+    df_metadata["filename"] = df_metadata["filename"].map(os.path.normpath)
 
     # Load metadata from ALL hospitals specified
-    hospitals_metadata = []
-    for hospital in hospitals:
-        curr_metadata = load_metadata(hospital=hospital, extract=True, **kwargs)
-        hospitals_metadata.append(curr_metadata)
-    df_metadata_all = pd.concat(hospitals_metadata)
+    df_metadata_all = load_metadata(hospital=hospitals, extract=True, **kwargs)
+    # Clean path
+    df_metadata_all["filename"] = df_metadata_all["filename"].map(
+        os.path.normpath)
 
-    # If no overlapping filenames, try loading all metadata WITH image directory
-    if not contains_overlapping_vals(df_metadata, df_metadata_all, "filename"):
+    # If not all filenames found, try loading all metadata WITH image directory
+    if not vals_is_subset(df_metadata, df_metadata_all, "filename"):
         df_metadata_all = load_metadata(
-            hospital=hospital,
+            hospital=hospitals,
             extract=True,
-            prepend_img_dir=True)
+            prepend_img_dir=True,
+            **kwargs)
+        # Clean path
+        df_metadata_all["filename"] = df_metadata_all["filename"].map(
+            os.path.normpath)
 
-    # Raise RuntimeError, if filenames still don't overlap
-    if not contains_overlapping_vals(df_metadata, df_metadata_all, "filename"):
-        raise RuntimeError("Filenames in provided metadata table and source "
+    # Raise RuntimeError, if not all filenames overlap
+    if not vals_is_subset(df_metadata, df_metadata_all, "filename"):
+         raise RuntimeError("Filenames in provided metadata table and source "
                            "metadata table do NOT overlap!")
 
     # Check columns that can be used for identification
@@ -1464,7 +1480,8 @@ def left_join_filtered_to_source(df_filtered, df_full, index_cols=None):
     df_filtered = df_filtered.join(df_full, how="left", rsuffix="dup__")
 
     # Remove duplicate columnss
-    drop_cols = [col for col in df_filtered.columns if col.startswith("dup__")]
+    drop_cols = [col for col in df_filtered.columns
+                 if isinstance(col, str) and col.startswith("dup__")]
     df_filtered = df_filtered.drop(columns=drop_cols)
 
     # Reset index, if earlier specified
@@ -1498,3 +1515,29 @@ def contains_overlapping_vals(df_a, df_b, column):
     uniq_vals_b = set(df_b[column])
 
     return len(uniq_vals_a.intersection(uniq_vals_b)) != 0
+
+
+def vals_is_subset(df_a, df_b, column):
+    """
+    Checks if values in table A are a subset of values in table  B.
+
+    Parameters
+    ----------
+    df_a : pd.DataFrame
+        Arbitrary table A with column `column`
+    df_b : pd.DataFrame
+        Arbitrary table B with column `column`
+    column : str
+        Name of column to check for values
+
+    Returns
+    -------
+    bool
+        Returns True if values in table A are a subset of values in table B,
+        and False, otherwise.
+    """
+    # Get unique values
+    uniq_vals_a = set(df_a[column])
+    uniq_vals_b = set(df_b[column])
+
+    return uniq_vals_a.issubset(uniq_vals_b)

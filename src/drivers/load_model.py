@@ -125,7 +125,8 @@ def get_model_cls(hparams):
     return model_cls, model_cls_kwargs
 
 
-def get_hyperparameters(hparam_dir=None, filename="hparams.yaml"):
+def get_hyperparameters(hparam_dir=None, exp_name=None,
+                        filename="hparams.yaml"):
     """
     Load hyperparameters from model training directory. If not provided, return
     default hyperparameters.
@@ -134,7 +135,10 @@ def get_hyperparameters(hparam_dir=None, filename="hparams.yaml"):
     ----------
     hparam_dir : str
         Path to model training directory containing hyperparameters.
-    filename : str
+    exp_name : str, optional
+        If `hparam_dir` not provided but `exp_name` is, use to find model
+        directory, by default None.
+    filename : str, optional
         Filename of YAML file with hyperparameters, by default "hparams.yaml"
 
     Returns
@@ -142,6 +146,13 @@ def get_hyperparameters(hparam_dir=None, filename="hparams.yaml"):
     dict
         Hyperparameters
     """
+    # 1. If hyperparameter directory not specified but experiment name is, check
+    #    if model directory exists
+    if not hparam_dir and exp_name:
+        model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+        hparam_dir = model_dir if os.path.exists(model_dir) else hparam_dir
+
+    # 2. Load hyperparameters from directory
     if hparam_dir:
         file_path = None
         # Recursively find hyperparameter file

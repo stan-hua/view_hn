@@ -164,28 +164,12 @@ def get_dset_metadata(dm, hparams, dset=constants.DEFAULT_EVAL_DSET):
         "label": dm.dset_to_labels[dset],
     })
 
-    # Extract filename from full path
-    df_dset["fname"] = df_dset.filename.map(lambda x: os.path.basename(x))
-
-    # Get all metadata for hospital
-    df_hospital_metadata = utils.load_metadata(
+    # Extract data via join
+    df_dset = utils.extract_data_from_filename_and_join(
+        df_dset,
         hospital=hospital,
-        extract=True,
         label_part=hparams.get("label_part"),
     )
-
-    # Join to existing data
-    df_dset = df_dset.set_index(["fname"])
-    df_hospital_metadata["fname"] = df_hospital_metadata["filename"]
-    df_hospital_metadata = df_hospital_metadata.set_index(["fname"])
-    df_dset = df_dset.join(df_hospital_metadata, rsuffix="_drop")
-
-    # Drop duplicate columns
-    cols_to_drop = [col for col in df_dset.columns if col.endswith("_drop")]
-    df_dset = df_dset.drop(columns=cols_to_drop)
-
-    # Reset index (removing only filename)
-    df_dset = df_dset.reset_index(drop=True)
 
     return df_dset
 
@@ -1071,9 +1055,12 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
     unique_labels = sorted(df_pred["label"].unique())
     for label in unique_labels:
         df_pred_filtered = df_pred[df_pred.label == label]
-        metrics[f"Label Accuracy ({label})"] = \
-            round(skmetrics.accuracy_score(
-                df_pred_filtered["label"], df_pred_filtered["pred"]),
+        metrics[f"Label Accuracy ({label})"] = 0
+        if not df_pred_filtered.empty:
+            metrics[f"Label Accuracy ({label})"] = round(
+                skmetrics.accuracy_score(
+                    df_pred_filtered["label"],
+                    df_pred_filtered["pred"]),
                 4)
 
     # Overall accuracy
@@ -1229,20 +1216,23 @@ def eval_calculate_all_metrics(df_pred):
     df_metrics_all.name = "All"
 
     # 1.2 Stratify patients w/ HN and w/o HN
-    df_metrics_w_hn = calculate_metrics(df_pred[df_pred.hn == 1])
-    df_metrics_w_hn.name = "With HN"
-    df_metrics_wo_hn = calculate_metrics(df_pred[df_pred.hn == 0])
-    df_metrics_wo_hn.name = "Without HN"
+    if "hn" in df_pred.columns:
+        df_metrics_w_hn = calculate_metrics(df_pred[df_pred.hn == 1])
+        df_metrics_w_hn.name = "With HN"
+        df_metrics_wo_hn = calculate_metrics(df_pred[df_pred.hn == 0])
+        df_metrics_wo_hn.name = "Without HN"
 
     # 1.3 For images at label boundaries
-    df_metrics_at_boundary = calculate_metrics(
-        df_pred[df_pred["at_label_boundary"]])
-    df_metrics_at_boundary.name = "At Label Boundary"
+    # NOTE: Disabled for now
+    # df_metrics_at_boundary = calculate_metrics(
+    #     df_pred[df_pred["at_label_boundary"]])
+    # df_metrics_at_boundary.name = "At Label Boundary"
 
     # 1.4 Most confident view (per label) in each sequence
-    df_confident = filter_most_confident(df_pred, local=False)
-    df_metrics_confident = calculate_metrics(df_confident, ci=True)
-    df_metrics_confident.name = "Most Confident"
+    # NOTE: Disabled for now
+    # df_confident = filter_most_confident(df_pred, local=False)
+    # df_metrics_confident = calculate_metrics(df_confident, ci=True)
+    # df_metrics_confident.name = "Most Confident"
 
     # 1.5 Accuracy, grouped by patient
     df_metrics_all["Accuracy (By Patient)"] = \
@@ -1260,12 +1250,12 @@ def eval_calculate_all_metrics(df_pred):
     # 2. Combine
     df_metrics = pd.concat([
         df_metrics_all,
-        filler,
-        df_metrics_w_hn, df_metrics_wo_hn,
-        filler,
-        df_metrics_at_boundary,
-        filler,
-        df_metrics_confident,
+        # filler,
+        # df_metrics_w_hn, df_metrics_wo_hn,
+        # filler,
+        # df_metrics_at_boundary,
+        # filler,
+        # df_metrics_confident,
         ], axis=1)
 
     return df_metrics
@@ -1317,6 +1307,93 @@ def eval_create_plots(df_pred, hparams, inference_dir,
     show_example_side_predictions(df_pred,
                                   relative_side=hparams.get("relative_side"),
                                   label_part=hparams.get("label_part"))
+
+
+def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
+    """
+    Given that inference was performed, compute metrics for experiment model
+    and dataset.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    dset : str
+        Name of evaluation split or test dataset
+    hparams : dict, optional
+        Experiment hyperparameters, by default None
+    mask_bladder : bool, optional
+        If True, bladder predictions are masked out, by default False
+    """
+    # 0. Overwrite `mask_bladder`, based on dset
+    if dset in constants.HOSPITAL_MISSING_BLADDER:
+        LOGGER.info(f"Hospital missing bladder labels found ({dset})! "
+                    "Overwriting `mask_bladder`")
+        mask_bladder = True
+
+    # 1. Get experiment hyperparameters (if not provided)
+    hparams = hparams if hparams \
+        else load_model.get_hyperparameters(exp_name=exp_name)
+
+    # 2. Load inference
+    save_path = create_save_path(
+        exp_name,
+        dset=dset,
+        mask_bladder=mask_bladder)
+    df_pred = pd.read_csv(save_path)
+    # 2.0 Ensure no duplicates
+    # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
+    df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
+    # 2.1 Add side/plane label, if not present
+    for label_part in constants.LABEL_PARTS:
+        if label_part not in df_pred.columns:
+            df_pred[label_part] = utils.get_labels_for_filenames(
+                df_pred["filename"].tolist(), label_part=label_part)
+    # 2.2 Add HN labels, if not already exists. NOTE: Needs side label to work
+    if "hn" not in df_pred.columns:
+        df_pred = utils.extract_hn_labels(df_pred)
+    # 2.3 Specify which images are at label boundaries
+    # NOTE: Disabled for now
+    # df_pred["at_label_boundary"] = utils.get_label_boundaries(df_pred)
+
+    # If multi-output, evaluate each label part, separately
+    label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
+        else [hparams.get("label_part")]
+    for label_part in label_parts:
+        temp_exp_name = exp_name
+
+        # If multi-output, make temporary changes to hparams
+        orig_label_part = hparams.get("label_part")
+        if hparams.get("multi_output"):
+            # Change experiment name to create different folders
+            temp_exp_name += f"__{label_part}"
+            # Force to be a specific label part
+            hparams["label_part"] = label_part
+            df_pred["label"] = df_pred[label_part]
+            df_pred["pred"] = df_pred[f"{label_part}_pred"]
+            df_pred["prob"] = df_pred[f"{label_part}_prob"]
+            df_pred["out"] = df_pred[f"{label_part}_out"]
+
+        # Add suffix, if predictions mask bladder
+        if mask_bladder:
+            temp_exp_name += "__mask_bladder"
+
+        # Experiment-specific inference directory, to store figures
+        inference_dir = os.path.join(constants.DIR_INFERENCE, temp_exp_name)
+        if not os.path.isdir(inference_dir):
+            os.mkdir(inference_dir)
+
+        # 4. Calculate metrics
+        df_metrics = eval_calculate_all_metrics(df_pred)
+        df_metrics.to_csv(os.path.join(inference_dir,
+                                        f"{dset}_metrics.csv"))
+
+        # 5. Create plots for visual evaluation
+        eval_create_plots(df_pred, hparams, inference_dir, dset=dset)
+
+        # Revert temporary changes
+        hparams["label_part"] = orig_label_part
+        df_pred = df_pred.drop(columns=["label", "pred", "prob", "out"])
 
 
 ################################################################################
@@ -1672,6 +1749,7 @@ def infer_dset(exp_name,
                dset=constants.DEFAULT_EVAL_DSET,
                seq_number_limit=None,
                mask_bladder=False,
+               overwrite_existing=False,
                **overwrite_hparams):
     """
     Perform inference on dset, and saves results
@@ -1689,6 +1767,9 @@ def infer_dset(exp_name,
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
+    overwrite_existing : bool, optional
+        If True and prediction file already exists, overwrite existing, by
+        default False.
     overwrite_hparams : dict, optional
         Keyword arguments to overwrite experiment hyperparameters
 
@@ -1702,7 +1783,7 @@ def infer_dset(exp_name,
                                       seq_number_limit=seq_number_limit,
                                       mask_bladder=mask_bladder)
     # Early return, if prediction already made
-    if os.path.isfile(pred_save_path):
+    if os.path.isfile(pred_save_path) and not overwrite_existing:
         return
 
     # 0. Get experiment directory, where model was trained
@@ -1870,64 +1951,28 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
     # If specified, calculate metrics
     if CALCULATE_METRICS:
-        # 2. Load inference
-        save_path = create_save_path(
-            exp_name,
-            dset=dset,
-            mask_bladder=mask_bladder)
-        df_pred = pd.read_csv(save_path)
-        # 2.0 Ensure no duplicates
-        # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
-        df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
-        # 2.1 Add side/plane label, if not present
-        for label_part in constants.LABEL_PARTS:
-            if label_part not in df_pred.columns:
-                df_pred[label_part] = utils.get_labels_for_filenames(
-                    df_pred["filename"].tolist(), label_part=label_part)
-        # 2.2 Add HN labels, if not already exists. NOTE: Needs side label to work
-        if "hn" not in df_pred.columns:
-            df_pred = utils.extract_hn_labels(df_pred)
-        # 2.3 Specify which images are at label boundaries
-        df_pred["at_label_boundary"] = utils.get_label_boundaries(df_pred)
-
-        # If multi-output, evaluate each label part, separately
-        label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
-            else [hparams.get("label_part")]
-        for label_part in label_parts:
-            temp_exp_name = exp_name
-
-            # If multi-output, make temporary changes to hparams
-            orig_label_part = hparams.get("label_part")
-            if hparams.get("multi_output"):
-                # Change experiment name to create different folders
-                temp_exp_name += f"__{label_part}"
-                # Force to be a specific label part
-                hparams["label_part"] = label_part
-                df_pred["label"] = df_pred[label_part]
-                df_pred["pred"] = df_pred[f"{label_part}_pred"]
-                df_pred["prob"] = df_pred[f"{label_part}_prob"]
-                df_pred["out"] = df_pred[f"{label_part}_out"]
-
-            # Add suffix, if predictions mask bladder
-            if mask_bladder:
-                temp_exp_name += "__mask_bladder"
-
-            # Experiment-specific inference directory, to store figures
-            inference_dir = os.path.join(constants.DIR_INFERENCE, temp_exp_name)
-            if not os.path.isdir(inference_dir):
-                os.mkdir(inference_dir)
-
-            # 4. Calculate metrics
-            df_metrics = eval_calculate_all_metrics(df_pred)
-            df_metrics.to_csv(os.path.join(inference_dir,
-                                           f"{dset}_metrics.csv"))
-
-            # 5. Create plots for visual evaluation
-            eval_create_plots(df_pred, hparams, inference_dir, dset=dset)
-
-            # Revert temporary changes
-            hparams["label_part"] = orig_label_part
-            df_pred = df_pred.drop(columns=["label", "pred", "prob", "out"])
+        # If 2+ dsets provided, calculate metrics on each dset individually
+        dsets = [dset] if isinstance(dset, str) else dset
+        for dset_ in dsets:
+            try:
+                calculate_exp_metrics(
+                    exp_name=exp_name,
+                    dset=dset_,
+                    hparams=hparams,
+                    mask_bladder=mask_bladder)
+            except KeyError:
+                # 1. Perform inference
+                infer_dset(
+                    exp_name=exp_name, dset=dset_,
+                    mask_bladder=dset_ in constants.HOSPITAL_MISSING_BLADDER,
+                    overwrite_existing=True,
+                    **create_overwrite_hparams(dset_))
+                # 2. Attempt to calculate metrics again
+                calculate_exp_metrics(
+                    exp_name=exp_name,
+                    dset=dset_,
+                    hparams=hparams,
+                    mask_bladder=mask_bladder)
 
     # If specified, create UMAP plots
     if EMBED:
@@ -1952,7 +1997,7 @@ if __name__ == '__main__':
             # Specify to mask bladder, if it's a hospital w/o bladder labels
             MASK_BLADDER = DSET in constants.HOSPITAL_MISSING_BLADDER
 
-            # 2. If dset is "stanford", overwrite parameters
+            # 2. Create overwrite parameters
             OVERWRITE_HPARAMS = create_overwrite_hparams(DSET)
 
             # 3. Perform inference
@@ -1964,6 +2009,9 @@ if __name__ == '__main__':
             if EMBED:
                 embed_dset(exp_name=EXP_NAME, dset=DSET, **OVERWRITE_HPARAMS)
 
-            # 5. Evaluate predictions and embeddings
+            # # 5. Evaluate predictions and embeddings
             analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,
                                mask_bladder=MASK_BLADDER)
+
+        # TODO: 6. Create UMAPs embeddings on all dsets together
+        analyze_dset_preds(exp_name=EXP_NAME, dset=ARGS.dset)
