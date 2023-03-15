@@ -19,7 +19,7 @@ from jinja2 import Environment
 
 # Custom libraries
 from src.data import constants
-from src.drivers import load_model, model_eval, model_training
+from src.drivers import load_data, load_model, model_eval, model_training
 
 
 ################################################################################
@@ -254,7 +254,7 @@ def analyze_preds(exp_name, augment_training=False,
                 dsets = [dset] if isinstance(dset, str) else dset
                 for dset in dsets:
                     # Create overwriting parameters, if external dataset desired
-                    overwrite_hparams = model_eval.create_overwrite_hparams(
+                    overwrite_hparams = load_data.create_overwrite_hparams(
                         dset)
                     # Specify to mask bladder, if hospital w/o bladder labels
                     mask_bladder = dset in constants.HOSPITAL_MISSING_BLADDER

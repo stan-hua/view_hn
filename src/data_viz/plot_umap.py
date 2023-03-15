@@ -3,7 +3,9 @@ plot_umap.py
 
 Description: Plots 2D UMAP embeddings
 """
+
 # Standard libraries
+import argparse
 import logging
 import os
 import random
@@ -242,7 +244,7 @@ def plot_umap_all_patients(exp_name, df_data, label_col="patient",
     )
 
 
-def plot_umap_by_view(model, df_data,
+def plot_umap_by_view(exp_name, df_data,
                       label_col="label",
                       hospital_col="hospital",
                       highlight=None,
@@ -253,8 +255,8 @@ def plot_umap_by_view(model, df_data,
 
     Parameters
     ----------
-    model : str
-        Name of model, or pretraining dataset used to pretrain model
+    exp_name : str
+        Name of experiment
     df_data : pd.DataFrame
         Contains extracted embeddings, view labels and hospital labels.
     label_col : str, optional
@@ -328,7 +330,7 @@ def plot_umap_by_view(model, df_data,
         label_order=label_order,
         save=True,
         title=f"UMAP ({hospital_str}, colored by view)",
-        filename=f"{model}/{hospital_folder_name}/umap"
+        filename=f"{exp_name}/{hospital_folder_name}/umap"
                 f"{'_raw' if raw else ''}(views"
                 f"{', highlighted' if highlight is not None else ''})",
         palette="tab10" if len(label_order) < 5 else "tab20",
@@ -336,7 +338,7 @@ def plot_umap_by_view(model, df_data,
     )
 
 
-def plot_umap_by_machine(model, machine_labels, filenames, df_embeds_only,
+def plot_umap_by_machine(exp_name, machine_labels, filenames, df_embeds_only,
                          raw=False,
                          hospital="SickKids",
                          **plot_kwargs):
@@ -345,8 +347,8 @@ def plot_umap_by_machine(model, machine_labels, filenames, df_embeds_only,
 
     Parameters
     ----------
-    model : str
-        Name of model, or pretraining dataset used to pretrain model
+    exp_name : str
+        Name of experiment
     machine_labels : numpy.array
         Contains machine labels, corresponding to embeddings extracted. Images
         without label (null value) will be excluded
@@ -377,12 +379,12 @@ def plot_umap_by_machine(model, machine_labels, filenames, df_embeds_only,
     plot_umap(umap_embeds_views, machine_labels,
               save=True,
               title=f"UMAP ({hospital}, colored by machine)",
-              filename=f"{model}/umap_{hospital.lower()}"
+              filename=f"{exp_name}/umap_{hospital.lower()}"
                        f"{'_raw' if raw else ''}(machine)",
               **plot_kwargs)
 
 
-def plot_umap_for_one_patient_seq(model, view_labels, patient_visit,
+def plot_umap_for_one_patient_seq(exp_name, view_labels, patient_visit,
                                   us_nums, df_embeds_only, color="us_nums",
                                   raw=False,
                                   **plot_kwargs):
@@ -391,8 +393,8 @@ def plot_umap_for_one_patient_seq(model, view_labels, patient_visit,
 
     Parameters
     ----------
-    model : str
-        Name of model, or pretraining dataset used to pretrain model
+    exp_name : str
+        Name of experiment
     view_labels : numpy.array
         Contains view labels, corresponding to embeddings extracted. Images
         without label (null value) will be excluded
@@ -445,12 +447,12 @@ def plot_umap_for_one_patient_seq(model, view_labels, patient_visit,
               title=f"UMAP (patient {patient_selected}, colored by US number)",
               palette="Blues" if color == "us_nums" else "tab10",
               save=True,
-              filename=f"{model}/umap_single{'_raw' if raw else ''}"
+              filename=f"{exp_name}/umap_single{'_raw' if raw else ''}"
                        f"({color})",
               **plot_kwargs)
 
 
-def plot_umap_for_n_patient(model, patients, df_embeds_only, n=3,
+def plot_umap_for_n_patient(exp_name, patients, df_embeds_only, n=3,
                             raw=False,
                             **plot_kwargs):
     """
@@ -458,8 +460,8 @@ def plot_umap_for_n_patient(model, patients, df_embeds_only, n=3,
 
     Parameters
     ----------
-    model : str
-        Name of model, or pretraining dataset used to pretrain model
+    exp_name : str
+        Name of experiment
     patients : pd.Series
         Contains all patient IDs
     df_embeds_only : pd.DataFrame
@@ -487,20 +489,20 @@ def plot_umap_for_n_patient(model, patients, df_embeds_only, n=3,
               title=f"UMAP (patients {patients_selected}, "
                     "colored by patient ID)",
               save=True,
-              filename=f"{model}/umap{'_raw' if raw else ''}"
+              filename=f"{exp_name}/umap{'_raw' if raw else ''}"
                        "(patient_id)",
               **plot_kwargs)
 
 
-def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False,
+def plot_images_in_umap_clusters(exp_name, filenames, df_embeds_only, raw=False,
                                  **plot_kwargs):
     """
     Plots images in UMAP clusters
 
     Parameters
     ----------
-    model : str
-        Name of model, or pretraining dataset used to pretrain model
+    exp_name : str
+        Name of experiment
     filenames : pd.Series
         Contains file name of image whose features were extracted
     df_embeds_only : pd.DataFrame
@@ -540,7 +542,7 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False,
         # Grid plot cluster images
         gridplot_images(
             imgs,
-            filename=f"{model}/umap_cluster_{cluster}{'_raw' if raw else ''}",
+            filename=f"{exp_name}/umap_cluster_{cluster}{'_raw' if raw else ''}",
             title=f"Cluster {cluster}"
             )
 
@@ -549,7 +551,7 @@ def plot_images_in_umap_clusters(model, filenames, df_embeds_only, raw=False,
               label_order=sorted(np.unique(cluster_labels)),
               save=True,
               title=f"UMAP (colored by cluster label)",
-              filename=f"{model}/umap{'_raw' if raw else ''}"
+              filename=f"{exp_name}/umap{'_raw' if raw else ''}"
                        "(cluster_labels)",
               **plot_kwargs)
 
@@ -789,3 +791,39 @@ def main(exp_name,
 
     # Close all figures
     plt.close("all")
+
+
+################################################################################
+#                                  User Input                                  #
+################################################################################
+def init(parser):
+    """
+    Initialize ArgumentParser arguments.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        ArgumentParser object
+    """
+    arg_help = {
+        "exp_name": "Name of experiment",
+        "dset": "Name of evaluation splits or datasets",
+    }
+
+    parser.add_argument("--exp_name", required=True, nargs="+",
+                        help=arg_help["exp_name"])
+    parser.add_argument("--dset", required=True, nargs="+",
+                        help=arg_help["dset"])
+
+
+if __name__ == "__main__":
+    # 0. Initialize parser
+    PARSER = argparse.ArgumentParser()
+    init(PARSER)
+
+    # 1. Parse arguments
+    ARGS = PARSER.parse_args()
+
+    # 2. Run main flow
+    for EXP_NAME in ARGS.exp_name:
+        main(exp_name=EXP_NAME, dset=ARGS.dset)

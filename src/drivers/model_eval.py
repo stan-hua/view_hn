@@ -30,7 +30,7 @@ from src.data import constants
 from src.data_prep import utils
 from src.data_viz import plot_umap
 from src.data_viz import utils as viz_utils
-from src.drivers import embed, load_model, model_training
+from src.drivers import embed, load_model, load_data
 
 
 # Configure logging
@@ -59,7 +59,7 @@ IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
 THEME = "dark"
 
 # Flag to calculate metrics for each evaluation set
-CALCULATE_METRICS = False
+CALCULATE_METRICS = True
 
 # Flag to create embeddings and plot UMAP for each evaluation set
 EMBED = True
@@ -1713,35 +1713,6 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
     return np.mean(scores)
 
 
-def create_overwrite_hparams(dset):
-    """
-    If `dset` provided is for an external test set, return hyperparameters to
-    overwrite experiment hyperparameters to load test data for evaluation.
-
-    Parameters
-    ----------
-    dset : str
-        Dataset split (train/val/test), or test dataset name (stanford)
-
-    Returns
-    -------
-    dict
-        Contains hyperparameters to overwrite, if necessary
-    """
-    overwrite_hparams = {}
-
-    if dset not in ("sickkids", "train", "val", "test") \
-            and dset in constants.HOSPITAL_TO_IMG_DIR:
-        overwrite_hparams = {
-            "hospital": dset,
-            "train_val_split": 1.0,
-            "train_test_split": 1.0,
-            "test": False,
-        }
-
-    return overwrite_hparams
-
-
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -1803,7 +1774,7 @@ def infer_dset(exp_name,
 
     # 3. Load data
     # NOTE: Ensure data is loaded in the non-SSL mode
-    dm = model_training.setup_data_module(hparams, self_supervised=False)
+    dm = load_data.setup_data_module(hparams, self_supervised=False)
 
     # 3.1 Get metadata (for specified split)
     df_metadata = get_dset_metadata(dm, hparams, dset=dset)
@@ -1901,7 +1872,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
 
     # 3. Load data
     # NOTE: Ensure data is loaded in the non-SSL mode
-    dm = model_training.setup_data_module(hparams, self_supervised=False)
+    dm = load_data.setup_data_module(hparams, self_supervised=False)
 
     # 4. Create a DataLoader
     if dset == "test":
@@ -1966,7 +1937,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     exp_name=exp_name, dset=dset_,
                     mask_bladder=dset_ in constants.HOSPITAL_MISSING_BLADDER,
                     overwrite_existing=True,
-                    **create_overwrite_hparams(dset_))
+                    **load_data.create_overwrite_hparams(dset_))
                 # 2. Attempt to calculate metrics again
                 calculate_exp_metrics(
                     exp_name=exp_name,
@@ -1998,7 +1969,7 @@ if __name__ == '__main__':
             MASK_BLADDER = DSET in constants.HOSPITAL_MISSING_BLADDER
 
             # 2. Create overwrite parameters
-            OVERWRITE_HPARAMS = create_overwrite_hparams(DSET)
+            OVERWRITE_HPARAMS = load_data.create_overwrite_hparams(DSET)
 
             # 3. Perform inference
             infer_dset(exp_name=EXP_NAME, dset=DSET,
