@@ -20,7 +20,7 @@ from tqdm import tqdm
 from src.data import constants
 from src.data_prep.dataset import UltrasoundDataModule
 from src.data_prep.segment_dataset import SegmentedUSModule
-from src.drivers import load_model
+from src.drivers import load_data, load_model
 
 
 ################################################################################
@@ -420,11 +420,58 @@ def get_embeds(name, **kwargs):
 
 
 ################################################################################
+#                                Main Function                                 #
+################################################################################
+def main(args):
+    """
+    Extract embeddings for the following experiments and datasets
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Contains command-line arguments
+    """
+    # Extract embeddings for each experiment name
+    for exp_name in args.exp_name:
+        # 1. Attempt to load (1) as experiment, or (2) from legacy model name
+        try:
+            model = load_model.load_pretrained_from_exp_name(exp_name)
+        except RuntimeError:
+            model = load_model.load_pretrained_from_model_name(exp_name)
+
+        # Extract embeddings for each dataset
+        for dset in args.dset:
+            # Prepare arguments for data module
+            hparams = {}
+            overwrite_hparams = load_data.create_overwrite_hparams(dset)
+
+            # Set up data module
+            dm = load_data.setup_data_module(hparams, use_defaults=True,
+                                             **overwrite_hparams)
+
+            # Get dataloader
+            if dset == "val":
+                img_dataloader = dm.val_dataloader()
+            elif dset == "test":
+                img_dataloader = dm.test_dataloader()
+            else:
+                img_dataloader = dm.train_dataloader()
+
+            # Create path to save embeddings
+            save_embed_path = get_save_path(exp_name, dset=dset)
+
+            # Perform extraction
+            extract_embeds(model=model, exp_name=exp_name,
+                           save_embed_path=save_embed_path,
+                           img_dataloader=img_dataloader)
+
+
+################################################################################
 #                               Helper Functions                               #
 ################################################################################
 def init(parser):
     """
-    Initialize ArgumentParser
+    Initialize ArgumentParser arguments.
 
     Parameters
     ----------
@@ -433,38 +480,13 @@ def init(parser):
     """
     arg_help = {
         "exp_name": "Name of experiment",
-
-        "random" : "If flagged, extracts embeddings from a randomly initialized"
-                   " EfficientNet model",
-        "hn" : "If flagged, extracts embeddings with HN model.",
-        "cytoimagenet" : "If flagged, extracts embeddings with CytoImageNet "
-                         "model.",
-        "imagenet" : "If flagged, extracts embeddings with ImageNet model.",
-        "cpc" : "If flagged, extracts embeddings with CPC model.",
-        "moco" : "If flagged, extracts embeddings with MoCo model.",
-
-        "raw" : "If flagged, extracts embeddings for raw images.",
-        "segmented": "If flagged, extracts embeddings for segmented images"
+        "dset": "Name of evaluation splits or datasets",
     }
 
-    # Experiment name
-    parser.add_argument("--exp_name", default=None, help=arg_help["exp_name"])
-
-    # Model name
-    parser.add_argument("--random", action="store_true",
-                        help=arg_help["random"])
-    parser.add_argument("--hn", action="store_true", help=arg_help["hn"])
-    parser.add_argument("--cytoimagenet", action="store_true",
-                        help=arg_help["cytoimagenet"])
-    parser.add_argument("--imagenet", action="store_true",
-                        help=arg_help["imagenet"])
-    parser.add_argument("--cpc", action="store_true", help=arg_help["cpc"])
-    parser.add_argument("--moco", action="store_true", help=arg_help["moco"])
-
-    # Data arguments
-    parser.add_argument("--raw", action="store_true", help=arg_help["raw"])
-    parser.add_argument("--segmented", action="store_true",
-                        help=arg_help["segmented"])
+    parser.add_argument("--exp_name", required=True, nargs="+",
+                        help=arg_help["exp_name"])
+    parser.add_argument("--dset", required=True, nargs="+",
+                        help=arg_help["dset"])
 
 
 def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
@@ -507,7 +529,7 @@ if __name__ == "__main__":
     init(PARSER)
 
     # 1. Get arguments
-    ARGS = PARSER.parse_args()
+    args = PARSER.parse_args()
 
-    # 2. Extract embeddings
-    extract_embeds(**vars(ARGS))
+    # 2. Run main flow to extract embeddings
+    main(args)
