@@ -54,6 +54,50 @@ SSL_NAME_TO_MODEL_CLS = {
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
+def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
+    """
+    Load pretrained model from experiment name.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+
+    Returns
+    -------
+    torch.nn.Module
+        Pretrained model
+    """
+    # 0. Get experiment directory, where model was trained
+    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+    if not os.path.exists(model_dir):
+        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
+                           "model training directory", exp_name)
+
+    # 1 Get experiment hyperparameters
+    hparams = get_hyperparameters(model_dir)
+    hparams.update(overwrite_hparams)
+
+    # 2. Load existing model and send to device
+    # 2.1 Get checkpoint path
+    ckpt_path = find_best_ckpt_path(model_dir)
+    # 2.2 Get model class and extra parameters for loading from checkpoint
+    model_cls, model_cls_kwargs = get_model_cls(hparams)
+    # 2.3 Load model
+    try:
+        model = model_cls.load_from_checkpoint(
+            checkpoint_path=ckpt_path,
+            **model_cls_kwargs)
+    except:
+        rename_torch_module(ckpt_path)
+        LOGGER.info("Renamed model module names!")
+        model = model_cls.load_from_checkpoint(
+            checkpoint_path=ckpt_path,
+            **model_cls_kwargs)
+
+    return model
+
+
 def get_model_cls(hparams):
     """
     Given experiment hyperparameters, get appropriate model class.
@@ -214,50 +258,6 @@ def find_best_ckpt_path(path_exp_dir):
                            f"last.ckpt! \nDirectory: {path_exp_dir}")
 
     return ckpt_paths[0]
-
-
-def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
-    """
-    Load pretrained model from experiment name.
-
-    Parameters
-    ----------
-    exp_name : str
-        Name of experiment
-
-    Returns
-    -------
-    torch.nn.Module
-        Pretrained model
-    """
-    # 0. Get experiment directory, where model was trained
-    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
-    if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
-                           "model training directory", exp_name)
-
-    # 1 Get experiment hyperparameters
-    hparams = get_hyperparameters(model_dir)
-    hparams.update(overwrite_hparams)
-
-    # 2. Load existing model and send to device
-    # 2.1 Get checkpoint path
-    ckpt_path = find_best_ckpt_path(model_dir)
-    # 2.2 Get model class and extra parameters for loading from checkpoint
-    model_cls, model_cls_kwargs = get_model_cls(hparams)
-    # 2.3 Load model
-    try:
-        model = model_cls.load_from_checkpoint(
-            checkpoint_path=ckpt_path,
-            **model_cls_kwargs)
-    except:
-        rename_torch_module(ckpt_path)
-        LOGGER.info("Renamed model module names!")
-        model = model_cls.load_from_checkpoint(
-            checkpoint_path=ckpt_path,
-            **model_cls_kwargs)
-
-    return model
 
 
 def extract_backbones_from_ssl(hparams):
@@ -496,24 +496,18 @@ def load_pretrained_from_model_name(model_name):
 
     if model_name == "cytoimagenet":
         model = EfficientNetB0(weights=weights,
-                                           include_top=False,
-                                           input_shape=(None, None, 3),
-                                           pooling="avg")
+                               include_top=False,
+                               input_shape=(None, None, 3),
+                               pooling="avg")
     elif model_name == "imagenet":
-        model = EfficientNetPL.from_pretrained(
-            model_name="efficientnet-b0")
+        model = EfficientNetLSTM()
+        model.load_imagenet_weights()
     elif model_name == "cpc":
         model = CPC.load_from_checkpoint(weights)
-    elif model_name == "moco":
-        model = MoCo.load_from_checkpoint(weights)
     elif model_name == "random":
-        # Randomly initialized EfficientNet model
-        model = EfficientNetPL()
+        model = EfficientNetLSTM()
     else:
         raise RuntimeError("Invalid model_name specified!")
-
-    # TODO: Compile for speed-up
-    # model = torch.compile(model)
 
     return model
 
