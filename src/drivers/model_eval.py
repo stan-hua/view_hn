@@ -128,52 +128,6 @@ def init(parser):
 ################################################################################
 #                             Inference - Related                              #
 ################################################################################
-def get_dset_metadata(dm, hparams, dset=constants.DEFAULT_EVAL_DSET):
-    """
-    Get metadata table containing (filename, label) for each image in the
-    specified set (train/val/test).
-
-    Parameters
-    ----------
-    dm : pl.LightningDataModule
-        Hyperparameters used in model training run, used to load exact dset
-        split
-    hparams : dict
-        Experiment hyperparameters
-    dset : str, optional
-        Specific split of dataset, or name of test set. If not one of (train,
-        val, test), assume "train"., by default constants.DEFAULT_EVAL_DSET.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Metadata of each image in the dset split
-    """
-    # Coerce to train, if not valid
-    # NOTE: This case is for non-standard dset names (i.e., external test sets)
-    hospital = "sickkids"
-    if dset not in ("train", "val", "test"):
-        LOGGER.warning(f"`{dset}` is not a valid data split. Assuming train "
-                       "set is desired...")
-        hospital = dset
-        dset = "train"
-
-    # Get filename and label of dset split data from data module
-    df_dset = pd.DataFrame({
-        "filename": dm.dset_to_paths[dset],
-        "label": dm.dset_to_labels[dset],
-    })
-
-    # Extract data via join
-    df_dset = utils.extract_data_from_filename_and_join(
-        df_dset,
-        hospital=hospital,
-        label_part=hparams.get("label_part"),
-    )
-
-    return df_dset
-
-
 @torch.no_grad()
 def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
                       mask_bladder=False,
@@ -1777,7 +1731,7 @@ def infer_dset(exp_name,
     dm = load_data.setup_data_module(hparams, self_supervised=False)
 
     # 3.1 Get metadata (for specified split)
-    df_metadata = get_dset_metadata(dm, hparams, dset=dset)
+    df_metadata = load_data.get_dset_metadata(dm, hparams, dset=dset)
     # 3.2 If provided, filter out high sequence number images
     if seq_number_limit:
         mask = (df_metadata["seq_number"] <= seq_number_limit)
