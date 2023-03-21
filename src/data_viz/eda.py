@@ -15,13 +15,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from mpl_toolkits.axes_grid1 import ImageGrid
 
 # Custom libraries
 from src.data import constants
 from src.data_prep.moco_dataset import MoCoDataModule
 from src.data_prep.utils import load_sickkids_metadata
-
+from src.data_viz import utils as viz_utils
 
 ################################################################################
 #                                  Constants                                   #
@@ -165,69 +164,6 @@ def patient_imgs_to_gif(df_metadata, patient_idx=0, img_dir=None,
     imageio.mimsave(save_path, images, fps=2)
 
 
-def gridplot_images(imgs, filename, title=None):
-    """
-    Plot example images on a grid plot
-
-    Parameters
-    ----------
-    example_imgs : np.array
-        Images to visualize
-    filename : str
-        Path to save figure to
-    title : str
-        Plot title, by default None
-    """
-    # Determine number of images to plot
-    num_imgs_sqrt = int(np.sqrt(len(imgs)))
-    num_imgs = num_imgs_sqrt ** 2
-
-    # Create grid plot
-    fig = plt.figure(figsize=(8., 8.))
-    grid = ImageGrid(
-        fig, 111,
-        nrows_ncols=(num_imgs_sqrt, num_imgs_sqrt),
-        axes_pad=0.01,      # padding between axes
-    )
-
-    for ax, img_arr in zip(grid, imgs[:num_imgs]):
-        # Set x and y axis to be invisible
-        ax.axes.xaxis.set_visible(False)
-        ax.axes.yaxis.set_visible(False)
-
-        # If first dimension is the channels, move to end
-        if img_arr.shape[0] in (1, 3):
-            img_arr = np.moveaxis(img_arr, 0, -1)
-
-        # Add image to grid plot
-        vmin, vmax = (0, 255) if img_arr.max() > 1 else (None, None)
-        ax.imshow(img_arr, cmap='gray', vmin=vmin, vmax=vmax)
-
-    # Set title
-    fig.suptitle(title)
-
-    # Save images
-    plt.tight_layout()
-    plt.savefig(constants.DIR_FIGURES + "/eda/" + filename)
-
-
-def gridplot_images_from_paths(paths, filename, title=None):
-    """
-    Create grid plot from provided list of image paths
-
-    Parameters
-    ----------
-    paths : list
-        List of full paths to images
-    filename : str
-        Path to save figure to
-    title : str
-        Plot title, by default None
-    """
-    imgs = np.stack([cv2.imread(path) for path in paths])
-    gridplot_images(imgs, filename, title)
-
-
 def plot_hn_dist_by_side(df_metadata, title="(Side vs HN)"):
     """
     Creates count plot for number of images with HN vs w/o HN (stratified by
@@ -281,7 +217,7 @@ def show_dist_of_ith_view(df_metadata, i=0):
         columns={0: f"Num. Seqs. w/ View at index {i}"})
 
     # Print to console
-    print_table(view_counts)
+    viz_utils.print_table(view_counts)
 
 
 def get_unique_label_sequences(df_metadata):
@@ -335,7 +271,7 @@ def get_unique_label_sequences(df_metadata):
         columns={"index": "Label Sequence", 0: "Count"})
 
     # Print to stdout
-    print_table(label_seq_counts, show_index=False)
+    viz_utils.print_table(label_seq_counts, show_index=False)
 
 
 def get_transition_matrix(df_metadata):
@@ -416,7 +352,7 @@ def get_transition_matrix(df_metadata):
     trans_matrix.index = trans_matrix.index.map(IDX_TO_CLASS)
     trans_matrix.columns = trans_matrix.columns.map(IDX_TO_CLASS)
 
-    print_table(trans_matrix)
+    viz_utils.print_table(trans_matrix)
 
     return trans_matrix
 
@@ -502,8 +438,14 @@ def plot_ssl_augmentations():
         break
 
     # Plot example images
-    gridplot_images(src_imgs, filename="before_ssl_augmentations.png")
-    gridplot_images(augmented_imgs, filename="after_ssl_augmentations.png")
+    viz_utils.gridplot_images(
+        src_imgs,
+        filename="before_ssl_augmentations.png",
+        save_dir=constants.DIR_FIGURES_EDA)
+    viz_utils.gridplot_images(
+        augmented_imgs,
+        filename="after_ssl_augmentations.png",
+        save_dir=constants.DIR_FIGURES_EDA)
 
 
 if __name__ == '__main__':

@@ -17,7 +17,7 @@ import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
-from maskedtensor import masked_tensor
+# from maskedtensor import masked_tensor
 
 # Custom libraries
 from src.data import constants
@@ -392,8 +392,8 @@ class SegmentedUSDataset(torch.utils.data.Dataset):
         # If specified, reverse mask
         if self.reverse_mask:
             X_mask = ~X_mask
-        
-        # Create masked image tensor
-        X = masked_tensor(X_src, X_mask, False)
 
-        return X
+        # Create masked image tensor
+        # X = masked_tensor(X_src, X_mask, False)
+        # return X
+        raise NotImplementedError

@@ -94,13 +94,15 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
 # TODO: Add second test path
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
+                           keep_orig_label=False,
                            extract=False,
                            include_hn=False,
                            relative_side=False,
                            include_unlabeled=False,
                            img_dir=constants.DIR_IMAGES,
                            include_test_set=False,
-                           test_path=constants.SK_TEST_METADATA_FILE):
+                           test_path=constants.SK_TEST_METADATA_FILE,
+                           ):
     """
     Load SickKids metadata table with filenames and view labels.
 
@@ -119,6 +121,9 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.
+    keep_orig_label : bool, optional
+        If True, create a new column "orig_label", which contains the original
+        label before potentially splitting it, by default False.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -162,6 +167,10 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
     fix_label_map = {"Saggital_Left": "Sagittal_Left",
                      "Saggital_Right": "Sagittal_Right"}
     df_metadata.label = df_metadata.label.map(lambda x: fix_label_map.get(x, x))
+
+    # If specified, create duplicate of original label
+    if keep_orig_label:
+        df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
     if label_part:
@@ -212,6 +221,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
 
 def load_stanford_metadata(path=constants.SU_METADATA_FILE,
                            label_part=None,
+                           keep_orig_label=False,
                            extract=False,
                            include_hn=False,
                            relative_side=False,
@@ -235,6 +245,9 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.
+    keep_orig_label : bool, optional
+        If True, create a new column "orig_label", which contains the original
+        label before potentially splitting it, by default False.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -262,6 +275,10 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
     fix_label_map = {"Saggital_Left": "Sagittal_Left",
                      "Saggital_Right": "Sagittal_Right"}
     df_metadata.label = df_metadata.label.map(lambda x: fix_label_map.get(x, x))
+
+    # If specified, create duplicate of original label
+    if keep_orig_label:
+        df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
     if label_part:
@@ -316,6 +333,7 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
 
 def load_uiowa_metadata(path=constants.UIOWA_METADATA_FILE,
                         label_part=None,
+                        keep_orig_label=False,
                         extract=False,
                         relative_side=False,
                         include_hn=False,
@@ -340,6 +358,9 @@ def load_uiowa_metadata(path=constants.UIOWA_METADATA_FILE,
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.
+    keep_orig_label : bool, optional
+        If True, create a new column "orig_label", which contains the original
+        label before potentially splitting it, by default False.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -364,6 +385,10 @@ def load_uiowa_metadata(path=constants.UIOWA_METADATA_FILE,
     # Load metadata
     df_metadata = pd.read_csv(path)
 
+    # If specified, create duplicate of original label
+    if keep_orig_label:
+        df_metadata["orig_label"] = df_metadata["label"]
+
     # Change label to side/plane, if specified
     if label_part:
         df_metadata["label"] = df_metadata["label"].map(
@@ -387,6 +412,7 @@ def load_uiowa_metadata(path=constants.UIOWA_METADATA_FILE,
 
 def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
                        label_part=None,
+                       keep_orig_label=False,
                        extract=False,
                        relative_side=False,
                        include_hn=False,
@@ -411,6 +437,9 @@ def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.
+    keep_orig_label : bool, optional
+        If True, create a new column "orig_label", which contains the original
+        label before potentially splitting it, by default False.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -434,6 +463,10 @@ def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
 
     # Load metadata
     df_metadata = pd.read_csv(path)
+
+    # If specified, create duplicate of original label
+    if keep_orig_label:
+        df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
     if label_part:
@@ -458,6 +491,7 @@ def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
 
 def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
                                    label_part=None,
+                                   keep_orig_label=False,
                                    extract=False,
                                    relative_side=False,
                                    include_hn=False,
@@ -482,6 +516,9 @@ def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.
+    keep_orig_label : bool, optional
+        If True, create a new column "orig_label", which contains the original
+        label before potentially splitting it, by default False.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -506,6 +543,10 @@ def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
     # Load metadata
     df_metadata = pd.read_csv(path)
 
+    # If specified, create duplicate of original label
+    if keep_orig_label:
+        df_metadata["orig_label"] = df_metadata["label"]
+
     # Change label to side/plane, if specified
     if label_part:
         df_metadata["label"] = df_metadata["label"].map(
@@ -529,6 +570,7 @@ def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
 
 def load_sickkids_silent_trial_metadata(path=constants.SK_ST_METADATA_FILE,
                                         label_part=None,
+                                        keep_orig_label=False,
                                         extract=False,
                                         relative_side=False,
                                         include_hn=False,
@@ -553,6 +595,9 @@ def load_sickkids_silent_trial_metadata(path=constants.SK_ST_METADATA_FILE,
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.
+    keep_orig_label : bool, optional
+        If True, create a new column "orig_label", which contains the original
+        label before potentially splitting it, by default False.
     extract : bool, optional
         If True, extracts patient ID, US visit, and sequence number from the
         filename, by default False.
@@ -576,6 +621,10 @@ def load_sickkids_silent_trial_metadata(path=constants.SK_ST_METADATA_FILE,
 
     # Load metadata
     df_metadata = pd.read_csv(path)
+
+    # If specified, create duplicate of original label
+    if keep_orig_label:
+        df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
     if label_part:
@@ -1477,11 +1526,11 @@ def left_join_filtered_to_source(df_filtered, df_full, index_cols=None):
         df_full = df_full.set_index(index_cols)
 
     # Perform LEFT JOIN
-    df_filtered = df_filtered.join(df_full, how="left", rsuffix="dup__")
+    df_filtered = df_filtered.join(df_full, how="left", rsuffix="__dup")
 
     # Remove duplicate columnss
     drop_cols = [col for col in df_filtered.columns
-                 if isinstance(col, str) and col.startswith("dup__")]
+                 if isinstance(col, str) and col.endswith("__dup")]
     df_filtered = df_filtered.drop(columns=drop_cols)
 
     # Reset index, if earlier specified

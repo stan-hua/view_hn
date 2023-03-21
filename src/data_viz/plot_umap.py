@@ -25,7 +25,6 @@ from src.data import constants
 from src.data_prep import utils
 from src.drivers.embed import get_embeds
 from src.data_viz import utils as viz_utils
-from src.data_viz.eda import gridplot_images
 
 
 ################################################################################
@@ -540,9 +539,10 @@ def plot_images_in_umap_clusters(exp_name, filenames, df_embeds_only, raw=False,
         imgs = np.array([cv2.imread(path) for path in cluster_img_paths])
 
         # Grid plot cluster images
-        gridplot_images(
+        viz_utils.gridplot_images(
             imgs,
             filename=f"{exp_name}/umap_cluster_{cluster}{'_raw' if raw else ''}",
+            save_dir=constants.DIR_FIGURES_UMAP,
             title=f"Cluster {cluster}"
             )
 
@@ -826,4 +826,6 @@ if __name__ == "__main__":
 
     # 2. Run main flow
     for EXP_NAME in ARGS.exp_name:
+        for DSET in ARGS.dset:
+            main(exp_name=EXP_NAME, dset=DSET)
         main(exp_name=EXP_NAME, dset=ARGS.dset)

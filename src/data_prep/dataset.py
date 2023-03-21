@@ -32,6 +32,14 @@ LOGGER.setLevel(level=logging.DEBUG)
 # Torchvision Grayscale/RGB constants
 IMAGE_MODES = {1: ImageReadMode.GRAY, 3: ImageReadMode.RGB}
 
+# Default parameters for data loader
+DEFAULT_DATALOADER_PARAMS = {
+    "batch_size": 16,
+    "shuffle": False,
+    "num_workers": 4,
+    "pin_memory": True,
+}
+
 
 ################################################################################
 #                                Main Functions                                #
@@ -88,6 +96,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
     """
     def __init__(self, dataloader_params=None, df=None, img_dir=None,
                  full_seq=False, mode=3,
+                 full_path=False,
                  augment_training=False,
                  **kwargs):
         """
@@ -115,6 +124,9 @@ class UltrasoundDataModule(pl.LightningDataModule):
         mode : int, optional
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
+        full_path : bool, optional
+            If True, "filename" metadata contains full path to the image/s.
+            Otherwise, contains path basename, by default False.
         augment_training : bool, optional
             If True, add random augmentations during training, by default False.
         **kwargs : dict
@@ -144,7 +156,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "img_size": self.img_size,
             "label_part": kwargs.get("label_part"),
             "split_label": kwargs.get("multi_output", False),
-            "full_path": kwargs.get("full_path", False),
+            "full_path": full_path,
         }
 
         # Get image paths, patient IDs, and labels (and visit)
@@ -174,14 +186,8 @@ class UltrasoundDataModule(pl.LightningDataModule):
         ########################################################################
         #                        DataLoader Parameters                         #
         ########################################################################
-        # Default parameters for data loader
-        default_data_params = {"batch_size": 32,
-                               "shuffle": False,
-                               "num_workers": 4,
-                               "pin_memory": True}
-
         # Parameters for training/validation DataLoaders
-        self.train_dataloader_params = default_data_params
+        self.train_dataloader_params = DEFAULT_DATALOADER_PARAMS
         if dataloader_params:
             self.train_dataloader_params.update(dataloader_params)
 
@@ -674,6 +680,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
                  label_part=None, split_label=False,
                  transforms=None,
                  full_path=False,
+                 **ignore_kwargs,
                 ):
         """
         Initialize UltrasoundDatasetDataFrame object.
@@ -712,6 +719,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         full_path : bool, optional
             If True, "filename" metadata contains full path to the image/s.
             Otherwise, contains path basename, by default False.
+        **ignore_kwargs : dict, optional
+            Misc. keyword arguments are ignored.
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
