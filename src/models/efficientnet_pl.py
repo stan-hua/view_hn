@@ -8,7 +8,7 @@ Description: PyTorch Lightning wrapper over efficientnet-pytorch library.
 import pytorch_lightning as pl
 import torch
 import torchmetrics
-from efficientnet_pytorch import EfficientNet, get_model_params
+from efficientnet_pytorch import EfficientNet, get_model_params, utils
 from torch.nn import functional as F
 
 
@@ -83,6 +83,17 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
         return optimizer
+
+
+    def load_imagenet_weights(self):
+        """
+        Load imagenet weights for convolutional backbone.
+        """
+        # NOTE: Modified utility function to ignore missing keys
+        utils.load_pretrained_weights(
+            self, self.model_name,
+            load_fc=False,
+            advprop=False)
 
 
     ############################################################################

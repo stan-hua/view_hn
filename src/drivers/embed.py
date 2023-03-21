@@ -115,7 +115,8 @@ class ImageEmbedder:
 
 
     def embed_tf_batch(self, save_path, img_dir=None,
-                       img_dataloader=None):
+                       img_dataloader=None,
+                       device=None):
         """
         Extract embeddings for all images in the directory, using Tensorflow
         data loading libraries.
@@ -185,7 +186,13 @@ class ImageEmbedder:
 
             # Extract embeddings in batches
             for img, metadata in tqdm(img_dataloader):
-                embeds = self.model.predict(img.detach().cpu())
+                x = img.detach().cpu().numpy()
+                if len(x.shape) == 5:
+                    x = x.squeeze(axis=0)
+                # Flip around channel dimension
+                if x.shape[1] == 3:
+                    x = np.moveaxis(x, 1, 3)
+                embeds = self.model.predict(x)
 
                 all_embeds.append(embeds)
                 file_paths.extend(metadata["filename"])
@@ -195,8 +202,8 @@ class ImageEmbedder:
 
         # Save embeddings
         df_features = pd.DataFrame(np.array(all_embeds))
-        df_features["filename"] = file_paths
-        df_features["filename"] = df_features["filename"].str.decode("utf-8")
+        assert not df_features.isna().all(axis=None)
+        df_features["filename"] = np.array(file_paths).flatten()
         df_features.to_hdf(save_path, "embeds")
 
 
@@ -229,6 +236,13 @@ class ImageEmbedder:
             Contains a column for the path to the image file. Other columns are
             embedding columns
         """
+        # INPUT: If GPU specified, move model to GPU/CPU
+        if device == "cuda" and torch.cuda.is_available():
+            device = "cpu"
+        else:
+            device = "cpu"
+        self.model = self.model.to(device)
+
         # Input sanitization
         assert img_dir or img_dataloader, "Must specify at least image "\
                                           "directory or image dataloader"
@@ -269,6 +283,7 @@ class ImageEmbedder:
 
         # Save embeddings. Each row is a feature vector
         df_features = pd.DataFrame(np.concatenate(all_embeds))
+        assert not df_features.isna().all(axis=None)
         df_features["filename"] = np.array(file_paths).flatten()
         df_features.to_hdf(save_path, "embeds", mode="w")
 
@@ -315,7 +330,7 @@ def extract_embeds(model,
 
     # If an image file
     if img_file:
-        embeds = embedder.embed_torch(img_file)
+        embeds = embedder.embed_torch(img_file, **embedder_kwargs)
         df_embed = pd.DataFrame(embeds).T
         df_embed['filename'] = img_file
         df_embed.to_hdf(save_embed_path)
@@ -441,29 +456,25 @@ def main(args):
 
         # Extract embeddings for each dataset
         for dset in args.dset:
-            # Prepare arguments for data module
-            hparams = {}
-            overwrite_hparams = load_data.create_overwrite_hparams(dset)
-
-            # Set up data module
-            dm = load_data.setup_data_module(hparams, use_defaults=True,
-                                             **overwrite_hparams)
-
-            # Get dataloader
-            if dset == "val":
-                img_dataloader = dm.val_dataloader()
-            elif dset == "test":
-                img_dataloader = dm.test_dataloader()
-            else:
-                img_dataloader = dm.train_dataloader()
+            # Get image dataloader
+            img_dataloader = load_data.get_dset_dataloader(dset, full_path=True)
 
             # Create path to save embeddings
             save_embed_path = get_save_path(exp_name, dset=dset)
+            # Early return, if embeddings already made
+            if os.path.isfile(save_embed_path):
+                LOGGER.info(f"Embeddings for exp_name: ({exp_name}), "
+                            f"dset: ({dset}) already exists! Skipping...")
+                continue
 
             # Perform extraction
             extract_embeds(model=model, exp_name=exp_name,
                            save_embed_path=save_embed_path,
-                           img_dataloader=img_dataloader)
+                           img_dataloader=img_dataloader,
+                           device=constants.DEVICE,)
+
+            LOGGER.info(f"Success! Created embeddings for exp_name: "
+                        f"({exp_name}), dset: ({dset})")
 
 
 ################################################################################
@@ -529,7 +540,7 @@ if __name__ == "__main__":
     init(PARSER)
 
     # 1. Get arguments
-    args = PARSER.parse_args()
+    ARGS = PARSER.parse_args()
 
     # 2. Run main flow to extract embeddings
-    main(args)
+    main(ARGS)
