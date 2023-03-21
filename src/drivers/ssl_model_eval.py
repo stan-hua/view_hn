@@ -257,7 +257,7 @@ def analyze_preds(exp_name, augment_training=False,
                     overwrite_hparams = load_data.create_overwrite_hparams(
                         dset)
                     # Specify to mask bladder, if hospital w/o bladder labels
-                    mask_bladder = dset in constants.HOSPITAL_MISSING_BLADDER
+                    mask_bladder = dset in constants.DSETS_MISSING_BLADDER
 
                     # 1. Perform inference on dataset
                     model_eval.infer_dset(

@@ -1280,7 +1280,7 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
         If True, bladder predictions are masked out, by default False
     """
     # 0. Overwrite `mask_bladder`, based on dset
-    if dset in constants.HOSPITAL_MISSING_BLADDER:
+    if dset in constants.DSETS_MISSING_BLADDER:
         LOGGER.info(f"Hospital missing bladder labels found ({dset})! "
                     "Overwriting `mask_bladder`")
         mask_bladder = True
@@ -1587,6 +1587,11 @@ def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
     str
         Expected path to dset predictions
     """
+    # Add mask bladder, if dset doesn't contain bladders
+    if dset in constants.DSETS_MISSING_BLADDER:
+        extra_flags["mask_bladder"] = True
+
+    # Add true flags to the experiment name
     for flag, val in extra_flags.items():
         if val:
             exp_name += f"__{flag}"
@@ -1889,7 +1894,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                 # 1. Perform inference
                 infer_dset(
                     exp_name=exp_name, dset=dset_,
-                    mask_bladder=dset_ in constants.HOSPITAL_MISSING_BLADDER,
+                    mask_bladder=dset_ in constants.DSETS_MISSING_BLADDER,
                     overwrite_existing=True,
                     **load_data.create_overwrite_hparams(dset_))
                 # 2. Attempt to calculate metrics again
@@ -1920,7 +1925,7 @@ if __name__ == '__main__':
         # Iterate over all specified eval dsets
         for DSET in ARGS.dset:
             # Specify to mask bladder, if it's a hospital w/o bladder labels
-            MASK_BLADDER = DSET in constants.HOSPITAL_MISSING_BLADDER
+            MASK_BLADDER = DSET in constants.DSETS_MISSING_BLADDER
 
             # 2. Create overwrite parameters
             OVERWRITE_HPARAMS = load_data.create_overwrite_hparams(DSET)

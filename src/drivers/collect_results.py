@@ -67,7 +67,7 @@ def create_eval_model_dir(exp_name, task, dset):
     exp_name = exp_name.replace("(TASK)", task)
 
     # If UIowa or CHOP, only look at predictions masking bladder
-    if dset in constants.HOSPITAL_MISSING_BLADDER:
+    if dset in constants.DSETS_MISSING_BLADDER:
         exp_name += "__mask_bladder"
 
     # Prepend `inference` directory path
