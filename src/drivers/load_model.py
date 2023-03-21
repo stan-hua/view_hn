@@ -474,6 +474,31 @@ def prepend_prefix(state_dict, prefix, exclude_regex=None):
     return state_dict
 
 
+def get_last_conv_layer(model):
+    """
+    Get last convolutional layer in model.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Convolutional model
+
+    Returns
+    -------
+    torch.nn.Conv2d
+        Last convolutional layer
+    """
+    # CASE 1: Model is a wrapper, storing a conv. backbone
+    if isinstance(model, (LinearEval, LSTMLinearEval, EnsembleLSTMLinear)):
+        return get_last_conv_layer(model.conv_backbone)
+    # CASE 2: Model is an EfficientNetB0
+    elif isinstance(model, EfficientNet):
+        return model._conv_head
+
+    # Raise error, if not found
+    raise NotImplementedError
+
+
 ################################################################################
 #                                  Deprecated                                  #
 ################################################################################
@@ -500,7 +525,7 @@ def load_pretrained_from_model_name(model_name):
                                input_shape=(None, None, 3),
                                pooling="avg")
     elif model_name == "imagenet":
-        model = EfficientNetLSTM()
+        model = EfficientNetPL()
         model.load_imagenet_weights()
     elif model_name == "cpc":
         model = CPC.load_from_checkpoint(weights)
