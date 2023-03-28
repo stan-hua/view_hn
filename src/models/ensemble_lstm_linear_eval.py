@@ -1,34 +1,48 @@
 """
-efficientnet_lstm_pl.py
+ensemble_lstm_linear_eval.py
 
-Description: CNN-LSTM using an EfficientNet convolutional backbone. PyTorch
-             Lightning is used to wrap over the efficientnet-pytorch library.
+Description: Used to provide a lstm + linear classification evaluation over
+             pretrained convolutional backbones.
 """
 
 # Non-standard libraries
 import pytorch_lightning as pl
 import torch
 import torchmetrics
-from efficientnet_pytorch import (EfficientNet,
-    get_model_params, utils)
+from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
-class EfficientNetLSTM(EfficientNet, pl.LightningModule):
+class EnsembleLSTMLinear(pl.LightningModule):
     """
-    EfficientNet + LSTM model for sequence-based classification.
+    EnsembleLSTMLinear object, wrapping over 2+ convolutional backbones.
     """
-    def __init__(self, num_classes=5, img_size=(256, 256),
+
+    def __init__(self, conv_backbones,
+                 temporal_backbone=None,
+                 freeze_weights=True,
+                 conv_backbone_output_dim=1280,
+                 num_classes=5,
+                 img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
-                 n_lstm_layers=1, hidden_dim=512, bidirectional=True,
-                 from_imagenet=False,
-                 freeze_weights=False,
+                 n_lstm_layers=1, hidden_dim=512, bidirectional=False,
                  *args, **kwargs):
         """
-        Initialize EfficientNetLSTM object.
+        Initialize EnsembleLSTMLinear object.
 
         Parameters
         ----------
+        conv_backbones : list of torch.nn.Module
+            Multiple pretrained convolutional backbone whose convoluational
+            features to concatenate.
+        temporal_backbone : torch.nn.Module, optional
+            Pretrained temporal backbone. Instantiates and trains one, by
+            default None.
+        freeze_weights : bool, optional
+            If True, freeze weights of provided pretrained backbone/s, by
+            default True.
+        conv_backbone_output_dim : int, optional
+            Size of output of pretrained convolutional backbone, by default 1280
         num_classes : int, optional
             Number of classes to predict, by default 5
         img_size : tuple, optional
@@ -49,33 +63,48 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         hidden_dim : int, optional
             Dimension/size of hidden layers, by default 512
         bidirectional : bool, optional
-            If True, trains a bidirectional LSTM, by default True
-        from_imagenet : bool, optional
-            If True, load ImageNet pretrained weights, by default False.
-        freeze_weights : bool, optional
-            If True, freeze convolutional weights, by default False.
+            If True, trains a bidirectional LSTM, by default False
         """
-        # Instantiate EfficientNet
-        self.model_name = "efficientnet-b0"
-        feature_dim = 1280      # expected feature size from EfficientNetB0
-        blocks_args, global_params = get_model_params(
-            self.model_name, {"image_size": img_size,
-                              "include_top": False})
-        super().__init__(blocks_args=blocks_args, global_params=global_params)
+        super().__init__()
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters()
+        self.save_hyperparameters(
+            "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
+            "n_lstm_layers", "hidden_dim", "bidirectional",
+            "conv_backbone_output_dim", "freeze_weights",
+             *list([k for k,v in kwargs.items() if \
+                not isinstance(v, torch.nn.Module)]))
 
-        # Define LSTM layers
-        self.temporal_backbone = torch.nn.LSTM(
-            feature_dim, self.hparams.hidden_dim, batch_first=True,
-            num_layers=self.hparams.n_lstm_layers,
-            bidirectional=self.hparams.bidirectional)
+        # NOTE: Ensure at least 1+ conv. backbones provided
+        self.num_convs = len(conv_backbones)
+        if not self.num_convs:
+            raise RuntimeError("At least 1 convolutional backbone must "
+                               "be provided!")
+
+        # Store 1+ convolutional backbone, and freeze its weights
+        self.conv_backbones = conv_backbones
+        if self.hparams.freeze_weights:
+            for conv_backbone in self.conv_backbones:
+                deactivate_requires_grad(conv_backbone)
+
+        # If provided, store temporal backbone
+        if temporal_backbone:
+            self.temporal_backbone = temporal_backbone
+            if self.hparams.freeze_weights:
+                deactivate_requires_grad(temporal_backbone)
+        else:
+            # Define LSTM layers
+            self.temporal_backbone = torch.nn.LSTM(
+                self.hparams.conv_backbone_output_dim,
+                self.hparams.hidden_dim,
+                batch_first=True,
+                num_layers=self.hparams.n_lstm_layers,
+                bidirectional=self.hparams.bidirectional)
 
         # Define classification layer
         multiplier = 2 if self.hparams.bidirectional else 1
         size_after_lstm = self.hparams.hidden_dim * multiplier
-        self.fc = torch.nn.Linear(size_after_lstm, self.hparams.num_classes)
+        self.fc = torch.nn.Linear(size_after_lstm, num_classes)
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
@@ -89,69 +118,6 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
             if self.hparams.num_classes == 2:
                 exec(f"self.{dset}_auroc = torchmetrics.AUROC()")
                 exec(f"self.{dset}_auprc = torchmetrics.AveragePrecision()")
-
-        ########################################################################
-        #                          Post-Setup                                  #
-        ########################################################################
-        # Freeze convolutional weights, if specified
-        self.prep_conv_weights()
-
-
-    def prep_conv_weights(self):
-        """
-        If specified by internal attribute, freeze all convolutional weights.
-        """
-        conv_requires_grad = not self.hparams.freeze_weights
-        blacklist = ["temporal_backbone.", "fc."]
-        for name, parameter in self.named_parameters():
-            if any(name.startswith(item) for item in blacklist):
-                continue
-            parameter.requires_grad = conv_requires_grad
-
-
-    def load_imagenet_weights(self):
-        """
-        Load imagenet weights for convolutional backbone.
-        """
-        # NOTE: Modified utility function to ignore missing keys
-        utils.load_pretrained_weights(
-            self, self.model_name,
-            load_fc=False,
-            advprop=False)
-
-
-    def forward(self, inputs):
-        """
-        Modified EfficientNet + LSTM forward pass.
-
-        Parameters
-        ----------
-        inputs : torch.Tensor
-            Sequential images for an ultrasound sequence for 1 patient
-
-        Returns
-        -------
-        torch.Tensor
-            Model output after final linear layer
-        """
-        # Convolution layers
-        x = self.extract_features(inputs)
-
-        # Pooling
-        x = self._avg_pooling(x)
-
-        # LSTM layers
-        seq_len = x.size()[0]
-        x = x.view(1, seq_len, -1)
-        x, _ = self.temporal_backbone(x)
-
-        # Linear layer
-        x = self.fc(x)
-
-        # Remove extra dimension added for LSTM
-        x = x.squeeze(dim=0)
-
-        return x
 
 
     def configure_optimizers(self):
@@ -175,18 +141,51 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         return optimizer
 
 
+    def forward(self, inputs):
+        """
+        Forward pass
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Sequential images for an ultrasound sequence for 1 patient. Expected
+            size is (T, C, H, W).
+
+        Returns
+        -------
+        torch.Tensor
+            Model output after final linear layer
+        """
+        assert self.conv_backbones is not None, \
+            "Please include `conv_backbones` during instantiation!"
+
+        # For each conv. backbone, extract convolutional features
+        x = [None] * len(self.conv_backbones)
+        for i, conv_backbone in enumerate(self.conv_backbones):
+            x[i] = conv_backbone(inputs)
+        # Concatenate conv. features
+        x = torch.cat(x)
+
+        # LSTM layers
+        seq_len = x.size()[0]
+        x = x.view(1, seq_len, -1)
+        x, _ = self.temporal_backbone(x)
+
+        # Linear layer
+        x = self.fc(x)
+
+        # Remove extra dimension added for LSTM
+        x = x.squeeze(dim=0)
+
+        return x
+
+
     ############################################################################
     #                          Per-Batch Metrics                               #
     ############################################################################
     def training_step(self, train_batch, batch_idx):
         """
-        Training step, where a batch represents all images from the same
-        ultrasound sequence.
-
-        Note
-        ----
-        Image tensors are of the shape:
-            - (sequence_length, num_channels, img_height, img_width)
+        Batch training step
 
         Parameters
         ----------
@@ -205,8 +204,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         # If shape is (1, seq_len, C, H, W), flatten first dimension
         if len(data.size()) == 5:
             data = data.squeeze(dim=0)
-################################################################################
-################################################################################
+
         # Get prediction
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
@@ -233,13 +231,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
 
     def validation_step(self, val_batch, batch_idx):
         """
-        Validation step, where a batch represents all images from the same
-        ultrasound sequence.
-
-        Note
-        ----
-        Image tensors are of the shape:
-            - (sequence_length, num_channels, img_height, img_width)
+        Batch validation step
 
         Parameters
         ----------
@@ -285,13 +277,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
 
     def test_step(self, test_batch, batch_idx):
         """
-        Test step, where a batch represents all images from the same
-        ultrasound sequence.
-
-        Note
-        ----
-        Image tensors are of the shape:
-            - (sequence_length, num_channels, img_height, img_width)
+        Batch test step
 
         Parameters
         ----------
@@ -439,20 +425,16 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         numpy.array
             Embeddings after CNN+LSTM
         """
-        # Get dimensions
-        T, _, _, _ = inputs.size()
+        # For each conv. backbone, extract convolutional features
+        x = [None] * len(self.conv_backbones)
+        for i, conv_backbone in enumerate(self.conv_backbones):
+            x[i] = conv_backbone(inputs)
+        # Concatenate conv. features
+        x = torch.cat(x)
 
-        # Extract convolutional features
-        z = self.extract_features(inputs)
+        # LSTM layers
+        seq_len = x.size()[0]
+        x = x.view(1, seq_len, -1)
+        x, _ = self.temporal_backbone(x)
 
-        # 2. Average Pooling
-        z = self._avg_pooling(z)
-
-        # Flatten
-        z = z.view(1, T, -1)
-
-        # Extract temporal features
-        c = self.temporal_backbone(z)[0]
-        c = c.view(T, -1)
-
-        return c.detach().cpu().numpy()
+        return x

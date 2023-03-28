@@ -54,6 +54,55 @@ SSL_NAME_TO_MODEL_CLS = {
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
+def load_model(hparams):
+    """
+    Given experiment hyperparameters, instantiate/load model specified.
+
+    Parameters
+    ----------
+    hparams : dict
+        Experiment hyperparameters
+
+    Returns
+    ------
+    torch.nn.Module
+        Desired model
+    """
+    # Get model class
+    model_cls, model_cls_kwargs = get_model_cls(hparams)
+    # Instantiate model
+    model = model_cls(**hparams, **model_cls_kwargs)
+
+    # If specified, attempt to load ImageNet pretrained weights
+    if hparams.get("from_imagenet") and hasattr(model, "load_imagenet_weights"):
+        model.load_imagenet_weights()
+    # If specified, start from a previously trained model
+    elif hparams.get("from_exp_name"):
+        pretrained_model = load_pretrained_from_exp_name(
+            hparams.get("from_exp_name"),
+            **model_cls_kwargs)
+        # CASE 1: If pretrained model is the same, replace with existing model
+        if type(model) == type(pretrained_model):
+            overwrite_model(model, src_model=pretrained_model)
+        # CASE 2: Update model weights with those from pretrained model
+        # CASE 2.1: Model weight names don't need to be changed
+        elif hparams.get("self_supervised"):
+            pretrained_state_dict = pretrained_model.state_dict()
+            # NOTE: SSL conv. backbone weights are prefixed by "conv_backbone."
+            pattern = r"(conv_backbone\..*)|(temporal_backbone\..*)|(fc\..*)"
+            pretrained_state_dict = prepend_prefix(
+                pretrained_state_dict, "conv_backbone.",
+                exclude_regex=pattern)
+            model = overwrite_model(
+                model,
+                src_state_dict=pretrained_state_dict)
+        # UNKNOWN CASE: Not supported case
+        else:
+            raise NotImplementedError
+
+    return model
+
+
 def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     """
     Load pretrained model from experiment name.

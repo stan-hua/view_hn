@@ -18,6 +18,7 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
     """
     def __init__(self, num_classes=5, img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 freeze_weights=False,
                  *args, **kwargs):
         """
         Initialize EfficientNetPL object.
@@ -39,6 +40,8 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         weight_decay : float, optional
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
+        freeze_weights : bool, optional
+            If True, freeze convolutional weights, by default False.
         """
         # Instantiate EfficientNet
         self.model_name = "efficientnet-b0"
@@ -62,6 +65,24 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
             if self.hparams.num_classes == 2:
                 exec(f"self.{dset}_auroc = torchmetrics.AUROC()")
                 exec(f"self.{dset}_auprc = torchmetrics.AveragePrecision()")
+
+        ########################################################################
+        #                          Post-Setup                                  #
+        ########################################################################
+        # Freeze convolutional weights, if specified
+        self.prep_conv_weights()
+
+
+    def prep_conv_weights(self):
+        """
+        If specified by internal attribute, freeze all convolutional weights.
+        """
+        conv_requires_grad = not self.hparams.freeze_weights
+        blacklist = ["temporal_backbone", "fc"]
+        for parameter in self.parameters():
+            if any(parameter.name.startswith(name) for name in blacklist):
+                continue
+            parameter.requires_grad = conv_requires_grad
 
 
     def configure_optimizers(self):
