@@ -232,7 +232,7 @@ def get_dset_dataloader_filtered(dset, filters=None, **overwrite_hparams):
                 raise RuntimeError(f"Column {col} not in table provided!")
             
             # CASE 1: Value is a list/tuple
-            if isinstance(val, (list, tuple)):
+            if isinstance(val, (list, tuple, set)):
                 mask = df_metadata[col].isin(val)
                 df_metadata = df_metadata[mask]
             # CASE 2: Value is a single item

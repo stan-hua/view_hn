@@ -142,11 +142,10 @@ class MoCoDataModule(UltrasoundDataModule):
             index_cols="filename")
 
         # Instantiate UltrasoundDatasetDataFrame
-        train_dataset = UltrasoundDatasetDataFrame(df_train, self.img_dir,
-                                                   self.full_seq,
-                                                   img_size=self.img_size,
-                                                   mode=self.mode,
-                                                   label_part=self.label_part)
+        train_dataset = UltrasoundDatasetDataFrame(
+            df_train,
+            **self.us_dataset_kwargs,
+        )
 
         # Transform to LightlyDataset
         train_dataset = LightlyDataset.from_torch_dataset(
@@ -155,7 +154,7 @@ class MoCoDataModule(UltrasoundDataModule):
 
         # Choose sampling method
         sampler = None
-        if self.full_seq:
+        if self.us_dataset_kwargs.get("full_seq"):
             sampler = BatchSampler(SequentialSampler(train_dataset),
                                    batch_size=1,
                                    drop_last=False)
@@ -188,11 +187,10 @@ class MoCoDataModule(UltrasoundDataModule):
             index_cols="filename")
 
         # Instantiate UltrasoundDatasetDataFrame
-        val_dataset = UltrasoundDatasetDataFrame(df_val, self.img_dir,
-                                                 self.full_seq,
-                                                 img_size=self.img_size,
-                                                 mode=self.mode,
-                                                 label_part=self.label_part)
+        val_dataset = UltrasoundDatasetDataFrame(
+            df_val,
+            **self.us_dataset_kwargs,
+        )
 
         # Transform to LightlyDataset
         val_dataset = LightlyDataset.from_torch_dataset(
@@ -201,7 +199,7 @@ class MoCoDataModule(UltrasoundDataModule):
 
         # Choose sampling method
         sampler = None
-        if self.full_seq:
+        if self.us_dataset_kwargs.get("full_seq"):
             sampler = BatchSampler(SequentialSampler(val_dataset),
                                    batch_size=1,
                                    drop_last=False)
@@ -235,10 +233,9 @@ class MoCoDataModule(UltrasoundDataModule):
 
         # Instantiate UltrasoundDatasetDataFrame
         test_dataset = UltrasoundDatasetDataFrame(
-            df_test, self.img_dir, self.full_seq,
-            img_size=self.img_size,
-            mode=self.mode,
-            label_part=self.label_part)
+            df_test,
+            **self.us_dataset_kwargs,
+        )
 
         # Transform to LightlyDataset
         test_dataset = LightlyDataset.from_torch_dataset(
@@ -247,7 +244,7 @@ class MoCoDataModule(UltrasoundDataModule):
 
         # Choose sampling method
         sampler = None
-        if self.full_seq:
+        if self.us_dataset_kwargs.get("full_seq"):
             sampler = BatchSampler(SequentialSampler(test_dataset),
                                    batch_size=1,
                                    drop_last=False)
