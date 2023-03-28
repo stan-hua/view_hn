@@ -197,20 +197,21 @@ def add_space_between_dsets(df_metrics, dsets=DSETS):
     df_metrics = df_metrics.copy()
 
     # Expected number of columns after adding spacers
-    future_n = len(df_metrics.columns) + len(dsets) - 1
+    future_n = len(df_metrics.columns) + (len(dsets) - 1)
 
     col_idx = 0
     curr_dset = "NOT_EXISTS"
     while col_idx < future_n:
         columns = df_metrics.columns.tolist()
         # If same dset, skip
-        if columns[col_idx].startswith(curr_dset) or col_idx == 0:
+        if "_".join(columns[col_idx].split("_")[:-1]) == curr_dset \
+                or col_idx == 0:
             col_idx += 1
             continue
-        # If the last one was `exp_name`, ignore
-        if col_idx and columns[col_idx-1] == "exp_name":
+        # If last is the `exp_name`, skip
+        if columns[col_idx-1] == "exp_name":
             col_idx += 1
-            curr_dset = columns[col_idx].split("_")[0]
+            curr_dset = "_".join(columns[col_idx].split("_")[:-1])
             continue
 
         # Otherwise, add column spacer
@@ -221,7 +222,7 @@ def add_space_between_dsets(df_metrics, dsets=DSETS):
             df_metrics.iloc[:, col_idx:]], axis=1)
 
         # New dataset
-        curr_dset = columns[col_idx].split("_")[0]
+        curr_dset = "_".join(columns[col_idx].split("_")[:-1])
         # NOTE: Need to skip added spacer column
         col_idx += 2
 
