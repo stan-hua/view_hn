@@ -273,7 +273,13 @@ def analyze_preds(exp_name, augment_training=False,
                         **overwrite_hparams,
                     )
 
-                # 3. Analyze predictions
+                    # 3. Analyze predictions separately
+                    model_eval.analyze_dset_preds(
+                        exp_eval_name,
+                        dset=dset,
+                    )
+
+                # 4. Create UMAP together
                 model_eval.analyze_dset_preds(
                     exp_eval_name,
                     dset=dsets,
