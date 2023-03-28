@@ -11,7 +11,9 @@ import os
 from collections import defaultdict
 
 # Non-standard libraries
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import torch
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
@@ -21,7 +23,7 @@ from tqdm import tqdm
 # Custom libraries
 from src.data import constants
 from src.data_viz import utils as viz_utils
-from src.drivers import load_data, load_model
+from src.drivers import load_data, load_model, model_eval
 
 
 # Set theme
@@ -83,8 +85,20 @@ def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
         use_cuda=False,
     )
 
-    # Create filters on ORIGINAL labels
-    filters = {"orig_label": label_whitelist}
+    # Load predictions
+    pred_path = model_eval.create_save_path(exp_name=exp_name, dset=dset)
+    df_preds = pd.read_csv(pred_path)
+
+    # TODO: Filter first for correct/misclassified images
+    # TODO: Fix folder name
+    df_preds = df_preds[df_preds.label != df_preds.pred]
+
+    # Create filters on:
+    #   a) ORIGINAL labels
+    filters = {
+        "orig_label": label_whitelist,
+        "filename": set(df_preds.filename.tolist()),
+    }
 
     # Create image dataloader, filtering for the right labels
     img_dataloader = load_data.get_dset_dataloader_filtered(
@@ -116,7 +130,7 @@ def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
         # Create grid plot with GradCAM
         viz_utils.gridplot_images(
             orig_imgs,
-            filename=f"{label.lower()}_orig_gridplot.png",
+            filename=f"misclassified_right_sag/orig_gridplot.png",
             save_dir=save_dir,
             title=f"{label} (Original)"
         )
@@ -124,10 +138,13 @@ def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
         # Create grid plot with GradCAM
         viz_utils.gridplot_images(
             overlayed_imgs,
-            filename=f"{label.lower()}_cam_gridplot.png",
+            filename=f"misclassified_right_sag/cam_gridplot.png",
             save_dir=save_dir,
             title=f"{label} (GradCAM)"
         )
+
+        # Close open figures
+        plt.close("all")
 
 
 def get_n_images_per_label(img_dataloader, n=4):
