@@ -71,7 +71,6 @@ MAP_HOSPITAL_STR = {
 ################################################################################
 def plot_umap(embeds, labels, highlight=None, label_order=None,
               s=None, alpha=0.8, line=False, legend=True, palette="tab10",
-              s=None, alpha=0.8, line=False, legend=True, palette="tab10",
               title="", save=False, save_dir=constants.DIR_FIGURES,
               filename="umap", filename_suffix="",
               **scatterplot_kwargs):
