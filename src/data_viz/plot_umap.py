@@ -70,7 +70,7 @@ MAP_HOSPITAL_STR = {
 #                           UMAP Plotting Functions                            #
 ################################################################################
 def plot_umap(embeds, labels, highlight=None, label_order=None,
-              s=6, alpha=0.8, line=False, legend=True, palette="tab10",
+              s=None, alpha=0.8, line=False, legend=True, palette="tab10",
               title="", save=False, save_dir=constants.DIR_FIGURES,
               filename="umap", filename_suffix="",
               **scatterplot_kwargs):
@@ -113,6 +113,9 @@ def plot_umap(embeds, labels, highlight=None, label_order=None,
     """
     # Plot configurations
     viz_utils.set_theme(THEME)
+
+    # If size of scatterplot dots not provided, default based on number of dots
+    s = s or int(6 + (150 * 1 / len(embeds)))
 
     # Create figure
     plt.figure()
