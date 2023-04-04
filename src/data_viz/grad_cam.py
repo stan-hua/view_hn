@@ -35,12 +35,29 @@ viz_utils.set_theme("dark")
 # Configure logging
 LOGGER = logging.getLogger(__name__)
 
+# Mapping of original label to simplified name
+LABEL_TO_SHORTHAND = {
+    "Sagittal_Left": "left_sag",
+    "Sagittal_Right": "right_sag",
+    "Transverse_Left": "left_trans",
+    "Transverse_Right": "right_trans",
+    "Bladder": "bladder",
+}
+
+# Labels to show GradCAMs for
+SHOW_LABELS = [
+    "Sagittal_Left",
+    "Sagittal_Right",
+    "Transverse_Left",
+    "Transverse_Right",
+]
+
 
 ################################################################################
 #                                Main Functions                                #
 ################################################################################
-def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
-                          save_dir=None):
+def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
+                          save_dir=None, **kwargs):
     """
     Given an experiment name and dataset, extract grad-cam heatmaps for real
     examples and save to directory specified
@@ -51,10 +68,8 @@ def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
         Experiment name
     dset : str
         Name of data split or evaluation dataset
-    n : int, optional
-        Number of images to randomly select, by default 4
     label_whitelist : list, optional
-        Whitelist of labels to create images, by default None
+        Whitelist of labels to create images, by default SHOW_LABELS
     save_dir : str, optional
         Directory to save images to, by default creates `exp_name/dset`
         subdirectory under `grad_cam` directory
@@ -89,16 +104,68 @@ def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
     pred_path = model_eval.create_save_path(exp_name=exp_name, dset=dset)
     df_preds = pd.read_csv(pred_path)
 
-    # TODO: Filter first for correct/misclassified images
-    # TODO: Fix folder name
-    df_preds = df_preds[df_preds.label != df_preds.pred]
+    # Make GradCAMs for correctly AND incorrectly predicted images
+    for op in ("==", "!="):
+        # Get filenames of images whose split labels were classified right/wrong
+        df_temp = df_preds[df_preds.eval(f"label {op} pred")]
+        filenames = df_temp.filename.tolist()
 
+        # Create folder prefix based on result of classification
+        prefix = "classified_" if op == "==" else "misclassified_"
+
+        # Make GradCAMs separately for each label
+        for label in label_whitelist:
+            # Get label shorthand
+            label_shorthand = LABEL_TO_SHORTHAND[label]
+            # Create subfolder name
+            subfolder_name = f"{prefix}{label_shorthand}"
+            # Create full path to subfolder
+            temp_save_dir = os.path.join(save_dir, subfolder_name)
+
+            # Create GradCAMs
+            explain_model_for_images_with_label(
+                cam=cam,
+                dset=dset,
+                label=label,
+                label_part=label_part,
+                filenames=filenames,
+                save_dir=temp_save_dir,
+                **kwargs)
+
+
+def explain_model_for_images_with_label(cam, dset, label, label_part,
+                                        filenames=None,
+                                        save_dir=None,
+                                        n=4):
+    """
+    Create GradCAM explanations for label-specific images from a dataset.
+
+    Parameters
+    ----------
+    cam : pytorch_grad_cam.GradCAM
+        GradCAM object loaded with a model
+    dset : str
+        Name of evaluation split/dataset
+    label : str
+        ORIGINAL (unsplit) label to filter for.
+    label_part : str
+        Type of label split from original, that the model was trained on. One of
+        ("side", "plane")
+    filenames : list, optional
+        List of filenames to filter for, by default None
+    save_dir : str, optional
+        Directory to save GradCAM images to, by default None
+    n : int, optional
+        Number of images to plot in GradCAM, by default 4
+    """
     # Create filters on:
     #   a) ORIGINAL labels
     filters = {
-        "orig_label": label_whitelist,
-        "filename": set(df_preds.filename.tolist()),
+        "orig_label": set([label]),
     }
+    # If provided, filter on b) specific files
+    if filenames:
+        filters["filename"] = set(filenames)
 
     # Create image dataloader, filtering for the right labels
     img_dataloader = load_data.get_dset_dataloader_filtered(
@@ -108,6 +175,7 @@ def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
         label_part=label_part,
         full_seq=False,
         full_path=True,
+        num_workers=0,
     )
 
     # Get image tensors (with N images) for each label
@@ -115,36 +183,46 @@ def explain_model_on_dset(exp_name, dset, n=4, label_whitelist=None,
 
     # Extract GradCAM-overlayed images
     idx_to_orig_imgs, idx_to_overlayed_imgs = extract_gradcams(cam, idx_to_imgs)
+    # Skip, if no images found
+    if not idx_to_overlayed_imgs:
+        LOGGER.warning(f"No correct/incorrectly classified images found for "
+                       "label: {label}! Skipping...")
+        return
 
-    # Get mapping of label index to label string
-    idx_to_label = constants.LABEL_PART_TO_CLASSES[label_part]["idx_to_class"]
-
-    # For each label, save GradCAM images in gridplot
-    for label_idx, overlayed_imgs in idx_to_overlayed_imgs.items():
-        # Get label name
-        label = idx_to_label[label_idx]
-
+    # Get all original and overlayed images
+    orig_imgs_lst = []
+    overlayed_imgs_lst = []
+    for label_idx in list(idx_to_overlayed_imgs.keys()):
         # Get original images
-        orig_imgs = idx_to_orig_imgs[label_idx]
+        curr_orig_imgs = idx_to_orig_imgs[label_idx]
+        # Get overlayed imgaes
+        curr_overlayed_imgs = idx_to_overlayed_imgs[label_idx]
+        if curr_orig_imgs and curr_overlayed_imgs:
+            orig_imgs_lst.append(curr_orig_imgs)
+            overlayed_imgs_lst.append(curr_overlayed_imgs)
 
-        # Create grid plot with GradCAM
-        viz_utils.gridplot_images(
-            orig_imgs,
-            filename=f"misclassified_right_sag/orig_gridplot.png",
-            save_dir=save_dir,
-            title=f"{label} (Original)"
+    # Concatenate
+    orig_imgs = np.concatenate(orig_imgs_lst)
+    overlayed_imgs = np.concatenate(overlayed_imgs_lst)
+
+    # Create grid plot with original images
+    viz_utils.gridplot_images(
+        orig_imgs,
+        filename=f"orig_gridplot.png",
+        save_dir=save_dir,
+        title=f"(Original) Full Label: {label} | Label Part: {label_part}"
+    )
+
+    # Create grid plot with GradCAM
+    viz_utils.gridplot_images(
+        overlayed_imgs,
+        filename=f"cam_gridplot.png",
+        save_dir=save_dir,
+        title=f"(GradCAM) Full Label: {label} | Label Part: {label_part}"
         )
 
-        # Create grid plot with GradCAM
-        viz_utils.gridplot_images(
-            overlayed_imgs,
-            filename=f"misclassified_right_sag/cam_gridplot.png",
-            save_dir=save_dir,
-            title=f"{label} (GradCAM)"
-        )
-
-        # Close open figures
-        plt.close("all")
+    # Close open figures
+    plt.close("all")
 
 
 def get_n_images_per_label(img_dataloader, n=4):
@@ -284,7 +362,7 @@ def init(parser):
     parser.add_argument("--dset", required=True, nargs="+",
                         help=arg_help["dset"])
     parser.add_argument("--label_whitelist", nargs="+",
-                        default=None,
+                        default=SHOW_LABELS,
                         help=arg_help["label_whitelist"])
 
 
