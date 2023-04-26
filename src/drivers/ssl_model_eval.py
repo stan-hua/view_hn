@@ -15,6 +15,7 @@ import os
 import shutil
 
 # Non-standard libraries
+from pytorch_lightning.utilities.exceptions import MisconfigurationException
 from jinja2 import Environment
 
 # Custom libraries
@@ -38,6 +39,9 @@ MODEL_TYPES = ["linear_lstm"]   # linear, linear_lstm
 # Options to train eval. models with/without fine-tuning backbones
 FREEZE_WEIGHTS = [False]    # True, False
 
+# Flag to perform Linear Probing - Fine-tuning
+LP_FT = False
+
 # Default args for `model_training.py` when evaluating SSL models
 DEFAULT_ARGS = [
     "--self_supervised",
@@ -58,7 +62,11 @@ DEFAULT_ARGS = [
 # Template for experiment name of a SSL evaluation model
 EVAL_EXP_NAME = \
     """{{ exp_name }}__{{ model_type }}__{{ label_part }}
-        {%- if freeze_weights is defined and not freeze_weights -%}
+        {%- if lp_ft -%}
+            __lp__ft
+        {%- elif freeze_weights -%}
+            __lp
+        {%- else -%}
             __finetuned
         {%- endif -%}
         {%- if augment_training is defined and augment_training -%}
@@ -82,8 +90,6 @@ def init(parser):
     """
     arg_help = {
         "exp_name": "Base name of experiment (for SSL trained)",
-        "from_ssl_eval": "If flagged, training SSL eval model, loading weights "
-                         "from another SSL eval model.",
         "dset": "List of dataset split or test dataset name to evaluate",
         "augment_training": "If flagged, use MoCo augmentations during "
                             "fine-tuning."
@@ -92,8 +98,6 @@ def init(parser):
     parser.add_argument("--exp_name", help=arg_help["exp_name"],
                         nargs="+",
                         required=True)
-    parser.add_argument("--from_ssl_eval", action="store_true",
-                        help=arg_help["from_ssl_eval"])
     parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
                         nargs='+',
                         help=arg_help["dset"])
@@ -148,12 +152,72 @@ def train_model_with_kwargs(exp_name, **extra_args):
         model_training.main(args)
     except Exception as error_msg:
         # On exception, delete folder
-        exp_dir = os.path.join(constants.DIR_RESULTS, exp_name)
-        if os.path.exists(exp_dir):
+        exp_dir = load_model.get_exp_dir(exp_name, on_error="ignore")
+        if exp_dir:
             shutil.rmtree(exp_dir)
 
         # Re-raise error
         raise error_msg
+
+
+def train_eval_model(exp_name, model_type="linear_lstm",
+                     label_part="side", freeze_weights=False,
+                     augment_training=False,
+                     lp_ft=False,
+                     **hparams):
+    """
+    Train single evaluation model.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of SSL experiment
+    model_type : str, optional
+        One of ("linear", "linear_lstm"), by default "linear_lstm"
+    label_part : str, optional
+        One of ("side", "plane"), by default "side"
+    freeze_weights : bool, optional
+        If True, freezes convolutional weights during training, by default False
+    augment_training : bool, optional
+        If True, adds augmentation during linear probing / fine-tuning, by
+        default False
+    lp_ft : bool, optional
+        If True, trains eval. model via fine-tuning starting FROM an eval. model
+        that was created via linear probing, by default False.
+    **hparams : dict, optional
+        Keyword arguments to pass into `model_training.main`
+    """
+    exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
+        exp_name=exp_name,
+        model_type=model_type,
+        label_part=label_part,
+        freeze_weights=freeze_weights,
+        lp_ft=lp_ft,
+        augment_training=augment_training,
+    )
+
+    # Skip if exists
+    if os.path.exists(os.path.join(constants.DIR_RESULTS, exp_eval_name)):
+        LOGGER.info(f"`{exp_eval_name}` already exists! Skipping...")
+        return
+
+    # Use full sequence if LSTM
+    full_seq = "lstm" in model_type
+
+    # Attempt to train model type with specified label part
+    try:
+        train_model_with_kwargs(
+            exp_name=exp_eval_name,
+            label_part=label_part,
+            freeze_weights=freeze_weights,
+            full_seq=full_seq,
+            augment_training=augment_training,
+            **hparams,
+        )
+    except MisconfigurationException as error_msg:
+        LOGGER.info(error_msg)
+        pass
+    LOGGER.info(f"`{exp_eval_name}` successfully created!")
 
 
 def train_eval_models(exp_name, augment_training=False, **kwargs):
@@ -169,6 +233,9 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
     **kwargs : dict, optional
         Keyword arguments to pass into `model_training.main()`
     """
+    # 0. Create copy of kwargs to avoid in-place edits
+    kwargs = kwargs.copy()
+
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
     if not os.path.exists(model_dir):
@@ -191,35 +258,128 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
 
     # 4. Train models on side/plane prediction with/without fine-tuning
     for model_type in MODEL_TYPES:
+        # 4.0 Update keyword arguments to pass in, to specify model to load
+        kwargs[f"ssl_eval_{model_type}"] = True
+
         for label_part in LABEL_PARTS:
             for freeze_weights in FREEZE_WEIGHTS:
-                exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
+                # Attempt to train model type with specified label part
+                train_eval_model(
                     exp_name=exp_name,
                     model_type=model_type,
                     label_part=label_part,
                     freeze_weights=freeze_weights,
                     augment_training=augment_training,
-                )
-
-                # Skip if exists
-                if os.path.exists(os.path.join(constants.DIR_RESULTS,
-                                            exp_eval_name)):
-                    continue
-
-                # Use full sequence if LSTM
-                full_seq = "lstm" in model_type
-
-                # Attempt to train model type with specified label part
-                train_model_with_kwargs(
-                    exp_name=exp_eval_name,
-                    label_part=label_part,
-                    freeze_weights=freeze_weights,
+                    lp_ft=False,
                     ssl_ckpt_path=ckpt_path,
                     ssl_model=ssl_model,
-                    full_seq=full_seq,
-                    augment_training=augment_training,
-                    **kwargs,
-                    **{f"ssl_eval_{model_type}": True})
+                    **kwargs)
+
+            # Skip, if not doing LP-FT (fine-tuning after linear probing)
+            if not LP_FT:
+                continue
+
+            # Get experiment name for linear probing eval. model
+            from_exp_name = TEMPLATE_EVAL_EXP_NAME.render(
+                exp_name=exp_name,
+                model_type=model_type,
+                label_part=label_part,
+                freeze_weights=True,
+                lp_ft=False,
+                augment_training=augment_training,
+            )
+
+            # Preparpe arguments for loading linear-probing model
+            lp_ft_kwargs = kwargs.copy()
+            lp_ft_kwargs["from_ssl_eval"] = True
+            lp_ft_kwargs["ssl_ckpt_path"] = load_model.find_best_ckpt_path(
+                exp_name=from_exp_name,
+            )
+
+            # Attempt to train fine-tuned model from linear-probed model
+            train_eval_model(
+                exp_name=exp_name,
+                model_type=model_type,
+                label_part=label_part,
+                freeze_weights=False,
+                augment_training=augment_training,
+                lp_ft=True,
+                **lp_ft_kwargs,
+            )
+
+
+################################################################################
+#                               Analyze Results                                #
+################################################################################
+def analyze_eval_model_preds(exp_name, dset, model_type="linear_lstm",
+                             label_part="side", freeze_weights=False,
+                             augment_training=False,
+                             lp_ft=False):
+    """
+    Evaluate single evaluation model.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of SSL experiment
+    dset : str or list, optional
+        Name of evaluation split / dataset to perform inference on, by default
+        constants.DEFAULT_EVAL_DSET
+    model_type : str, optional
+        One of ("linear", "linear_lstm"), by default "linear_lstm"
+    label_part : str, optional
+        One of ("side", "plane"), by default "side"
+    freeze_weights : bool, optional
+        If True, freezes convolutional weights during training, by default False
+    augment_training : bool, optional
+        If True, adds augmentation during linear probing / fine-tuning, by
+        default False
+    lp_ft : bool, optional
+        If True, trains eval. model via fine-tuning starting FROM an eval. model
+        that was created via linear probing, by default False.
+    """
+    exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
+            exp_name=exp_name,
+            model_type=model_type,
+            label_part=label_part,
+            freeze_weights=freeze_weights,
+            lp_ft=lp_ft,
+            augment_training=augment_training,
+    )
+
+    dsets = [dset] if isinstance(dset, str) else dset
+    for dset in dsets:
+        # Create overwriting parameters, if external dataset desired
+        overwrite_hparams = load_data.create_overwrite_hparams(
+            dset)
+        # Specify to mask bladder, if hospital w/o bladder labels
+        mask_bladder = dset in constants.DSETS_MISSING_BLADDER
+
+        # 1. Perform inference on dataset
+        model_eval.infer_dset(
+            exp_eval_name,
+            dset=dset,
+            mask_bladder=mask_bladder,
+            **overwrite_hparams)
+
+        # 2. Embed dataset
+        model_eval.embed_dset(
+            exp_eval_name,
+            dset=dset,
+            **overwrite_hparams,
+        )
+
+        # 3. Analyze predictions separately
+        model_eval.analyze_dset_preds(
+            exp_eval_name,
+            dset=dset,
+        )
+
+    # 4. Create UMAP together
+    model_eval.analyze_dset_preds(
+        exp_eval_name,
+        dset=dsets,
+    )
 
 
 def analyze_preds(exp_name, augment_training=False,
@@ -235,55 +395,36 @@ def analyze_preds(exp_name, augment_training=False,
     augment_training : bool, optional
         If True, check evaluation models fine-tuned WITH augmentation, by
         default False.
-    dset : str, optional
-        Dataset split to perform inference on, by default
+    dset : str or list, optional
+        Name of evaluation split / dataset to perform inference on, by default
         constants.DEFAULT_EVAL_DSET
     """
     # Evaluate each model separately
     for model_type in MODEL_TYPES:
         for label_part in LABEL_PARTS:
             for freeze_weights in FREEZE_WEIGHTS:
-                exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
-                        exp_name=exp_name,
-                        model_type=model_type,
-                        label_part=label_part,
-                        freeze_weights=freeze_weights,
-                        augment_training=augment_training,
-                )
+                analyze_eval_model_preds(
+                    exp_name=exp_name,
+                    dset=dset,
+                    model_type=model_type,
+                    label_part=label_part,
+                    freeze_weights=freeze_weights,
+                    augment_training=augment_training,
+                    lp_ft=False)
+            # Skip, if not doing LP-FT (fine-tuning after linear probing)
+            if not LP_FT:
+                continue
 
-                dsets = [dset] if isinstance(dset, str) else dset
-                for dset in dsets:
-                    # Create overwriting parameters, if external dataset desired
-                    overwrite_hparams = load_data.create_overwrite_hparams(
-                        dset)
-                    # Specify to mask bladder, if hospital w/o bladder labels
-                    mask_bladder = dset in constants.DSETS_MISSING_BLADDER
-
-                    # 1. Perform inference on dataset
-                    model_eval.infer_dset(
-                        exp_eval_name,
-                        dset=dset,
-                        mask_bladder=mask_bladder,
-                        **overwrite_hparams)
-
-                    # 2. Embed dataset
-                    model_eval.embed_dset(
-                        exp_eval_name,
-                        dset=dset,
-                        **overwrite_hparams,
-                    )
-
-                    # 3. Analyze predictions separately
-                    model_eval.analyze_dset_preds(
-                        exp_eval_name,
-                        dset=dset,
-                    )
-
-                # 4. Create UMAP together
-                model_eval.analyze_dset_preds(
-                    exp_eval_name,
-                    dset=dsets,
-                )
+            # Attempt to train fine-tuned model from linear-probed model
+            analyze_eval_model_preds(
+                exp_name=exp_name,
+                dset=dset,
+                model_type=model_type,
+                label_part=label_part,
+                freeze_weights=False,
+                lp_ft=True,
+                augment_training=augment_training,
+            )
 
 
 ################################################################################
@@ -343,7 +484,7 @@ def main(args):
             raise RuntimeError("`exp_name` (%s) provided does not lead to a "
                                "SSL-trained model directory!", exp_name)
 
-        # Get othe keyword arguments for SSL eval model training
+        # Get other keyword arguments for SSL eval model training
         train_kwargs = {
             k:v for k,v in vars(args).items() if k not in ["exp_name", "dset"]
         }
@@ -352,9 +493,8 @@ def main(args):
         train_eval_models(exp_name, **train_kwargs)
 
         # Analyze results of evaluation models
-        # for dset in args.dset:
         analyze_preds(exp_name, dset=args.dset,
-                        augment_training=args.augment_training)
+                      augment_training=args.augment_training)
 
 
 if __name__ == "__main__":

@@ -118,10 +118,7 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
         Pretrained model
     """
     # 0. Get experiment directory, where model was trained
-    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
-    if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
-                           "model training directory", exp_name)
+    model_dir = get_exp_dir(exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = get_hyperparameters(model_dir)
@@ -171,24 +168,15 @@ def get_model_cls(hparams):
     # For self-supervised (SSL) image-based model
     if hparams.get("self_supervised"):
         ssl_model = hparams.get("ssl_model", "moco")
-        model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
+        ssl_model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
 
         # If training SSL (not evaluating an SSL-pretrained model)
         if not (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
-            return model_cls, model_cls_kwargs
+            return ssl_model_cls, model_cls_kwargs
 
         # Check if loading backbones from multipe SSL-finetuned models
         multi_backbone = isinstance(hparams["ssl_ckpt_path"], list) and \
             len(hparams["ssl_ckpt_path"]) > 1
-
-        # Load backbones from ssl checkpoint path/s, provided in hyperparameters
-        backbone_dict = extract_backbones_from_ssl(hparams)
-
-        # Check temporal backbone (if TCLR)
-        if ssl_model == "tclr" and \
-                hparams["ssl_eval_linear_lstm"] and \
-                "temporal_backbone" not in backbone_dict:
-            raise RuntimeError("Could not find `temporal_backbone` for model!")
 
         # Specify eval. model to load
         if hparams["ssl_eval_linear"]:
@@ -197,6 +185,20 @@ def get_model_cls(hparams):
             model_cls = EnsembleLSTMLinear
         else:
             model_cls = LSTMLinearEval
+
+        # Load backbones from ssl checkpoint path/s, provided in hyperparameters
+        # NOTE: If loading from previous SSL eval. model, use that model class
+        #       instead of SSL model
+        backbone_dict = extract_backbones_from_ssl(
+            hparams,
+            model_cls if hparams.get("from_ssl_eval") else ssl_model_cls,
+        )
+
+        # Check temporal backbone (if TCLR)
+        if ssl_model == "tclr" and \
+                hparams["ssl_eval_linear_lstm"] and \
+                "temporal_backbone" not in backbone_dict:
+            raise RuntimeError("Could not find `temporal_backbone` for model!")
 
         # NOTE: Backbones need to be added to load the model
         model_cls_kwargs.update(backbone_dict)
@@ -219,7 +221,8 @@ def get_model_cls(hparams):
 
 
 def get_hyperparameters(hparam_dir=None, exp_name=None,
-                        filename="hparams.yaml"):
+                        filename="hparams.yaml",
+                        on_error="use_default"):
     """
     Load hyperparameters from model training directory. If not provided, return
     default hyperparameters.
@@ -233,6 +236,9 @@ def get_hyperparameters(hparam_dir=None, exp_name=None,
         directory, by default None.
     filename : str, optional
         Filename of YAML file with hyperparameters, by default "hparams.yaml"
+    on_error : str, optional
+        If "use_default", return default hyperparameters. If "raise", raises
+        error, by default "use_default".
 
     Returns
     -------
@@ -242,8 +248,8 @@ def get_hyperparameters(hparam_dir=None, exp_name=None,
     # 1. If hyperparameter directory not specified but experiment name is, check
     #    if model directory exists
     if not hparam_dir and exp_name:
-        model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
-        hparam_dir = model_dir if os.path.exists(model_dir) else hparam_dir
+        model_dir = get_exp_dir(exp_name, on_error="ignore")
+        hparam_dir = model_dir or hparam_dir
 
     # 2. Load hyperparameters from directory
     if hparam_dir:
@@ -251,6 +257,11 @@ def get_hyperparameters(hparam_dir=None, exp_name=None,
         # Recursively find hyperparameter file
         for path in Path(hparam_dir).rglob(filename):
             file_path = str(path)
+
+        # Raise error, if unable to find file
+        if file_path is None:
+            raise RuntimeError("No hyperparameters found in experiment "
+                               f"directory!\n\tDirectory: {hparam_dir}")
 
         # Load hyperparameter file
         with open(file_path, "r") as stream:
@@ -261,19 +272,26 @@ def get_hyperparameters(hparam_dir=None, exp_name=None,
                 LOGGER.critical(exc)
                 LOGGER.critical("Using default hyperparameters...")
 
-    # If above does not succeed, use default hyperparameters
-    hparams = {
-        "img_size": constants.IMG_SIZE,
-        "train": True,
-        "test": True,
-        "train_test_split": 0.75,
-        "train_val_split": 0.75
-    }
+    # If above does not succeed,
+    # CASE 0: Use default hyperparameters
+    if on_error == "use_default":
+        LOGGER.warning("Unable to find hyperparameters for specified "
+                       "experiment! Resorting to default hyperparameters...")
+        hparams = {
+            "img_size": constants.IMG_SIZE,
+            "train": True,
+            "test": True,
+            "train_test_split": 0.75,
+            "train_val_split": 0.75
+        }
+        return hparams
+    # CASE 1: Raise error
+    elif on_error == "raise":
+        raise RuntimeError("Unable to find hyperparameters for specified "
+                           f"experiment! ({exp_name})")
 
-    return hparams
 
-
-def find_best_ckpt_path(path_exp_dir):
+def find_best_ckpt_path(path_exp_dir=None, exp_name=None):
     """
     Finds the path to the best model checkpoint.
 
@@ -292,6 +310,13 @@ def find_best_ckpt_path(path_exp_dir):
     RuntimeError
         If no valid ckpt files found
     """
+    # INPUT: Ensure at least one of `path_exp_dir` or `exp_name` is provided
+    assert path_exp_dir or exp_name
+
+    # If only `exp_name` provided, attempt to find experiment training directory
+    if not path_exp_dir and exp_name:
+        path_exp_dir = get_exp_dir(exp_name, on_error="raise")
+
     # Look for checkpoint files
     ckpt_paths = [str(path) for path in Path(path_exp_dir).rglob("*.ckpt")]
 
@@ -309,7 +334,7 @@ def find_best_ckpt_path(path_exp_dir):
     return ckpt_paths[0]
 
 
-def extract_backbones_from_ssl(hparams):
+def extract_backbones_from_ssl(hparams, model_cls):
     """
     Given experiment hyperparameters with 1+ specified SSL checkpoints, extract
     their conv. backbone and temporal backbone, if available.
@@ -318,6 +343,8 @@ def extract_backbones_from_ssl(hparams):
     ----------
     hparams : dict
         Experiment parameters, containing 1+ SSL-pretrained model ckpt paths
+    model_cls : class
+        Reference to model class, of type torch.nn.Module
 
     Returns
     -------
@@ -332,7 +359,7 @@ def extract_backbones_from_ssl(hparams):
     if isinstance(ssl_ckpt_paths, list) and len(ssl_ckpt_paths) == 1:
         hparams["ssl_ckpt_path"] = ssl_ckpt_paths[0]
     if isinstance(hparams["ssl_ckpt_path"], str):
-        return extract_backbones_from_ssl_single(hparams)
+        return extract_backbones_from_ssl_single(hparams, model_cls)
 
     # If multiple SSL ckpt path provided
     backbone_dict = defaultdict(list)
@@ -342,7 +369,8 @@ def extract_backbones_from_ssl(hparams):
         hparams_copy["ssl_ckpt_path"] = ssl_ckpt_path
 
         # Extract backbones
-        backbone_dict_i = extract_backbones_from_ssl_single(hparams_copy)
+        backbone_dict_i = extract_backbones_from_ssl_single(
+            hparams_copy, model_cls)
 
         # Accumulate backbones
         for backbone_name in ["conv_backbone", "temporal_backbone"]:
@@ -353,7 +381,7 @@ def extract_backbones_from_ssl(hparams):
     return dict(backbone_dict)
 
 
-def extract_backbones_from_ssl_single(hparams):
+def extract_backbones_from_ssl_single(hparams, model_cls):
     """
     Given experiment hyperparameters for 1 SSL-pretrained model, extract its
     conv. backbone and temporal backbone, if available.
@@ -362,6 +390,8 @@ def extract_backbones_from_ssl_single(hparams):
     ----------
     hparams : dict
         Experiment parameters
+    model_cls : class
+        Reference to model class of type torch.nn.Module
 
     Returns
     -------
@@ -369,11 +399,10 @@ def extract_backbones_from_ssl_single(hparams):
         Contains mapping of name to backbones (conv_backbone or
         temporal_backbone)
     """
-    # If no SSL model class provided, assume MoCo
-    model_cls = SSL_NAME_TO_MODEL_CLS[hparams.get("ssl_model", "moco")]
-
     # If no SSL checkpoint path provided, assume MoCo
-    ssl_ckpt_path = hparams.get("ssl_ckpt_path", constants.MOCO_CKPT_PATH)
+    ssl_ckpt_path = hparams.get("ssl_ckpt_path")
+    if not ssl_ckpt_path:
+        raise RuntimeError("No SSL checkpoint path provided!")
 
     # If loading another SSL eval model, instantiate required conv. backbones
     extra_model_kwargs = {}
@@ -546,6 +575,39 @@ def get_last_conv_layer(model):
 
     # Raise error, if not found
     raise NotImplementedError
+
+
+def get_exp_dir(exp_name, on_error="raise"):
+    """
+    Get experiment directory, given experiment name.
+
+    Parameters
+    ----------
+    exp_name : str
+        Experiment name
+    on_error : str, optional
+        If "raise", raises an error, if expected directory does not exist. If
+        "ignore", simply returns None, by default "raise".
+
+    Returns
+    -------
+    str
+        Path to experiment directory, where model was trained
+    """
+    # INPUT: Verify provided `on_error` is valid
+    assert on_error in ("raise", "ignore"), \
+        "`on_error` must be one of ('raise', 'ignore')"
+
+    # Create full path
+    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+
+    # Raise error, if model directory does not exist
+    if not os.path.exists(model_dir):
+        if on_error == "raise":
+            raise RuntimeError(f"`exp_name` ({exp_name}) provided does not lead"
+                               " to a valid model training directory")
+        model_dir = None
+    return model_dir
 
 
 ################################################################################

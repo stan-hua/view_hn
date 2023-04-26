@@ -1717,10 +1717,7 @@ def infer_dset(exp_name,
         return
 
     # 0. Get experiment directory, where model was trained
-    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
-    if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
-                           "model training directory", exp_name)
+    model_dir = load_model.get_exp_dir(exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
@@ -1813,10 +1810,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
         return
 
     # 0. Get experiment directory, where model was trained
-    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
-    if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
-                           "model training directory", exp_name)
+    model_dir = load_model.get_exp_dir(exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
@@ -1871,10 +1865,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
         If `exp_name` does not lead to a valid training directory
     """
     # 0. Get experiment directory, where model was trained
-    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
-    if not os.path.exists(model_dir):
-        raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
-                           "model training directory", exp_name)
+    model_dir = load_model.get_exp_dir(exp_name)
 
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
