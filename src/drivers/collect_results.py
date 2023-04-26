@@ -210,8 +210,8 @@ def add_space_between_dsets(df_metrics, dsets=DSETS):
             continue
         # If last is the `exp_name`, skip
         if columns[col_idx-1] == "exp_name":
-            col_idx += 1
             curr_dset = "_".join(columns[col_idx].split("_")[:-1])
+            col_idx += 1
             continue
 
         # Otherwise, add column spacer
