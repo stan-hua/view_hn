@@ -188,7 +188,7 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
         # If specified, remove Bladder/None as a possible prediction
         # NOTE: Assumes model predicts bladder/none as the 3rd index
         if mask_bladder:
-            outs = outs[:, :2]
+            out = out[:, :2]
 
         # Get index of predicted label
         pred = torch.argmax(out, dim=1)
