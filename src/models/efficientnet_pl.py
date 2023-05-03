@@ -80,7 +80,8 @@ class EfficientNetPL(EfficientNet, pl.LightningModule):
         conv_requires_grad = not self.hparams.freeze_weights
         blacklist = ["temporal_backbone", "fc"]
         for parameter in self.parameters():
-            if any(parameter.name.startswith(name) for name in blacklist):
+            if parameter.name and any(
+                parameter.name.startswith(name) for name in blacklist):
                 continue
             parameter.requires_grad = conv_requires_grad
 
