@@ -62,7 +62,7 @@ THEME = "dark"
 CALCULATE_METRICS = True
 
 # Flag to create embeddings and plot UMAP for each evaluation set
-EMBED = True
+EMBED = False
 
 
 ################################################################################
@@ -1295,9 +1295,10 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
         dset=dset,
         mask_bladder=mask_bladder)
     df_pred = pd.read_csv(save_path)
-    # 2.0 Ensure no duplicates
+    # 2.0 Ensure no duplicates (or sequential data only)
     # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
-    df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
+    if not mask_bladder:
+        df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
     # 2.1 Add side/plane label, if not present
     for label_part in constants.LABEL_PARTS:
         if label_part not in df_pred.columns:
