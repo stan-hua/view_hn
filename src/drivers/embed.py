@@ -277,6 +277,11 @@ class ImageEmbedder:
             # Remove possibly added extra dimension
             if len(embeds.shape) == 3 and embeds.shape[0] == 1:
                 embeds = embeds.squeeze(axis=0)
+            elif len(embeds.shape) == 4 and \
+                    embeds.shape[-2] == 1 and embeds.shape[-1] == 1:
+                embeds = embeds.squeeze(axis=2).squeeze(axis=2)
+                assert len(embeds.shape) == 2, \
+                    "Unexpected case, where embed. output has 4 dimensions!"
 
             all_embeds.append(embeds)
             file_paths.extend(metadata["filename"])
