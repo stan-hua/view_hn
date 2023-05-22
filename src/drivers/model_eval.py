@@ -62,8 +62,10 @@ THEME = "dark"
 CALCULATE_METRICS = True
 
 # Flag to create embeddings and plot UMAP for each evaluation set
-EMBED = False
+EMBED = True
 
+# Flag to overwrite existing results
+OVERWRITE_EXISTING = True
 
 ################################################################################
 #                               Paths Constants                                #
@@ -1164,6 +1166,10 @@ def eval_calculate_all_metrics(df_pred):
     pandas.DataFrame
         Table of formatted metrics
     """
+    # 0. Lambda function to calculate accuracy with df_pred
+    calculate_acc_func = lambda df: round(skmetrics.accuracy_score(
+        df["label"], df["pred"]), 4)
+
     # 1. Calculate metrics
     # 1.1.1 For all samples
     df_metrics_all = calculate_metrics(df_pred, ci=True)
@@ -1195,6 +1201,13 @@ def eval_calculate_all_metrics(df_pred):
     # 1.6 Accuracy, grouped by sequence
     df_metrics_all["Accuracy (By Seq)"] = \
         calculate_metric_by_groups(df_pred, ["id", "visit"])
+
+    # 1.7 Accuracy for adjacent same-label images vs. stand-alone images
+    mask_same_label_adjacent = identify_repeating_same_label_in_video(df_pred)
+    df_metrics_all["Accuracy (Adjacent to Same-Label)"] = calculate_acc_func(
+        df_pred[mask_same_label_adjacent])
+    df_metrics_all["Accuracy (Not Adjacent to Same-Label)"] = calculate_acc_func(
+        df_pred[~mask_same_label_adjacent])
 
     # Filler columns
     filler = df_metrics_all.copy()
@@ -1420,6 +1433,54 @@ def get_local_groups(values):
     return local_groups
 
 
+def identify_repeating_segments(values):
+    """
+    Create boolean mask, where True is given to list values adjacent to the same
+    value.
+
+    Parameters
+    ----------
+    values: list
+        List of values
+
+    Returns
+    -------
+    np.array
+        Boolean mask of repeating value segments
+    """
+    mask = []
+    prev_val = None
+    segment_len = 1
+
+    for idx, val in enumerate(values):
+        # CASE 0: Part of repeating segment
+        if val == prev_val:
+            segment_len += 1
+            continue
+
+        # CASE 1: New value encountered
+        # CASE 1.0: Default value (to skip)
+        if prev_val is None:
+            prev_val = val
+            continue
+
+        # CASE 1.1: Extend mask
+        mask.extend([(segment_len > 1)] * segment_len)
+
+        # Update accumulators
+        segment_len = 1
+        prev_val = val
+
+    # Handle last segment
+    if prev_val is not None:
+        mask.extend([(segment_len > 1)] * segment_len)
+
+    # Ensure mask is the same length as values
+    assert len(mask) == len(values)
+
+    return np.array(mask)
+
+
 def filter_most_confident(df_pred, local=False):
     """
     Given predictions for all images across multiple US sequences, filter the
@@ -1461,6 +1522,47 @@ def filter_most_confident(df_pred, local=False):
         df_filtered = df_seqs.apply(lambda df: df[df.out == df.out.max()])
 
     return df_filtered
+
+
+def identify_repeating_same_label_in_video(df_pred, repeating=True):
+    """
+    Given predictions on US videos, identify images which have consecutive
+    images with the same label.
+
+    Parameters
+    ----------
+    df_pred : pandas.DataFrame
+        Model predictions. Each row contains a label,
+        prediction, and other patient and sequence-related metadata.
+    repeating : bool, optional
+        If True, filter for repeating same label frames. Otherwise, filter for
+        frames that are NOT adjacent to frames of the same label, by default
+        True.
+
+    Returns
+    -------
+    np.array
+        Boolean mask to keep images that ARE or ARE NOT adjacent to
+        same-label image frames
+    """
+    # PRECONDITION: Index must be unique
+    assert not df_pred.index.duplicated().any(), "Duplicate index value found!"
+
+    # Create copy and ensure videos are in order
+    df_pred = df_pred.sort_values(by=["id", "visit", "seq_number"])
+
+    # Get boolean mask for images adjacent to images of the same label
+    mask = np.concatenate(df_pred.groupby(by=["id", "visit"]).apply(
+        lambda df: identify_repeating_segments(df.label.tolist())).to_numpy())
+
+    # If specified, only get those that are NOT adjacent to same-label images
+    if not repeating:
+        mask = ~mask
+
+    # Reorder mask to match index
+    mask = mask[df_pred.index]
+
+    return mask
 
 
 def extract_from_label(df, col="label", extract="plane"):
@@ -1680,7 +1782,7 @@ def infer_dset(exp_name,
                dset=constants.DEFAULT_EVAL_DSET,
                seq_number_limit=None,
                mask_bladder=False,
-               overwrite_existing=False,
+               overwrite_existing=OVERWRITE_EXISTING,
                **overwrite_hparams):
     """
     Perform inference on dset, and saves results
@@ -1700,7 +1802,7 @@ def infer_dset(exp_name,
         kidney labels. Defaults to False.
     overwrite_existing : bool, optional
         If True and prediction file already exists, overwrite existing, by
-        default False.
+        default OVERWRITE_EXISTING.
     overwrite_hparams : dict, optional
         Keyword arguments to overwrite experiment hyperparameters
 
@@ -1759,15 +1861,32 @@ def infer_dset(exp_name,
     else:
         # If temporal model
         if hparams["full_seq"]:
-            # Perform inference one sequence at a time
-            df_preds = df_metadata.groupby(by=["id", "visit"]).progress_apply(
-                lambda df: predict_on_sequences(
-                    model=model, filenames=df.filename.tolist(), img_dir=None,
-                    mask_bladder=mask_bladder,
-                    **hparams)
-            )
-            # Remove groupby index
-            df_preds = df_preds.reset_index(drop=True)
+            # CASE 1: Dataset of US videos
+            if dset not in constants.DSETS_NON_SEQ:
+                # Perform inference one sequence at a time
+                df_preds = df_metadata.groupby(by=["id", "visit"]).\
+                    progress_apply(
+                        lambda df: predict_on_sequences(
+                            model=model,
+                            filenames=df.filename.tolist(),
+                            img_dir=None,
+                            mask_bladder=mask_bladder,
+                            **hparams)
+                    )
+                # Remove groupby index
+                df_preds = df_preds.reset_index(drop=True)
+            # CASE 2: Dataset of US images
+            else:
+                df_preds = df_metadata.progress_apply(
+                    lambda row: predict_on_sequences(
+                        model=model,
+                        filenames=[row.filename],
+                        img_dir=None,
+                        mask_bladder=mask_bladder,
+                        **hparams),
+                    axis=1,
+                )
+                df_preds = pd.concat(df_preds.tolist(), ignore_index=True)
         else:
             filenames = df_metadata.filename.tolist()
             df_preds = predict_on_images(
@@ -1784,7 +1903,9 @@ def infer_dset(exp_name,
     df_metadata.to_csv(pred_save_path, index=False)
 
 
-def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
+def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
+               overwrite_existing=OVERWRITE_EXISTING,
+               **overwrite_hparams):
     """
     Extract embeddings on dset.
 
@@ -1795,6 +1916,9 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
         constants.DEFAULT_EVAL_DSET.
+    overwrite_existing : bool, optional
+        If True and embeddings already exists, overwrite existing, by
+        default OVERWRITE_EXISTING.
     overwrite_hparams : dict, optional
         Keyword arguments to overwrite experiment hyperparameters
 
@@ -1823,6 +1947,11 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET, **overwrite_hparams):
     model = load_model.load_pretrained_from_exp_name(
         exp_name, overwrite_hparams=overwrite_hparams)
     model = model.to(DEVICE)
+
+    # TODO: Revert this
+    if dset in constants.DSETS_NON_SEQ:
+        hparams["full_seq"] = False
+        hparams["batch_size"] = 1
 
     # 3. Load data
     # NOTE: Ensure data is loaded in the non-SSL mode
@@ -1935,5 +2064,5 @@ if __name__ == '__main__':
             analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,
                                mask_bladder=MASK_BLADDER)
 
-        # TODO: 6. Create UMAPs embeddings on all dsets together
+        # 6. Create UMAPs embeddings on all dsets together
         analyze_dset_preds(exp_name=EXP_NAME, dset=ARGS.dset)
