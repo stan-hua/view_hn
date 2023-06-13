@@ -1007,21 +1007,17 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
     # Accumulate exact metric, and confidence interval bounds (if specified)
     metrics = OrderedDict()
 
-    # Accuracy by class
+    # 1. Accuracy by class
     unique_labels = sorted(df_pred["label"].unique())
     for label in unique_labels:
         df_pred_filtered = df_pred[df_pred.label == label]
         metrics[f"Label Accuracy ({label})"] = 0
         if not df_pred_filtered.empty:
-            metrics[f"Label Accuracy ({label})"] = round(
-                skmetrics.accuracy_score(
-                    df_pred_filtered["label"],
-                    df_pred_filtered["pred"]),
-                4)
+            metrics[f"Label Accuracy ({label})"] = calculate_accuracy(
+                df_pred_filtered)
 
-    # Overall accuracy
-    metrics["Overall Accuracy"] = \
-        round(skmetrics.accuracy_score(df_pred["label"], df_pred["pred"]), 4)
+    # 2. Overall accuracy
+    metrics["Overall Accuracy"] = calculate_accuracy(df_pred)
     # Bootstrap confidence interval
     if ci:
         point, (lower, upper) = bootstrap_metric(
@@ -1030,7 +1026,23 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
             **ci_kwargs)
         metrics[f"Overall Accuracy"] = f"{point} ({lower}, {upper})"
 
-    # F1 Score by class
+    # 3. Accuracy, grouped by patient
+    metrics["Accuracy (By Patient)"] = \
+        calculate_metric_by_groups(df_pred, ["id"])
+
+    # 4. Accuracy, grouped by sequence
+    metrics["Accuracy (By Seq)"] = \
+        calculate_metric_by_groups(df_pred, ["id", "visit"])
+
+    # 5. Accuracy for adjacent same-label images vs. stand-alone images
+    mask_same_label_adjacent = identify_repeating_same_label_in_video(df_pred)
+    metrics["Accuracy (Adjacent to Same-Label)"] = calculate_accuracy(
+        df_pred[mask_same_label_adjacent])
+    metrics["Accuracy (Not Adjacent to Same-Label)"] = calculate_accuracy(
+        df_pred[~mask_same_label_adjacent if len(mask_same_label_adjacent)
+                else []])
+
+    # 6. F1 Score by class
     # NOTE: Overall F1 Score isn't calculated because it's equal to 
     #       Overall Accuracy in multi-label problems.
     # TODO: Implement wrapper function to allow bootstrapping f1_score
@@ -1064,6 +1076,10 @@ def calculate_metric_by_groups(df_pred, group_cols,
     str
         Contains mean and standard deviation of calculated metric across groups
     """
+    # Skip, if empty
+    if df_pred.empty:
+        return "N/A"
+
     # Calculate metric on each group
     grp_metrics = df_pred.groupby(by=group_cols).apply(
         lambda df_grp: metric_func(df_grp["label"], df_grp["pred"]))
@@ -1166,14 +1182,19 @@ def eval_calculate_all_metrics(df_pred):
     pandas.DataFrame
         Table of formatted metrics
     """
-    # 0. Lambda function to calculate accuracy with df_pred
-    calculate_acc_func = lambda df: round(skmetrics.accuracy_score(
-        df["label"], df["pred"]), 4)
+    # Accumulate metric table columns
+    accum_metric_tables = []
 
     # 1. Calculate metrics
     # 1.1.1 For all samples
     df_metrics_all = calculate_metrics(df_pred, ci=True)
     df_metrics_all.name = "All"
+    accum_metric_tables.append(df_metrics_all)
+
+    # 0. Filler columns
+    filler = df_metrics_all.copy()
+    filler[:] = ""
+    filler.name = ""
 
     # 1.2 Stratify patients w/ HN and w/o HN
     if "hn" in df_pred.columns:
@@ -1181,6 +1202,11 @@ def eval_calculate_all_metrics(df_pred):
         df_metrics_w_hn.name = "With HN"
         df_metrics_wo_hn = calculate_metrics(df_pred[df_pred.hn == 0])
         df_metrics_wo_hn.name = "Without HN"
+
+        # Update accumulator
+        accum_metric_tables.append(filler)
+        accum_metric_tables.append(df_metrics_w_hn)
+        accum_metric_tables.append(df_metrics_wo_hn)
 
     # 1.3 For images at label boundaries
     # NOTE: Disabled for now
@@ -1194,36 +1220,23 @@ def eval_calculate_all_metrics(df_pred):
     # df_metrics_confident = calculate_metrics(df_confident, ci=True)
     # df_metrics_confident.name = "Most Confident"
 
-    # 1.5 Accuracy, grouped by patient
-    df_metrics_all["Accuracy (By Patient)"] = \
-        calculate_metric_by_groups(df_pred, ["id"])
+    # 1.5 If bladder present, re-compute metrics without Bladder images
+    # NOTE: Doesn't remove non-Bladder images misclassified as Bladder
+    for bladder_label in ["None", "Bladder"]:
+        if bladder_label not in df_pred["label"].unique():
+            continue
 
-    # 1.6 Accuracy, grouped by sequence
-    df_metrics_all["Accuracy (By Seq)"] = \
-        calculate_metric_by_groups(df_pred, ["id", "visit"])
+        # Recalculate metrics
+        df_pred_wo_bladder = df_pred[df_pred["label"] != bladder_label]
+        df_metrics_wo_bladder = calculate_metrics(df_pred_wo_bladder, ci=True)
+        df_metrics_wo_bladder.name = "Without Bladder"
 
-    # 1.7 Accuracy for adjacent same-label images vs. stand-alone images
-    mask_same_label_adjacent = identify_repeating_same_label_in_video(df_pred)
-    df_metrics_all["Accuracy (Adjacent to Same-Label)"] = calculate_acc_func(
-        df_pred[mask_same_label_adjacent])
-    df_metrics_all["Accuracy (Not Adjacent to Same-Label)"] = calculate_acc_func(
-        df_pred[~mask_same_label_adjacent])
-
-    # Filler columns
-    filler = df_metrics_all.copy()
-    filler[:] = ""
-    filler.name = ""
+        # Update accumulator
+        accum_metric_tables.append(filler)
+        accum_metric_tables.append(df_metrics_wo_bladder)
 
     # 2. Combine
-    df_metrics = pd.concat([
-        df_metrics_all,
-        # filler,
-        # df_metrics_w_hn, df_metrics_wo_hn,
-        # filler,
-        # df_metrics_at_boundary,
-        # filler,
-        # df_metrics_confident,
-        ], axis=1)
+    df_metrics = pd.concat(accum_metric_tables, axis=1)
 
     return df_metrics
 
@@ -1548,8 +1561,14 @@ def identify_repeating_same_label_in_video(df_pred, repeating=True):
     # PRECONDITION: Index must be unique
     assert not df_pred.index.duplicated().any(), "Duplicate index value found!"
 
+    # Early return, if empty
+    if df_pred.empty:
+        return np.array([])
+
     # Create copy and ensure videos are in order
     df_pred = df_pred.sort_values(by=["id", "visit", "seq_number"])
+    # Reset index (necessary for reordering)
+    df_pred = df_pred.reset_index(drop=True)
 
     # Get boolean mask for images adjacent to images of the same label
     mask = np.concatenate(df_pred.groupby(by=["id", "visit"]).apply(
@@ -1775,6 +1794,35 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
     return np.mean(scores)
 
 
+def calculate_accuracy(df_pred):
+    """
+    Given a table of predictions with columns "label" and "pred", compute
+    accuracy rounded to 4 decimal places.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Model predictions. Each row contains a label,
+        prediction, and other patient and sequence-related metadata.
+
+    Returns
+    -------
+    float
+        Accuracy rounded to 4 decimal places
+    """
+    # Early return, if empty
+    if df_pred.empty:
+        return "N/A"
+
+    # Compute accuracy
+    acc = skmetrics.accuracy_score(df_pred["label"], df_pred["pred"])
+
+    # Round decimals
+    acc = round(acc, 4)
+
+    return acc
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -1948,7 +1996,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
         exp_name, overwrite_hparams=overwrite_hparams)
     model = model.to(DEVICE)
 
-    # TODO: Revert this
+    # NOTE: For non-video datasets, ensure each image is treated independently
     if dset in constants.DSETS_NON_SEQ:
         hparams["full_seq"] = False
         hparams["batch_size"] = 1

@@ -99,6 +99,10 @@ def prettify_metric(metric_str):
     # Replace parenthesis with brackets
     metric_str = metric_str.replace("(", "[").replace(")", "]")
 
+    # Early return, if metric doesn't contain confidence interval
+    if "[" not in metric_str and "]" not in metric_str:
+        return metric_str
+
     # Extract values
     # 1. Get the mean value
     mean, rest = metric_str.split(" [")
@@ -122,7 +126,7 @@ def prettify_metric(metric_str):
     return new_metric_str
 
 
-def get_eval_metrics(exp_name, dsets=DSETS, tasks=TASKS):
+def get_eval_metrics(exp_name, dsets=DSETS, tasks=TASKS, ignore_bladder=False):
     """
     Get accuracy metrics for task-specific evaluation model, for the specified
     experiment and evaluation datasets.
@@ -135,6 +139,8 @@ def get_eval_metrics(exp_name, dsets=DSETS, tasks=TASKS):
         Dataset splits and/or external datasets evaluated on, by default DSETS
     tasks : list, optional
         List of tasks (side/plane/None) to find models for, by default TASKS
+    ignore_bladder : bool, optional
+        If True, specify to ignore the images labeled as Bladder (if possible)
 
     Returns
     -------
@@ -153,8 +159,14 @@ def get_eval_metrics(exp_name, dsets=DSETS, tasks=TASKS):
             metrics_path = os.path.join(eval_model_dir, f"{dset}_metrics.csv")
             df_metrics = pd.read_csv(metrics_path, index_col=0)
 
+            # Specify column to get from
+            # NOTE: Column specifies subset of images to get metrics from
+            col = "All"
+            if ignore_bladder and "Without Bladder" in df_metrics.columns:
+                col = "Without Bladder"
+
             # Get metric of interest
-            metric_str = df_metrics.loc["Overall Accuracy", "All"]
+            metric_str = df_metrics.loc["Overall Accuracy", col]
 
             # Clean up metric
             metric_str = prettify_metric(metric_str)
@@ -249,6 +261,8 @@ def init(parser):
                     "Providing '|' symbolizes row space.",
         "dset": "List of dataset split or test dataset name to evaluate",
         "task": "Tasks whose evaluation models to look for (side/plane/None)",
+        "ignore_bladder": "If True, get metrics computed only on non-Bladder "
+                          "images.",
         "save_dir": "Path to directory to save created file in",
         "fname": "Filename of CSV to save gathered results to",
     }
@@ -262,6 +276,10 @@ def init(parser):
     parser.add_argument("--task", nargs="+",
                         default=TASKS,
                         help=arg_help["task"])
+    parser.add_argument("--ignore_bladder",
+                        default=False,
+                        action="store_true",
+                        help=arg_help["ignore_bladder"])
     parser.add_argument("--save_dir", type=str,
                         default=constants.DIR_INFERENCE,
                         help=arg_help["save_dir"])
@@ -292,7 +310,8 @@ def main(args):
             metric_row = get_eval_metrics(
                 exp_name,
                 dsets=args.dset,
-                tasks=args.task)
+                tasks=args.task,
+                ignore_bladder=args.ignore_bladder)
 
         # Accumulate
         metric_rows.append(metric_row)
