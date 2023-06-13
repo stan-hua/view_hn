@@ -130,3 +130,75 @@ def gridplot_images_from_paths(paths, filename, save_dir, title=None):
     """
     imgs = np.stack([cv2.imread(path) for path in paths])
     gridplot_images(imgs, filename, save_dir, title=title)
+
+
+def grouped_barplot(data, x, y, hue, yerr_low, yerr_high, legend=False,
+                    xlabel=None, ylabel=None, ax=None,
+                    **plot_kwargs):
+    """
+    Create grouped bar plot with custom confidence intervals.
+
+    Parameters
+    ----------
+    data : pd.DataFrame
+        Data
+    x : str
+        Name of primary column to group by
+    y : str
+        Name of column with bar values
+    hue : str
+        Name of secondary column to group by
+    yerr_low : str
+        Name of column to subtract y from to create LOWER bound on confidence
+        interval
+    yerr_high : str
+        Name of column to subtract y from to create UPPER bound on confidence
+        interval
+    legend : bool, optional
+        If True, add legend to figure, by default False.
+    ax : matplotlib.pyplot.Axis, optional
+        If provided, draw plot into this Axis instead of creating a new Axis, by
+        default None.
+    **plot_kwargs : keyword arguments to pass into `matplotlib.pyplot.bar`
+
+    Returns
+    -------
+    matplotlib.pyplot.Axis.axis
+        Grouped bar plot with custom confidence intervals
+    """
+    # Get unique values for x and hue
+    x_unique = data[x].unique()
+    xticks = np.arange(len(x_unique))
+    hue_unique = data[hue].unique()
+
+    # Bar-specific constants
+    offsets = np.arange(len(hue_unique)) - np.arange(len(hue_unique)).mean()
+    offsets /= len(hue_unique) + 1.
+    width = np.diff(offsets).mean()
+
+    # Create figure
+    if ax is None:
+        _, ax = plt.subplots()
+
+    # Create bar plot per hue group
+    for i, hue_group in enumerate(hue_unique):
+        df_group = data[data[hue] == hue_group]
+        ax.bar(
+            x=xticks+offsets[i],
+            height=df_group[y].values,
+            width=width,
+            label="{} {}".format(hue, hue_group),
+            yerr=abs(df_group[[yerr_low, yerr_high]].T.to_numpy()),
+            **plot_kwargs)
+
+    # Axis labels
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    # Set x-axis ticks
+    ax.set_xticks(xticks, x_unique)
+
+    if legend:
+        ax.legend()
+
+    return ax
