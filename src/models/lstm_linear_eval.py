@@ -415,10 +415,13 @@ class LSTMLinearEval(pl.LightningModule):
         # Extract convolutional features
         z = self.conv_backbone(inputs)
 
-        # Flatten
-        z = z.view(1, T, -1)
+        # # Flatten
+        # z = z.view(1, T, -1)
 
-        # Extract temporal features
-        c = self.temporal_backbone(z)[0]
+        # # Extract temporal features
+        # c = self.temporal_backbone(z)[0]
 
-        return c.detach().cpu().numpy()
+        # return c
+
+        # TODO: To use LSTM features, uncomment above and remove below
+        return z.detach().cpu().numpy()
