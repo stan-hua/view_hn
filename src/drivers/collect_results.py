@@ -16,7 +16,7 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
+from sklearn import metrics as skmetrics
 
 # Custom libraries
 from src.data import constants
@@ -288,6 +288,45 @@ def parse_prettified_metric_col(metric_col):
     return mean, lower, upper
 
 
+def parse_all_prettified_metric_cols(df_prettified_metrics, task="plane"):
+    """
+    Given metrics for 1+ models on 1+ eval. datasets only for the given task,
+    and set index to experiment name.
+
+    Parameters
+    ----------
+    df_prettified_metrics : pd.DataFrame
+        Each row is a distinct model with a string metric column for each
+        dataset evaluated on.
+    task : str, optional
+        Prediction task (side/plane). Corresponding metric columns end with
+        "_TASK", by default "plane".
+
+    Returns
+    -------
+    pd.DataFrame
+        Each row is for a unique model and contains its performance metrics on
+        each eval. dataset. And the rows are indexed by experiment name.
+    """
+    # Create copy and set index to experiment name
+    # NOTE: Treated as model name
+    df_prettified_metrics = df_prettified_metrics.copy()
+    df_prettified_metrics = df_prettified_metrics.set_index("exp_name")
+
+    # Extract metric columns and eval. dataset names
+    metric_cols = [col for col in df_prettified_metrics.columns
+                   if f"_{task}" in col]
+    dsets = [re.match(rf"(.*)_{task}", col).group(1) for col in metric_cols]
+
+    # Filter for metric columns and non-NA rows
+    df_prettified_metrics = df_prettified_metrics[metric_cols]
+    df_prettified_metrics = df_prettified_metrics.replace(r'^\s*$', np.nan,
+                                                          regex=True)
+    df_prettified_metrics = df_prettified_metrics.dropna()
+
+    return df_prettified_metrics
+
+
 ################################################################################
 #                        Analysis on Collected Metrics                         #
 ################################################################################
@@ -364,7 +403,7 @@ def barplot_all_models(prettified_metrics, ylabel=None, ax=None):
     return ax
 
 
-def plot_all_models_on_dsets(df_prettified_metrics, task="plane",
+def plot_all_models_on_dsets(df_metrics, task="plane",
                              save=False,
                              save_dir=None,
                              fname="barplot.png"):
@@ -374,7 +413,7 @@ def plot_all_models_on_dsets(df_prettified_metrics, task="plane",
 
     Parameters
     ----------
-    df_prettified_metrics : pd.Series
+    df_metrics : pd.DataFrame
         Each row is a distinct model with a string metric column for each
         dataset evaluated on.
     task : str, optional
@@ -394,34 +433,18 @@ def plot_all_models_on_dsets(df_prettified_metrics, task="plane",
     """
     assert task in ("plane", "side", None)
 
-    # Create copy and set index to experiment name
-    # NOTE: Treated as model name
-    df_prettified_metrics = df_prettified_metrics.copy()
-    df_prettified_metrics = df_prettified_metrics.set_index("exp_name")
-
-    # Extract metric columns and eval. dataset names
-    metric_cols = [col for col in df_prettified_metrics.columns
-                   if f"_{task}" in col]
-    dsets = [re.match(rf"(.*)_{task}", col).group(1) for col in metric_cols]
-
-    # Filter for metric columns and non-NA rows
-    df_prettified_metrics = df_prettified_metrics[metric_cols]
-    df_prettified_metrics = df_prettified_metrics.replace(r'^\s*$', np.nan,
-                                                          regex=True)
-    df_prettified_metrics = df_prettified_metrics.dropna()
-
     # Create plots
     fig, axs = plt.subplots(
-        nrows=len(metric_cols), ncols=1,
+        nrows=len(cols), ncols=1,
         sharex=True, sharey=True,
         figsize=(5, 4))
 
     # Create bar plot for each eval. dataset
-    for i, metric_col in enumerate(metric_cols):
+    for i, col in enumerate(cols):
         # NOTE: Make dataset name the title for each plot
-        dset = re.match(rf"(.*)_{task}", metric_col).group(1)
+        dset = re.match(rf"(.*)_{task}", col).group(1)
         barplot_all_models(
-            df_prettified_metrics[metric_col],
+            df_metrics[col],
             ylabel=dset,
             ax=axs[i],
         )
@@ -442,6 +465,60 @@ def plot_all_models_on_dsets(df_prettified_metrics, task="plane",
     if save:
         path = os.path.join(save_dir, fname) if save_dir else fname
         plt.savefig(path)
+
+
+def compute_r2_scores_between_dsets(df_metrics, task="plane"):
+    """
+    Compute R2 scores on model performance between evaluation datasets.
+
+    Note
+    ----
+    This is to see if good model performance on 1 dataset implies good model
+    performance on other datasets.
+
+    Parameters
+    ----------
+    df_metrics : pd.DataFrame
+        Each row is a distinct model with a string metric column for each
+        dataset evaluated on.
+    task : str, optional
+        Prediction task (side/plane). Corresponding metric columns end with
+        "_TASK", by default "plane".
+    """
+    # Parameters
+    # 1. `src_dset`: Dataset to compare against all dataset performance
+    # 2. `dst_dsets`: Datasets to compare against source dataset
+    src_dset = "stanford"
+    dst_dsets = ["stanford_non_seq", "uiowa", "chop"]
+
+    cols = df_metrics.columns.tolist()
+
+    # Compute R2 score for each distinct pair
+    for dst_dset in dst_dsets:
+        src_col = f"{src_dset}_{task}"
+        dst_col = f"{dst_dset}_{task}"
+
+        # Early continue, if eval. dsets not found
+        if src_col not in cols:
+            LOGGER.warning(f"Metric column for dataset `{src_dset}` not found!")
+            continue
+        if dst_col not in cols:
+            LOGGER.warning(f"Metric column for dataset `{dst_dset}` not found!")
+            continue
+
+        # Get only mean metric value for each dataset of interest
+        src_metrics, _, _ = parse_prettified_metric_col(df_metrics[src_col])
+        dst_metrics, _, _ = parse_prettified_metric_col(df_metrics[dst_col])
+
+        # Compute R2 score        
+        score = skmetrics.r2_score(src_metrics, dst_metrics)
+
+        # Print R2 score to console
+        print(f"""
+            ##########################################
+              Datasets: {src_dset} & {dst_dset}
+              R2 Score on Model Metrics: {score:.4f}
+            ##########################################""")
 
 
 ################################################################################
@@ -544,11 +621,26 @@ def main(args):
     save_path = os.path.join(args.save_dir, args.fname)
     df_metrics.to_csv(save_path, index=False)
 
-    # Create plot
-    if args.barplot:
-        plot_all_models_on_dsets(
-            df_metrics, save=True, save_dir=args.save_dir,
-            fname=args.plotname)
+    ############################################################################
+    #                    Analysis on Collected Metrics                         #
+    ############################################################################
+    for task in args.task:
+        # Extract numeric values from prettified string metric columns
+        df_prettified_metrics = parse_all_prettified_metric_cols(
+            df_metrics, task)
+
+        # Look at R2 score
+        # NOTE: This function required manual intervention
+        compute_r2_scores_between_dsets(df_prettified_metrics, task)
+
+        # Create plot
+        if args.barplot:
+            plot_all_models_on_dsets(
+                df_prettified_metrics,
+                save=True, save_dir=args.save_dir,
+                fname=args.plotname,
+                task=task,
+            )
 
 
 if __name__ == "__main__":
