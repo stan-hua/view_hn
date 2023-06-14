@@ -1377,6 +1377,80 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
         df_pred = df_pred.drop(columns=["label", "pred", "prob", "out"])
 
 
+def store_example_classifications(exp_name, dset, mask_bladder=False,
+                                  save_dir=constants.DIR_FIGURES_PRED):
+    """
+    Store correctly/incorrectly classified images in nested folders.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    dset : str
+        Name of evaluation split or test dataset
+    hparams : dict, optional
+        Experiment hyperparameters, by default None
+    mask_bladder : bool, optional
+        If True, bladder predictions are masked out, by default False
+    save_dir : str, optional
+        Directory to save model classifications, by default
+        constants.DIR_FIGURES_PRED
+    """
+    # Load inference
+    save_path = create_save_path(
+        exp_name,
+        dset=dset,
+        mask_bladder=mask_bladder)
+    df_pred = pd.read_csv(save_path)
+
+    # Sort by video
+    df_pred = df_pred.sort_values(by=["id", "visit", "seq_number"])
+    # Get unique labels
+    labels = df_pred["label"].unique().tolist()
+
+    mask_same_label = identify_repeating_same_label_in_video(df_pred)
+
+    df_pred = df_pred[~mask_same_label]
+
+    # Create sub-folders for experiment and its correct/incorrect predictions
+    exp_dir = os.path.join(save_dir, exp_name, dset)
+    correct_dir = os.path.join(exp_dir, "standalone", "correct")
+    incorrect_dir = os.path.join(exp_dir, "standalone", "incorrect")
+    for subdir in (correct_dir, incorrect_dir):
+        if not os.path.exists(subdir):
+            os.makedirs(subdir)
+
+    # For each label, stratify by correct and incorrect predictions
+    for label in labels:
+        # Filter for correct/incorrectly predicted
+        df_label = df_pred[df_pred.label == label]
+        df_correct = df_label[df_label.label == df_label.pred]
+        df_incorrect = df_label[df_label.label != df_label.pred]
+
+        # Sample at most 9 images to plot
+        df_correct = df_correct.sample(n=min(9, len(df_correct)))
+        df_incorrect = df_incorrect.sample(n=min(9, len(df_incorrect)))
+
+        # Get paths to images
+        correct_paths = df_correct.filename.tolist()
+        incorrect_paths = df_incorrect.filename.tolist()
+
+        # Create gridplot from sampled images
+        viz_utils.gridplot_images_from_paths(
+            correct_paths,
+            filename=f"{label} (correct).png",
+            save_dir=correct_dir,
+            title=f"Classified ({label})",
+        )
+
+        viz_utils.gridplot_images_from_paths(
+            incorrect_paths,
+            filename=f"{label} (misclassified).png",
+            save_dir=incorrect_dir,
+            title=f"Misclassified ({label})",
+        )
+
+
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
