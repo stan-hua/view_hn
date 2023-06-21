@@ -12,7 +12,7 @@ import copy
 import lightly
 import pytorch_lightning as pl
 import torch
-from efficientnet_pytorch import EfficientNet
+from efficientnet_pytorch import EfficientNet, utils as effnet_utils
 from lightly.models.modules.heads import MoCoProjectionHead
 from lightly.models.utils import (batch_shuffle, batch_unshuffle, 
                                   deactivate_requires_grad, update_momentum)
@@ -126,6 +126,17 @@ class MoCo(pl.LightningModule):
             # Define classification layer
             num_classes = kwargs.get("num_classes", 5)
             self.fc_1 = torch.nn.Linear(self.feature_dim, num_classes)
+
+
+    def load_imagenet_weights(self):
+        """
+        Load imagenet weights for convolutional backbone.
+        """
+        # NOTE: Modified utility function to ignore missing keys
+        effnet_utils.load_pretrained_weights(
+            self.conv_backbone, self.model_name,
+            load_fc=False,
+            advprop=False)
 
 
     def configure_optimizers(self):
