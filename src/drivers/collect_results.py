@@ -434,6 +434,7 @@ def plot_all_models_on_dsets(df_metrics, task="plane",
     assert task in ("plane", "side", None)
 
     # Create plots
+    cols = df_metrics.columns.tolist()
     fig, axs = plt.subplots(
         nrows=len(cols), ncols=1,
         sharex=True, sharey=True,
