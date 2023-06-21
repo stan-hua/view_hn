@@ -95,7 +95,7 @@ class EnsembleLSTMLinear(pl.LightningModule):
         else:
             # Define LSTM layers
             self.temporal_backbone = torch.nn.LSTM(
-                self.num_covs * self.hparams.conv_backbone_output_dim,
+                self.num_convs * self.hparams.conv_backbone_output_dim,
                 self.hparams.hidden_dim,
                 batch_first=True,
                 num_layers=self.hparams.n_lstm_layers,
