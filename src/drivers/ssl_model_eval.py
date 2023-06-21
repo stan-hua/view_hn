@@ -258,8 +258,9 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
 
     # 4. Train models on side/plane prediction with/without fine-tuning
     for model_type in MODEL_TYPES:
+        curr_kwargs = kwargs.copy()
         # 4.0 Update keyword arguments to pass in, to specify model to load
-        kwargs[f"ssl_eval_{model_type}"] = True
+        curr_kwargs[f"ssl_eval_{model_type}"] = True
 
         for label_part in LABEL_PARTS:
             for freeze_weights in FREEZE_WEIGHTS:
@@ -273,7 +274,7 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
                     lp_ft=False,
                     ssl_ckpt_path=ckpt_path,
                     ssl_model=ssl_model,
-                    **kwargs)
+                    **curr_kwargs)
 
             # Skip, if not doing LP-FT (fine-tuning after linear probing)
             if not LP_FT:
@@ -290,7 +291,7 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
             )
 
             # Preparpe arguments for loading linear-probing model
-            lp_ft_kwargs = kwargs.copy()
+            lp_ft_kwargs = curr_kwargs.copy()
             lp_ft_kwargs["from_ssl_eval"] = True
             lp_ft_kwargs["ssl_ckpt_path"] = load_model.find_best_ckpt_path(
                 exp_name=from_exp_name,
