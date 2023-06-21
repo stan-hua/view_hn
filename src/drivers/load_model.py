@@ -16,7 +16,7 @@ from pathlib import Path
 # Non-standard libraries
 import torch
 import yaml
-from efficientnet_pytorch import EfficientNet
+from efficientnet_pytorch import EfficientNet, utils as effnet_utils
 from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
@@ -77,7 +77,15 @@ def load_model(hparams):
     if hparams.get("from_imagenet") and hasattr(model, "load_imagenet_weights"):
         model.load_imagenet_weights()
     # If specified, start from a previously trained model
-    elif hparams.get("from_exp_name"):
+    elif hparams.get("from_exp_name") \
+            and (isinstance(hparams.get("from_exp_name"), str) or
+                 len(hparams.get("from_exp_name")) == 1):
+        # Parse argument
+        from_exp_name = hparams.get("from_exp_name")
+        from_exp_name = from_exp_name[0] if isinstance(from_exp_name, list) \
+            else from_exp_name
+
+        # Load pretrained model
         pretrained_model = load_pretrained_from_exp_name(
             hparams.get("from_exp_name"),
             **model_cls_kwargs)
@@ -117,6 +125,23 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     torch.nn.Module
         Pretrained model
     """
+    # 0. Redirect if `exp_name` is "imagenet"
+    if exp_name == "imagenet":
+        # Instantiate CNN
+        model = EfficientNet.from_name(
+            overwrite_hparams.get("model_name", "efficientnet-b0"),
+            image_size=overwrite_hparams.get("img_size", (256, 256)),
+            include_top=False)
+
+        # Load ImageNet weights
+        # NOTE: Modified utility function to ignore missing keys
+        effnet_utils.load_pretrained_weights(
+            model, overwrite_hparams.get("model_name", "efficientnet-b0"),
+            load_fc=False,
+            advprop=False)
+
+        return model
+    
     # 0. Get experiment directory, where model was trained
     model_dir = get_exp_dir(exp_name)
 
@@ -174,7 +199,7 @@ def get_model_cls(hparams):
         if not (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
             return ssl_model_cls, model_cls_kwargs
 
-        # Check if loading backbones from multipe SSL-finetuned models
+        # Check if loading backbones from multiple SSL-finetuned models
         multi_backbone = isinstance(hparams["ssl_ckpt_path"], list) and \
             len(hparams["ssl_ckpt_path"]) > 1
 
@@ -202,6 +227,32 @@ def get_model_cls(hparams):
 
         # NOTE: Backbones need to be added to load the model
         model_cls_kwargs.update(backbone_dict)
+
+    # For ensembling multiple models. NOTE: Needs to be sequence model
+    elif hparams.get("from_exp_name") \
+            and not isinstance(hparams.get("from_exp_name"), str) \
+            and len(hparams.get("from_exp_name")) > 1 \
+            and hparams.get("full_seq"):
+        model_cls = EnsembleLSTMLinear
+
+        # Load pretrained models
+        exp_names = hparams.get("from_exp_name")
+        pretrained_models = [load_pretrained_from_exp_name(exp_name).to("cuda")
+                             for exp_name in exp_names]
+
+        # Extract conv. backbones
+        conv_backbones = []
+        for pretrained_model in pretrained_models:
+            conv_backbone = pretrained_model
+            # CASE 1: Pretrained model is not an EfficientNet model
+            if not isinstance(pretrained_model, EfficientNet):
+                backbone_dict = extract_backbone_dict_from_ssl_model(
+                    pretrained_model)
+                conv_backbone = backbone_dict["conv_backbone"]
+            conv_backbones.append(conv_backbone)
+
+        # Update accumulator
+        model_cls_kwargs["conv_backbones"] = conv_backbones
 
     # For supervised full-sequence model
     elif not hparams.get("self_supervised") and hparams.get("full_seq"):
@@ -409,9 +460,6 @@ def extract_backbones_from_ssl_single(hparams, model_cls):
     if hparams.get("from_ssl_eval"):
         extra_model_kwargs["conv_backbone"] = create_conv_backbone(hparams)
 
-    # Accumulate backbones
-    backbone_dict = {}
-
     # Load pretrained model
     try:
         pretrained_model = model_cls.load_from_checkpoint(
@@ -423,25 +471,45 @@ def extract_backbones_from_ssl_single(hparams, model_cls):
         pretrained_model = model_cls.load_from_checkpoint(
             checkpoint_path=ssl_ckpt_path, **extra_model_kwargs)
 
+    return extract_backbone_dict_from_ssl_model(pretrained_model)
+
+
+def extract_backbone_dict_from_ssl_model(model):
+    """
+    Given SSL-pretrained model instance, extract conv. (and temporal) backbones
+    into a dictionary.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Must contain "conv_backbone" (and "temporal_backbone") attributes.
+
+    Returns
+    -------
+    dict
+        Contains "conv_backbone" and optionally "temporal_backbone"
+    """
+    backbone_dict = {}
+
     # Get convolutional backbone
     # NOTE: Pretrained backbone/s, needs to be inserted as an argument
     for conv_backbone_name in ["conv_backbone", "backbone"]:
-        if hasattr(pretrained_model, conv_backbone_name):
+        if hasattr(model, conv_backbone_name):
             backbone_dict["conv_backbone"] = \
-                getattr(pretrained_model, conv_backbone_name)
+                getattr(model, conv_backbone_name)
             break
     if "conv_backbone" not in backbone_dict:
         raise RuntimeError("Could not find `conv_backbone` for model!")
 
     # Get temporal backbone
-    if hasattr(pretrained_model, "temporal_backbone"):
-        temporal_backbone = pretrained_model.temporal_backbone
+    if hasattr(model, "temporal_backbone"):
+        temporal_backbone = model.temporal_backbone
         backbone_dict["temporal_backbone"] = temporal_backbone
 
     return backbone_dict
 
 
-def create_conv_backbone(hparams):
+def create_conv_backbone(hparams=None):
     """
     Return base EfficientNet convolutional backbone, based on parameters.
 
@@ -455,6 +523,10 @@ def create_conv_backbone(hparams):
     torch.nn.Module
         EfficientNet convolutional backbone
     """
+    # Default value for `hparams`
+    hparams = hparams or {}
+
+    # Create conv. backbone
     conv_backbone = EfficientNet.from_name(
         hparams.get("model_name", "efficientnet-b0"),
         image_size=hparams.get("img_size", (256, 256)),

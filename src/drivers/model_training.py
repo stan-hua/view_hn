@@ -149,7 +149,7 @@ def init(parser):
                         help=arg_help["freeze_weights"])
     parser.add_argument("--from_ssl_eval", action="store_true",
                         help=arg_help["from_ssl_eval"])
-    parser.add_argument("--from_exp_name",
+    parser.add_argument("--from_exp_name", nargs="+",
                         help=arg_help["from_exp_name"])
     # SSL Model arguments
     parser.add_argument("--memory_bank_size", default=4096, type=int,

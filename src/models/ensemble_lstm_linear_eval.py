@@ -84,7 +84,7 @@ class EnsembleLSTMLinear(pl.LightningModule):
         # Store 1+ convolutional backbone, and freeze its weights
         self.conv_backbones = conv_backbones
         if self.hparams.freeze_weights:
-            for conv_backbone in self.conv_backbones:
+            for i, conv_backbone in enumerate(self.conv_backbones):
                 deactivate_requires_grad(conv_backbone)
 
         # If provided, store temporal backbone
@@ -95,7 +95,7 @@ class EnsembleLSTMLinear(pl.LightningModule):
         else:
             # Define LSTM layers
             self.temporal_backbone = torch.nn.LSTM(
-                self.hparams.conv_backbone_output_dim,
+                self.num_covs * self.hparams.conv_backbone_output_dim,
                 self.hparams.hidden_dim,
                 batch_first=True,
                 num_layers=self.hparams.n_lstm_layers,
@@ -164,7 +164,7 @@ class EnsembleLSTMLinear(pl.LightningModule):
         for i, conv_backbone in enumerate(self.conv_backbones):
             x[i] = conv_backbone(inputs)
         # Concatenate conv. features
-        x = torch.cat(x)
+        x = torch.cat(x, dim=1)
 
         # LSTM layers
         seq_len = x.size()[0]
