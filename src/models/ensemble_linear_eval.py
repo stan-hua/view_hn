@@ -1,7 +1,7 @@
 """
-ensemble_lstm_linear_eval.py
+ensemble_linear_eval.py
 
-Description: Used to provide a lstm + linear classification evaluation over
+Description: Used to provide a linear classification evaluation over
              pretrained convolutional backbones.
 """
 
@@ -13,31 +13,26 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
-class EnsembleLSTMLinear(pl.LightningModule):
+class EnsembleLinear(pl.LightningModule):
     """
-    EnsembleLSTMLinear object, wrapping over 2+ convolutional backbones.
+    EnsembleLinear object, wrapping over 2+ convolutional backbones.
     """
 
     def __init__(self, conv_backbones,
-                 temporal_backbone=None,
                  freeze_weights=True,
                  conv_backbone_output_dim=1280,
                  num_classes=5,
                  img_size=(256, 256),
                  adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
-                 n_lstm_layers=1, hidden_dim=512, bidirectional=False,
                  *args, **kwargs):
         """
-        Initialize EnsembleLSTMLinear object.
+        Initialize EnsembleLinear object.
 
         Parameters
         ----------
         conv_backbones : list of torch.nn.Module
             Multiple pretrained convolutional backbone whose convoluational
             features to concatenate.
-        temporal_backbone : torch.nn.Module, optional
-            Pretrained temporal backbone. Instantiates and trains one, by
-            default None.
         freeze_weights : bool, optional
             If True, freeze weights of provided pretrained backbone/s, by
             default True.
@@ -58,19 +53,12 @@ class EnsembleLSTMLinear(pl.LightningModule):
         weight_decay : float, optional
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
-        n_lstm_layers : int, optional
-            Number of LSTM layers, by default 1
-        hidden_dim : int, optional
-            Dimension/size of hidden layers, by default 512
-        bidirectional : bool, optional
-            If True, trains a bidirectional LSTM, by default False
         """
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
         self.save_hyperparameters(
             "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
-            "n_lstm_layers", "hidden_dim", "bidirectional",
             "conv_backbone_output_dim", "freeze_weights",
              *list([k for k,v in kwargs.items() if \
                 not isinstance(v, torch.nn.Module)]))
@@ -87,24 +75,9 @@ class EnsembleLSTMLinear(pl.LightningModule):
             for i, conv_backbone in enumerate(self.conv_backbones):
                 deactivate_requires_grad(conv_backbone)
 
-        # If provided, store temporal backbone
-        if temporal_backbone:
-            self.temporal_backbone = temporal_backbone
-            if self.hparams.freeze_weights:
-                deactivate_requires_grad(temporal_backbone)
-        else:
-            # Define LSTM layers
-            self.temporal_backbone = torch.nn.LSTM(
-                self.num_convs * self.hparams.conv_backbone_output_dim,
-                self.hparams.hidden_dim,
-                batch_first=True,
-                num_layers=self.hparams.n_lstm_layers,
-                bidirectional=self.hparams.bidirectional)
-
         # Define classification layer
-        multiplier = 2 if self.hparams.bidirectional else 1
-        size_after_lstm = self.hparams.hidden_dim * multiplier
-        self.fc = torch.nn.Linear(size_after_lstm, num_classes)
+        size_after_conv = self.num_convs * conv_backbone_output_dim
+        self.fc = torch.nn.Linear(size_after_conv, num_classes)
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
@@ -148,8 +121,7 @@ class EnsembleLSTMLinear(pl.LightningModule):
         Parameters
         ----------
         inputs : torch.Tensor
-            Sequential images for an ultrasound sequence for 1 patient. Expected
-            size is (T, C, H, W).
+            Ultrasound images. Expected size is (B, C, H, W).
 
         Returns
         -------
@@ -163,19 +135,11 @@ class EnsembleLSTMLinear(pl.LightningModule):
         x = [None] * len(self.conv_backbones)
         for i, conv_backbone in enumerate(self.conv_backbones):
             x[i] = conv_backbone(inputs)
-        # Concatenate conv. features
-        x = torch.cat(x, dim=1)
-
-        # LSTM layers
-        seq_len = x.size()[0]
-        x = x.view(1, seq_len, -1)
-        x, _ = self.temporal_backbone(x)
+        # Concatenate conv. features and remove extra dimensions
+        x = torch.cat(x, dim=1).flatten(start_dim=1)
 
         # Linear layer
         x = self.fc(x)
-
-        # Remove extra dimension added for LSTM
-        x = x.squeeze(dim=0)
 
         return x
 
@@ -423,7 +387,7 @@ class EnsembleLSTMLinear(pl.LightningModule):
         Returns
         -------
         numpy.array
-            Embeddings after CNN+LSTM
+            Embeddings after CNN
         """
         # For each conv. backbone, extract convolutional features
         x = [None] * len(self.conv_backbones)
@@ -431,11 +395,5 @@ class EnsembleLSTMLinear(pl.LightningModule):
             x[i] = conv_backbone(inputs)
         # Concatenate conv. features
         x = torch.cat(x)
-
-        # NOTE: Rely only on convolutional features
-        # # LSTM layers
-        # seq_len = x.size()[0]
-        # x = x.view(1, seq_len, -1)
-        # x, _ = self.temporal_backbone(x)
 
         return x

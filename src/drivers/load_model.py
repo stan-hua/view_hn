@@ -25,6 +25,7 @@ from src.models.cpc import CPC
 from src.models.efficientnet_lstm_pl import EfficientNetLSTM
 from src.models.efficientnet_lstm_multi import EfficientNetLSTMMulti
 from src.models.efficientnet_pl import EfficientNetPL
+from src.models.ensemble_linear_eval import EnsembleLinear
 from src.models.ensemble_lstm_linear_eval import EnsembleLSTMLinear
 from src.models.linear_eval import LinearEval
 from src.models.lstm_linear_eval import LSTMLinearEval
@@ -47,6 +48,7 @@ SSL_NAME_TO_MODEL_CLS = {
     # Evaluation models
     "linear": LinearEval,
     "linear_lstm": LSTMLinearEval,
+    "ensemble_linear": EnsembleLinear,
     "ensemble_linear_lstm": EnsembleLSTMLinear,
 }
 
@@ -207,7 +209,10 @@ def get_model_cls(hparams):
         if hparams["ssl_eval_linear"]:
             model_cls = LinearEval
         elif multi_backbone:
-            model_cls = EnsembleLSTMLinear
+            if hparams["full_seq"]:
+                model_cls = EnsembleLSTMLinear
+            else:
+                model_cls = EnsembleLinear
         else:
             model_cls = LSTMLinearEval
 
@@ -231,9 +236,11 @@ def get_model_cls(hparams):
     # For ensembling multiple models. NOTE: Needs to be sequence model
     elif hparams.get("from_exp_name") \
             and not isinstance(hparams.get("from_exp_name"), str) \
-            and len(hparams.get("from_exp_name")) > 1 \
-            and hparams.get("full_seq"):
-        model_cls = EnsembleLSTMLinear
+            and len(hparams.get("from_exp_name")) > 1:
+        if hparams.get("full_seq"):
+            model_cls = EnsembleLSTMLinear
+        else:
+            model_cls = EnsembleLinear
 
         # Load pretrained models
         exp_names = hparams.get("from_exp_name")
@@ -639,7 +646,8 @@ def get_last_conv_layer(model):
         Last convolutional layer
     """
     # CASE 1: Model is a wrapper, storing a conv. backbone
-    if isinstance(model, (LinearEval, LSTMLinearEval, EnsembleLSTMLinear)):
+    if isinstance(model, (LinearEval, LSTMLinearEval,
+                          EnsembleLinear, EnsembleLSTMLinear)):
         return get_last_conv_layer(model.conv_backbone)
     # CASE 2: Model is an EfficientNetB0
     elif isinstance(model, EfficientNet):
