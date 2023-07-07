@@ -9,6 +9,7 @@ Description: Used to provide a linear classification evaluation over
 import pytorch_lightning as pl
 import torch
 import torchmetrics
+from efficientnet_pytorch import EfficientNet
 from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
@@ -134,7 +135,16 @@ class EnsembleLinear(pl.LightningModule):
         # For each conv. backbone, extract convolutional features
         x = [None] * len(self.conv_backbones)
         for i, conv_backbone in enumerate(self.conv_backbones):
+            # NOTE: Flatten is necessary for models that output (B, _, 1, 1)
             x[i] = conv_backbone(inputs)
+
+            # CASE 1: Conv. backbone is an unwrapped EfficientNet model
+            if type(conv_backbone) == EfficientNet:
+                x[i] = x[i].flatten(start_dim=2)
+            # CASE 2:
+            else:
+                x[i] = x[i].squeeze(axis=2)
+
         # Concatenate conv. features and remove extra dimensions
         x = torch.cat(x, dim=1).flatten(start_dim=1)
 
@@ -394,6 +404,6 @@ class EnsembleLinear(pl.LightningModule):
         for i, conv_backbone in enumerate(self.conv_backbones):
             x[i] = conv_backbone(inputs)
         # Concatenate conv. features
-        x = torch.cat(x)
+        x = torch.cat(x, dim=1).flatten(start_dim=1)
 
         return x

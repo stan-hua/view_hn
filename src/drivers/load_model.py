@@ -244,19 +244,31 @@ def get_model_cls(hparams):
 
         # Load pretrained models
         exp_names = hparams.get("from_exp_name")
-        pretrained_models = [load_pretrained_from_exp_name(exp_name).to("cuda")
+        pretrained_models = [load_pretrained_from_exp_name(exp_name)
                              for exp_name in exp_names]
 
         # Extract conv. backbones
         conv_backbones = []
         for pretrained_model in pretrained_models:
             conv_backbone = pretrained_model
-            # CASE 1: Pretrained model is not an EfficientNet model
-            if not isinstance(pretrained_model, EfficientNet):
+            # CASE 1: Pretrained model is an EfficientNet model
+            if isinstance(pretrained_model, EfficientNet):
+                backbone_dict = extract_backbone_dict_from_efficientnet_model(
+                    conv_backbone)
+                conv_backbone = backbone_dict["conv_backbone"]
+            # CASE 2: Pretrained model is NOT an EfficientNet model
+            else:
                 backbone_dict = extract_backbone_dict_from_ssl_model(
                     pretrained_model)
                 conv_backbone = backbone_dict["conv_backbone"]
+            # CASE 2: Pretrained model is 
             conv_backbones.append(conv_backbone)
+
+        # Send models to device
+        device = hparams.get("device", constants.DEVICE)
+        if device != "cpu" and torch.cuda.is_available():
+            conv_backbones = [conv_backbone.to(device)
+                              for conv_backbone in conv_backbones]
 
         # Update accumulator
         model_cls_kwargs["conv_backbones"] = conv_backbones
@@ -516,6 +528,46 @@ def extract_backbone_dict_from_ssl_model(model):
     return backbone_dict
 
 
+def extract_backbone_dict_from_efficientnet_model(model):
+    """
+    Given an EfficientNet model instance, extract conv. (and temporal) backbones
+    into a dictionary.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Must be an EfficientNet model
+
+    Returns
+    -------
+    dict
+        Contains "conv_backbone" and optionally "temporal_backbone"
+    """
+    assert isinstance(model, EfficientNet)
+
+    backbone_dict = {}
+
+    # CASE 1: Remove Linear layer (from forward pass), if exists
+    if hasattr(model, "fc"):
+        model.fc = torch.nn.Identity()
+
+    # CASE 2: Remove LSTM layer (from forward pass), if exists
+    if hasattr(model, "temporal_backbone"):
+        model.temporal_backbone = torch.nn.Identity()
+    if hasattr(model, "temporal_backbone_forward"):
+        identity_module = torch.nn.Identity()
+        model.temporal_backbone_forward = lambda x: identity_module(x)
+
+    # Verify that conv. layers exist
+    if not len(find_layers_in_model(model, torch.nn.Conv2d)):
+        raise RuntimeError("No conv. layers found!")
+
+    # Get convolutional backbone
+    backbone_dict["conv_backbone"] = model
+
+    return backbone_dict
+
+
 def create_conv_backbone(hparams=None):
     """
     Return base EfficientNet convolutional backbone, based on parameters.
@@ -688,6 +740,30 @@ def get_exp_dir(exp_name, on_error="raise"):
                                " to a valid model training directory")
         model_dir = None
     return model_dir
+
+
+def find_layers_in_model(model, layer_type):
+    """
+    Find specified layers in model.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model
+    layer_type : class
+        Class of layer desired
+
+    Returns
+    -------
+    lists
+        List of model indices containing layer
+    """
+    fc_idx = []
+    for idx, layer in enumerate(model.children()):
+        if isinstance(layer, layer_type):
+            fc_idx.append(idx)
+
+    return fc_idx
 
 
 ################################################################################

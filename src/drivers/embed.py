@@ -111,6 +111,9 @@ class ImageEmbedder:
         if features.shape[0] > 1:
             features = features.squeeze()
 
+        # Convert to numpy
+        features = features.cpu().numpy()
+
         return features
 
 
@@ -209,7 +212,7 @@ class ImageEmbedder:
 
     def embed_torch_batch(self, save_path,
                           img_dir=None, img_dataloader=None,
-                          device="cpu"):
+                          device=constants.DEVICE):
         """
         Extract embeddings for all images in the directory, using PyTorch
         libraries.
@@ -228,7 +231,7 @@ class ImageEmbedder:
             Image dataloader with metadata dictionary containing `filename`, by
             default None
         device : str, optional
-            Device to send data to, by default "cpu".
+            Device to send data to, by default constants.DEVICE.
 
         Returns
         -------
@@ -236,10 +239,8 @@ class ImageEmbedder:
             Contains a column for the path to the image file. Other columns are
             embedding columns
         """
-        # INPUT: If GPU specified, move model to GPU/CPU
-        if device == "cuda" and torch.cuda.is_available():
-            device = "cpu"
-        else:
+        # INPUT: If GPU specified but no GPU available, default to CPU
+        if device != "cpu" and not torch.cuda.is_available():
             device = "cpu"
         self.model = self.model.to(device)
 

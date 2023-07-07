@@ -140,18 +140,40 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         # Pooling
         x = self._avg_pooling(x)
 
-        # LSTM layers
-        seq_len = x.size()[0]
-        x = x.view(1, seq_len, -1)
-        x, _ = self.temporal_backbone(x)
+        # LSTM layer
+        x = self.temporal_backbone_forward(x)
 
         # Linear layer
         x = self.fc(x)
 
         # Remove extra dimension added for LSTM
-        x = x.squeeze(dim=0)
+        if (len(x.size()) == 3) and (x.size()[0] == 1):
+            x = x.squeeze(dim=0)
 
         return x
+
+
+    def temporal_backbone_forward(self, x):
+        """
+        Forward pass for temporal backbone
+
+        Parameters
+        ----------
+        x : torch.nn.Tensor
+            Output of convolutional + pooling layers on US video frames
+
+        Returns
+        -------
+        torch.nn.Tensor
+            Output of temporal backbone on US video frames
+        """
+        # LSTM layers
+        seq_len = x.size()[0]
+        x = x.view(1, seq_len, -1)
+        x, _ = self.temporal_backbone(x)
+
+        return x
+
 
 
     def configure_optimizers(self):

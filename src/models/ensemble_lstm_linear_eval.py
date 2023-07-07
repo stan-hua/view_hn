@@ -428,9 +428,11 @@ class EnsembleLSTMLinear(pl.LightningModule):
         # For each conv. backbone, extract convolutional features
         x = [None] * len(self.conv_backbones)
         for i, conv_backbone in enumerate(self.conv_backbones):
-            x[i] = conv_backbone(inputs)
+            # NOTE: Flatten is necessary for models that output (B, _, 1, 1)
+            x[i] = conv_backbone(inputs).flatten(start_dim=1)
+
         # Concatenate conv. features
-        x = torch.cat(x)
+        x = torch.cat(x, dim=1)
 
         # NOTE: Rely only on convolutional features
         # # LSTM layers
