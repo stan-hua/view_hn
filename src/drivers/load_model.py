@@ -143,7 +143,7 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
             advprop=False)
 
         return model
-    
+
     # 0. Get experiment directory, where model was trained
     model_dir = get_exp_dir(exp_name)
 
@@ -261,7 +261,6 @@ def get_model_cls(hparams):
                 backbone_dict = extract_backbone_dict_from_ssl_model(
                     pretrained_model)
                 conv_backbone = backbone_dict["conv_backbone"]
-            # CASE 2: Pretrained model is 
             conv_backbones.append(conv_backbone)
 
         # Send models to device

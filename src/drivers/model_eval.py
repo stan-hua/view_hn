@@ -1,7 +1,8 @@
 """
 model_eval.py
 
-Description: Used to evaluate a trained model's performance.
+Description: Used to evaluate a trained model's performance on other view
+             labeling datasets.
 """
 
 # Standard libraries
@@ -9,8 +10,8 @@ import argparse
 import logging
 import os
 import random
-from colorama import Fore, Style
 from collections import OrderedDict
+from colorama import Fore, Style
 
 # Non-standard libraries
 import pandas as pd
@@ -62,7 +63,7 @@ THEME = "dark"
 CALCULATE_METRICS = True
 
 # Flag to create embeddings and plot UMAP for each evaluation set
-EMBED = True
+EMBED = False
 
 # Flag to overwrite existing results
 OVERWRITE_EXISTING = True
@@ -1307,8 +1308,8 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
     """
     # 0. Overwrite `mask_bladder`, based on dset
     if dset in constants.DSETS_MISSING_BLADDER:
-        LOGGER.info(f"Hospital missing bladder labels found ({dset})! "
-                    "Overwriting `mask_bladder`")
+        LOGGER.info("Hospital missing bladder labels found (%s)! "
+                    "Overwriting `mask_bladder`", dset)
         mask_bladder = True
 
     # 1. Get experiment hyperparameters (if not provided)
@@ -1316,26 +1317,7 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
         else load_model.get_hyperparameters(exp_name=exp_name)
 
     # 2. Load inference
-    save_path = create_save_path(
-        exp_name,
-        dset=dset,
-        mask_bladder=mask_bladder)
-    df_pred = pd.read_csv(save_path)
-    # 2.0 Ensure no duplicates (or sequential data only)
-    # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
-    if not mask_bladder:
-        df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
-    # 2.1 Add side/plane label, if not present
-    for label_part in constants.LABEL_PARTS:
-        if label_part not in df_pred.columns:
-            df_pred[label_part] = utils.get_labels_for_filenames(
-                df_pred["filename"].tolist(), label_part=label_part)
-    # 2.2 Add HN labels, if not already exists. NOTE: Needs side label to work
-    if "hn" not in df_pred.columns:
-        df_pred = utils.extract_hn_labels(df_pred)
-    # 2.3 Specify which images are at label boundaries
-    # NOTE: Disabled for now
-    # df_pred["at_label_boundary"] = utils.get_label_boundaries(df_pred)
+    df_pred = load_view_predictions(exp_name, dset, mask_bladder)
 
     # If multi-output, evaluate each label part, separately
     label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
@@ -1539,7 +1521,7 @@ def identify_repeating_segments(values):
     prev_val = None
     segment_len = 1
 
-    for idx, val in enumerate(values):
+    for val in values:
         # CASE 0: Part of repeating segment
         if val == prev_val:
             segment_len += 1
@@ -1895,6 +1877,65 @@ def calculate_accuracy(df_pred):
     acc = round(acc, 4)
 
     return acc
+
+
+def load_view_predictions(exp_name, dset, mask_bladder=False):
+    """
+    Load predictions by model given by `exp_name` on dataset `dset`.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    dset : str
+        Name of evaluation split or test dataset
+    mask_bladder : bool, optional
+        If True, bladder predictions are masked out, by default False
+
+    Returns
+    -------
+    pd.DataFrame
+        Each row is an image with a view label (plane/side) predicted.
+    """
+    # 0. Overwrite `mask_bladder`, based on dset
+    if dset in constants.DSETS_MISSING_BLADDER:
+        LOGGER.info("Hospital missing bladder labels found (%s)! "
+                    "Overwriting `mask_bladder`", dset)
+        mask_bladder = True
+
+    # 1. Specify path to inference file
+    save_path = create_save_path(
+        exp_name,
+        dset=dset,
+        mask_bladder=mask_bladder)
+    # Raise error, if predictions not found
+    if not os.path.exists(save_path):
+        raise RuntimeError(f"Predictions not found on dataset {dset}!\n"
+                           f"`exp_name`: {exp_name}")
+
+    # 2. Load results
+    df_pred = pd.read_csv(save_path)
+
+    # 3. Ensure no duplicates (or sequential data only)
+    # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
+    if not mask_bladder:
+        df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
+
+    # 4. Add side/plane label, if not present
+    for label_part in constants.LABEL_PARTS:
+        if label_part not in df_pred.columns:
+            df_pred[label_part] = utils.get_labels_for_filenames(
+                df_pred["filename"].tolist(), label_part=label_part)
+
+    # 5. Add HN labels, if not already exists. NOTE: Needs side label to work
+    if "hn" not in df_pred.columns:
+        df_pred = utils.extract_hn_labels(df_pred)
+
+    # 6. Specify which images are at label boundaries
+    # NOTE: Disabled for now
+    # df_pred["at_label_boundary"] = utils.get_label_boundaries(df_pred)
+
+    return df_pred
 
 
 ################################################################################
