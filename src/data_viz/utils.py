@@ -75,12 +75,19 @@ def gridplot_images(imgs, filename, save_dir, title=None):
     # Determine number of images to plot
     num_imgs_sqrt = int(np.sqrt(len(imgs)))
     num_imgs = num_imgs_sqrt ** 2
+    nrows = ncols = num_imgs_sqrt
+
+    # If very few images, print all images in 1 row
+    if num_imgs < len(imgs):
+        nrows = len(imgs)
+        ncols = 1
+        num_imgs = len(imgs)
 
     # Create grid plot
     fig = plt.figure(figsize=(8., 8.))
     grid = ImageGrid(
         fig, 111,
-        nrows_ncols=(num_imgs_sqrt, num_imgs_sqrt),
+        nrows_ncols=(nrows, ncols),
         axes_pad=0.01,      # padding between axes
     )
 
