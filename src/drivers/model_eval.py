@@ -511,7 +511,7 @@ def plot_pred_probability_by_views(df_pred, relative_side=False):
     df_prob_by_view = df_pred.groupby(by="label").mean()["prob"].reset_index()
     df_prob_by_view = df_prob_by_view.rename(columns=
         {"label": "View", "prob": "Probability"})
-    
+
     # Gets all labels based on side encoding
     all_labels = constants.CLASSES["relative" if relative_side else ""]
     # Bar plot
@@ -729,7 +729,7 @@ def check_others_pred_progression(df_pred):
 
         # Encoded label for "Other"
         other_label = str(CLASS_TO_IDX["Other"])
-        
+
         # Keep track of order of views
         prev_label = None
         prev_pred = None
@@ -1025,7 +1025,7 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
             df_pred=df_pred,
             metric_func=skmetrics.accuracy_score,
             **ci_kwargs)
-        metrics[f"Overall Accuracy"] = f"{point} ({lower}, {upper})"
+        metrics["Overall Accuracy"] = f"{point} ({lower}, {upper})"
 
     # 3. Accuracy, grouped by patient
     metrics["Accuracy (By Patient)"] = \
@@ -1116,6 +1116,7 @@ def calculate_hn_corr(df_pred):
 
 def bootstrap_metric(df_pred,
                      metric_func=skmetrics.accuracy_score,
+                     label_col="label", pred_col="pred",
                      alpha=0.05,
                      n_bootstrap=12000,
                      seed=constants.SEED):
@@ -1131,6 +1132,10 @@ def bootstrap_metric(df_pred,
     metric_func : function, optional
         Reference to function that can be used to calculate a metric given the
         (label, predictions), by default sklearn.metrics.accuracy_score
+    label_col : str, optional
+        Name of label column, by default "label"
+    pred_col : str, optional
+        Name of label column, by default "pred"
     alpha : float, optional
         Desired significance level, by default 0.05
     n_bootstrap : int, optional
@@ -1145,11 +1150,11 @@ def bootstrap_metric(df_pred,
     """
     # Calculate exact point metric
     # NOTE: Assumes function takes in (label, pred)
-    exact_metric = round(metric_func(df_pred["label"], df_pred["pred"]), 4)
+    exact_metric = round(metric_func(df_pred[label_col], df_pred[pred_col]), 4)
 
     # Initialize bootstrap
     bootstrap = IIDBootstrap(
-        df_pred["label"], df_pred["pred"],
+        df_pred[label_col], df_pred[pred_col],
         seed=seed)
 
     try:
@@ -1850,7 +1855,7 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
     return np.mean(scores)
 
 
-def calculate_accuracy(df_pred):
+def calculate_accuracy(df_pred, label_col="label", pred_col="pred"):
     """
     Given a table of predictions with columns "label" and "pred", compute
     accuracy rounded to 4 decimal places.
@@ -1860,6 +1865,10 @@ def calculate_accuracy(df_pred):
     df_pred : pd.DataFrame
         Model predictions. Each row contains a label,
         prediction, and other patient and sequence-related metadata.
+    label_col : str, optional
+        Name of label column, by default "label"
+    pred_col : str, optional
+        Name of label column, by default "pred"
 
     Returns
     -------
@@ -1871,7 +1880,7 @@ def calculate_accuracy(df_pred):
         return "N/A"
 
     # Compute accuracy
-    acc = skmetrics.accuracy_score(df_pred["label"], df_pred["pred"])
+    acc = skmetrics.accuracy_score(df_pred[label_col], df_pred[pred_col])
 
     # Round decimals
     acc = round(acc, 4)
@@ -2223,7 +2232,7 @@ if __name__ == '__main__':
             if EMBED:
                 embed_dset(exp_name=EXP_NAME, dset=DSET, **OVERWRITE_HPARAMS)
 
-            # # 5. Evaluate predictions and embeddings
+            # 5. Evaluate predictions and embeddings
             analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,
                                mask_bladder=MASK_BLADDER)
 
