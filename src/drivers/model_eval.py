@@ -1947,6 +1947,71 @@ def load_view_predictions(exp_name, dset, mask_bladder=False):
     return df_pred
 
 
+def load_side_plane_view_predictions(side_exp_name, plane_exp_name, dset,
+                                     mask_bladder=False):
+    """
+    Load view label predictions for side and plane model.
+
+    Parameters
+    ----------
+    side_exp_name : str
+        Name of side experiment
+    plane_exp_name : str
+        Name of plane experiment
+    dset : str
+        Name of evaluation split or test dataset
+    mask_bladder : bool, optional
+        If True, bladder predictions are masked out, by default False
+
+    Returns
+    -------
+    pd.DataFrame
+        Contains view label predictions (side and plane) for dataset
+    """
+    # Load side predictions
+    df_side_preds = load_view_predictions(
+        side_exp_name, dset, mask_bladder=mask_bladder)
+    # Rename columns
+    df_side_preds = df_side_preds.rename(columns={
+        "label": "side",
+        "pred": "side_pred",
+        "prob": "side_prob",
+        "out": "side_out",
+    })
+    df_side_preds = df_side_preds.loc[:,~df_side_preds.columns.duplicated()]
+
+    # Load plane predictions
+    df_plane_preds = load_view_predictions(
+        plane_exp_name, dset, mask_bladder=mask_bladder)
+    # Rename columns
+    df_plane_preds = df_plane_preds.rename(columns={
+        "label": "plane",
+        "pred": "plane_pred",
+        "prob": "plane_prob",
+        "out": "plane_out",
+    })
+    df_plane_preds = df_plane_preds.loc[:,~df_plane_preds.columns.duplicated()]
+
+    # Fix slashes in filenames
+    df_side_preds["filename"] = df_side_preds["filename"].map(os.path.normpath)
+    df_plane_preds["filename"] = df_plane_preds["filename"].map(os.path.normpath)
+
+    # Merge predictions
+    duplicate_suffix = "_duplicate"
+    df_view_preds = df_side_preds.merge(
+        df_plane_preds,
+        how="inner",
+        on=["filename"],
+        suffixes=("", duplicate_suffix))
+
+    # Remove duplicate columns
+    cols = df_view_preds.columns.tolist()
+    duplicate_cols = [col for col in cols if col.endswith(duplicate_suffix)]
+    df_view_preds = df_view_preds.drop(columns=duplicate_cols)
+
+    return df_view_preds
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
