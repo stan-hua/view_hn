@@ -86,12 +86,14 @@ class EnsembleLinear(pl.LightningModule):
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
         for dset in dsets:
-            exec(f"self.{dset}_acc = torchmetrics.Accuracy()")
+            exec(f"self.{dset}_acc = torchmetrics.Accuracy(task='multiclass')")
 
             # Metrics for binary classification
             if self.hparams.num_classes == 2:
-                exec(f"self.{dset}_auroc = torchmetrics.AUROC()")
-                exec(f"self.{dset}_auprc = torchmetrics.AveragePrecision()")
+                exec(f"""self.{dset}_auroc = torchmetrics.AUROC(
+                    task='multiclass')""")
+                exec(f"""self.{dset}_auprc = torchmetrics.AveragePrecision(
+                    task='multiclass')""")
 
 
     def configure_optimizers(self):

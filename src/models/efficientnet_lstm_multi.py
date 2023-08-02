@@ -98,7 +98,8 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
         dsets = ['train', 'val', 'test']
         for dset in dsets:
             for label in self.hparams.label_to_num_classes:
-                exec(f"self.{dset}_acc_{label} = torchmetrics.Accuracy()")
+                exec(f"""self.{dset}_acc_{label} = torchmetrics.Accuracy(
+                    task='multiclass')""")
 
 
     def forward(self, inputs):
