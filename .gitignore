@@ -1,5 +1,6 @@
 src/data
 *.pyc
-.vscode
+.idea
 .pytest_cache
 src/models/siamnet.py
+.vscode/settings.json

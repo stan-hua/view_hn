@@ -229,12 +229,14 @@
             "justMyCode": true,
             "args": [
                 "--pairing_method",
-                    "random",
-                    // "most_confident_pred",
-                "--exp_name",
-                // Only Supervised
-                    // "supervised__linear_lstm_side__redo_1",
-                    "supervised__linear_lstm_plane__redo_1",
+                    // "random",
+                    "most_confident_pred",
+
+                
+                "--side_exp_name",
+                    "supervised__linear_lstm_side__from_imagenet__with_aug",
+                "--plane_exp_name",
+                    "supervised__linear_lstm_plane__from_imagenet__with_aug__redo_1",
 
                     // "supervised__linear_lstm_side__with_aug__redo_1",
                     // "supervised__linear_lstm_plane__with_aug__redo_1",
