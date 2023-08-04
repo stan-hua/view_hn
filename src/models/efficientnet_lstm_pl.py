@@ -9,9 +9,11 @@ Description: CNN-LSTM using an EfficientNet convolutional backbone. PyTorch
 import pytorch_lightning as pl
 import torch
 import torchmetrics
-from efficientnet_pytorch import (EfficientNet,
-    get_model_params, utils)
+from efficientnet_pytorch import EfficientNet, get_model_params
 from torch.nn import functional as F
+
+# Custom libraries
+from src.utilities import efficientnet_pytorch_utils as effnet_utils
 
 
 class EfficientNetLSTM(EfficientNet, pl.LightningModule):
@@ -116,7 +118,7 @@ class EfficientNetLSTM(EfficientNet, pl.LightningModule):
         Load imagenet weights for convolutional backbone.
         """
         # NOTE: Modified utility function to ignore missing keys
-        utils.load_pretrained_weights(
+        effnet_utils.load_pretrained_weights(
             self, self.model_name,
             load_fc=False,
             advprop=False)

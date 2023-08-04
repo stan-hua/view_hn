@@ -16,7 +16,7 @@ from pathlib import Path
 # Non-standard libraries
 import torch
 import yaml
-from efficientnet_pytorch import EfficientNet, utils as effnet_utils
+from efficientnet_pytorch import EfficientNet
 from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
@@ -31,6 +31,7 @@ from src.models.linear_eval import LinearEval
 from src.models.lstm_linear_eval import LSTMLinearEval
 from src.models.moco import MoCo
 from src.models.tclr import TCLR
+from src.utilities import efficientnet_pytorch_utils as effnet_utils
 
 
 ################################################################################
@@ -136,7 +137,6 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
             include_top=False)
 
         # Load ImageNet weights
-        # NOTE: Modified utility function to ignore missing keys
         effnet_utils.load_pretrained_weights(
             model, overwrite_hparams.get("model_name", "efficientnet-b0"),
             load_fc=False,

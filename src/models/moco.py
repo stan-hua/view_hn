@@ -12,7 +12,7 @@ import copy
 import lightly
 import pytorch_lightning as pl
 import torch
-from efficientnet_pytorch import EfficientNet, utils as effnet_utils
+from efficientnet_pytorch import EfficientNet
 from lightly.models.modules.heads import MoCoProjectionHead
 from lightly.models.utils import (batch_shuffle, batch_unshuffle, 
                                   deactivate_requires_grad, update_momentum)
@@ -20,6 +20,7 @@ from lightly.models.utils import (batch_shuffle, batch_unshuffle,
 # Custom libraries
 from src.loss.soft_ntx_ent_loss import SoftNTXentLoss
 from src.loss.same_label_con_loss import SameLabelConLoss
+from src.utilities import efficientnet_pytorch_utils as effnet_utils
 
 
 ################################################################################
