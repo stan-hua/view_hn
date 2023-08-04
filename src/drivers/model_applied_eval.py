@@ -343,10 +343,6 @@ def filter_for_hn_pairs(df_metadata, pairing_method="random"):
         Guaranteed to have a pair of images for the same patient ID and visit
         ID. However, it's not guaranteed to be from the same side/plane.
     """
-    # Remove bladder images
-    mask = df_metadata.side.str.lower().isin(["left", "right"])
-    df_metadata = df_metadata[mask]
-
     # Remove images without HN/surgery label
     df_metadata = df_metadata.dropna(subset=["hn", "surgery"])
 
@@ -355,6 +351,10 @@ def filter_for_hn_pairs(df_metadata, pairing_method="random"):
         return pair_by_random_choice(df_metadata)
     # CASE 2: Pairing by most confident plane prediction
     elif pairing_method == "most_confident_pred":
+        # Remove images predicted as bladder
+        mask = (df_metadata["side_pred"] != "None") & (df_metadata["plane_pred"] != "Bladder")
+        df_metadata = df_metadata[mask]
+
         return pair_by_most_confident_side_plane_pred(df_metadata)
 
     raise NotImplementedError
@@ -565,7 +565,7 @@ def calculate_metrics(df_pred, ci=False,
             label_col=label_col,
             pred_col=pred_col,
             **ci_kwargs)
-        metrics["Overall Accuracy"] = f"{point} ({lower}, {upper})"
+        metrics["Overall Accuracy"] = f"{point} [{lower}, {upper}]"
 
     # 3. F1 Score by class
     # NOTE: Overall F1 Score isn't calculated because it's equal to
@@ -577,15 +577,22 @@ def calculate_metrics(df_pred, ci=False,
         metrics[f"Label F1-Score ({unique_labels[i]})"] = round(f1_score, 4)
 
     # 4. Area under the ROC
-    metrics["AUROC"] = skmetrics.roc_auc_score(
-        y_true=df_pred[label_col],
-        y_score=df_pred[prob_col],
-    )
+    try:
+        metrics["AUROC"] = round(skmetrics.roc_auc_score(
+            y_true=df_pred[label_col],
+            y_score=df_pred[prob_col],
+        ), 4)
+    except:
+        metrics["AUROC"] = None
+
     # 5. Area under the Precision-Recall Curve
-    metrics["AUPRC"] = skmetrics.average_precision_score(
-        y_true=df_pred[label_col],
-        y_score=df_pred[prob_col],
-    )
+    try:
+        metrics["AUPRC"] = round(skmetrics.average_precision_score(
+            y_true=df_pred[label_col],
+            y_score=df_pred[prob_col],
+        ), 4)
+    except:
+        metrics["AUPRC"] = None
 
     return pd.Series(metrics)
 
@@ -624,7 +631,7 @@ def eval_calculate_all_metrics(df_pred):
     return df_metrics
 
 
-def eval_create_plots(df_pred, save_dir,
+def eval_create_plots(df_pred, save_dir, dset,
                       label_col="surgery",
                       pred_col="surgery_pred",
                       prob_col="surgery_prob"):
@@ -638,6 +645,8 @@ def eval_create_plots(df_pred, save_dir,
         prediction, and other patient and sequence-related metadata.
     save_dir : str
         Directory to save plots in
+    dset : str
+        Evaluation dataset
     label_col : str, optional
         Name of label column, by default "surgery"
     pred_col : str, optional
@@ -655,7 +664,7 @@ def eval_create_plots(df_pred, save_dir,
         y_pred=df_pred[prob_col],
         plot_chance_level=True,
     )
-    plt.savefig(os.path.join(save_dir, "ro_curve.png"))
+    plt.savefig(os.path.join(save_dir, f"{dset}_ro_curve.png"))
 
     # 2. Create PR curve plot
     skmetrics.PrecisionRecallDisplay.from_predictions(
@@ -663,7 +672,7 @@ def eval_create_plots(df_pred, save_dir,
         y_pred=df_pred[prob_col],
         plot_chance_level=True,
     )
-    plt.savefig(os.path.join(save_dir, "pr_curve.png"))
+    plt.savefig(os.path.join(save_dir, f"{dset}_pr_curve.png"))
 
 
 ################################################################################
@@ -794,7 +803,8 @@ def infer_hn_dset(side_exp_name, plane_exp_name,
 
     # 0. Ensure `exp_name` points to existing model
     for exp_name in (side_exp_name, plane_exp_name):
-        load_model.get_exp_dir(exp_name)
+        if exp_name not in ["canonical", "random"]:
+            load_model.get_exp_dir(exp_name)
 
     # 1. Load view label predictions for dataset
     df_views_pred = model_eval.load_side_plane_view_predictions(
@@ -855,7 +865,7 @@ def analyze_dset_surgery_preds(
     df_metrics.to_csv(os.path.join(save_dir, fname))
 
     # 4. Create plots
-    eval_create_plots(df_surgery_preds, save_dir)
+    eval_create_plots(df_surgery_preds, save_dir, dset=dset)
 
 
 if __name__ == '__main__':
