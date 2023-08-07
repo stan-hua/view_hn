@@ -27,6 +27,7 @@ pip install -r requirements.txt
 
 #### 2. Create symbolic link to data directory
 ```
+# (In a console with admin priviliges)
 # 1. In Windows
 mklink /d ".\src\data" "PATH\TO\DATA\DIRECTORY"
 
