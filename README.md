@@ -2,13 +2,13 @@
 
 ## Quick Setup
 
-### 0. Go to project directory
+#### Go to project directory
 ```
 # Go to `view_hn` repo directory
 cd PATH/TO/DIRECTORY
 ```
 
-### 0. (Optional) Create virtual environmeent
+#### 0. (Optional) Create virtual environmeent
 ```
 # Create environment
 python -m venv VIEW_HN
@@ -20,12 +20,12 @@ VIEW_HN\Scripts\activate
 source VIEW_HN/bin/activate
 ```
 
-### 1. Install dependencies
+#### 1. Install dependencies
 ```
 pip install -r requirements.txt
 ```
 
-### 2. Create symbolic link to data directory
+#### 2. Create symbolic link to data directory
 ```
 # 1. In Windows
 mklink /d ".\src\data" "PATH\TO\DATA\DIRECTORY"
