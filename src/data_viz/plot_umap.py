@@ -36,9 +36,6 @@ LOGGER = logging.getLogger(__name__)
 # Disable logging
 logging.disable()
 
-# Set random seed
-random.seed(constants.SEED)
-
 # Plot theme (light/dark)
 THEME = "dark"
 
@@ -664,6 +661,9 @@ def main(exp_name,
         1+ dataset split or test dataset names, whose embeddings to plot, by
         default constants.DEFAULT_EVAL_DSET
     """
+    # Set random seed
+    random.seed(constants.SEED)
+
     # INPUT: Ensure `dset` is a list
     dsets = [dset] if isinstance(dset, str) else dset
 
@@ -794,6 +794,9 @@ def main(exp_name,
 
     # Close all figures
     plt.close("all")
+
+    # Unset random seed
+    random.seed()
 
 
 ################################################################################
