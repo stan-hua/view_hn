@@ -1,8 +1,41 @@
 # Supervised Contrastive Learning for Improved View Labeling of Ultrasound Videos
 
-## Context
+## Quick Setup
 
-[ TO BE ADDED ] 
+#### Go to project directory
+```
+# Go to `view_hn` repo directory
+cd PATH/TO/DIRECTORY
+```
+
+#### 0. (Optional) Create virtual environmeent
+```
+# Create environment
+python -m venv VIEW_HN
+
+# Activate environment
+# 1. In Windows
+VIEW_HN\Scripts\activate
+# 2. In Linux
+source VIEW_HN/bin/activate
+```
+
+#### 1. Install dependencies
+```
+pip install -r requirements.txt
+```
+
+#### 2. Create symbolic link to data directory
+```
+# (In a console with admin priviliges)
+# 1. In Windows
+mklink /d ".\src\data" "PATH\TO\DATA\DIRECTORY"
+
+# 2. In Linux
+ln -s /PATH/TO/DATA/DIRECTORY ./src/data
+```
+
+---
 
 ## Package Layout
 
