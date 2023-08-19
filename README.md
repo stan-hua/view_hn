@@ -1,5 +1,18 @@
 # Supervised Contrastive Learning for Improved View Labeling of Ultrasound Videos
 
+## Context
+
+This project aims to use self-supervised learning (SSL) to learn features that may be beneficial for the task of automated view labeling of frames in a renal ultrasound video.
+
+Repository contains code for:
+ a) pre-training with SSL methods (SimCLR, MoCo, TCLR) with custom losses,
+ b) fine-tuning of SSL-pretrained models,
+ c) exploratory data analysis and data visualization,
+ d) model evaluation, and
+ e) clinical model evaluation with a downstream task (surgery prediction).
+
+---
+
 ## Quick Setup
 
 #### Go to project directory
