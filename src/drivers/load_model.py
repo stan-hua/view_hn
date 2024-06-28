@@ -17,7 +17,7 @@ from pathlib import Path
 import torch
 import yaml
 from efficientnet_pytorch import EfficientNet
-from tensorflow.keras.applications.efficientnet import EfficientNetB0
+# from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
 from src.data import constants
@@ -786,10 +786,11 @@ def load_pretrained_from_model_name(model_name):
     weights = constants.MODEL_NAME_TO_WEIGHTS.get(model_name)
 
     if model_name == "cytoimagenet":
-        model = EfficientNetB0(weights=weights,
-                               include_top=False,
-                               input_shape=(None, None, 3),
-                               pooling="avg")
+        raise NotImplementedError()
+        # model = EfficientNetB0(weights=weights,
+        #                        include_top=False,
+        #                        input_shape=(None, None, 3),
+        #                        pooling="avg")
     elif model_name == "imagenet":
         model = EfficientNetPL()
         model.load_imagenet_weights()
