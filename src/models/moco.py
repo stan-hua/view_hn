@@ -32,7 +32,7 @@ class MoCo(pl.LightningModule):
     """
     MoCo for self-supervised learning.
     """
-    def __init__(self, img_size=(256, 256), adam=True, lr=0.0005,
+    def __init__(self, img_size=(256, 256), optimizer="adamw", lr=0.0005,
                  momentum=0.9, weight_decay=0.0005,
                  memory_bank_size=4096, temperature=0.1,
                  exclude_momentum_encoder=False,
@@ -47,9 +47,8 @@ class MoCo(pl.LightningModule):
         ----------
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -142,24 +141,22 @@ class MoCo(pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam/SGD) and learning rate scheduler.
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
-        tuple of (torch.optim.Optimizer, torch.optim.LRScheduler)
-            Contains an initialized optimizer and learning rate scheduler. Each
-            are wrapped in a list.
+        torch.optim.Optimizer
+            Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
-
         return optimizer
 
 

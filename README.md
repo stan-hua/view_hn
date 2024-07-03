@@ -48,6 +48,13 @@ mklink /d ".\src\data" "PATH\TO\DATA\DIRECTORY"
 ln -s /PATH/TO/DATA/DIRECTORY ./src/data
 ```
 
+#### 3. Set up Comet ML Logging
+```
+# pip install comet_ml
+comet init                  # create account, if not already
+```
+
+
 ---
 
 ## Package Layout

@@ -15,12 +15,15 @@ from datetime import datetime
 import numpy as np
 import torch
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+from pytorch_lightning.callbacks import (
+    ModelCheckpoint, StochasticWeightAveraging, EarlyStopping
+)
+from pytorch_lightning.loggers import CometLogger
 
 # Custom libraries
 from src.data import constants
 from src.drivers import load_data, load_model
+from src.utilities import config as config_utils
 from src.utilities.custom_logger import FriendlyCSVLogger
 
 
@@ -33,6 +36,9 @@ LOGGER.setLevel(level=logging.DEBUG)
 
 # Default random seed
 SEED = None
+
+# Comet-ML project name
+COMET_PROJECT = "renal-view"
 
 
 ################################################################################
@@ -268,8 +274,8 @@ def set_seed(seed=SEED, include_algos=False):
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
-def run(hparams, dm, results_dir, train=True, test=True, fold=0,
-        checkpoint=True, early_stopping=False, version_name="1"):
+def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
+        checkpoint=True, early_stopping=False, exp_name="1", comet_logger=None):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
 
@@ -291,47 +297,60 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
         If performing cross-validation, supplies fold index. Index ranges
         between 0 to (num_folds - 1). If train-val-test split, remains 0, by
         default 0.
+    swa : bool, optional
+        If True, perform Stochastic Weight Averaging (SWA), by default True.
     checkpoint : bool, optional
         If True, saves model (last epoch) to checkpoint, by default True
     early_stopping : bool, optional
         If True, performs early stopping on plateau of val loss, by default
         False.
-    version_name : str, optional
-        If provided, specifies current experiment number. Version will be shown
-        in the logging folder, by default "1"
+    exp_name : str, optional
+        Name of experiment, by default "1"
+    comet_logger : pl.loggers.CometLogger
+        ML Comet Logger object. If not provided, creates one.
     """
     # Create parent directory if not exists
-    if not os.path.exists(f"{results_dir}/{version_name}"):
-        os.mkdir(f"{results_dir}/{version_name}")
+    if not os.path.exists(f"{results_dir}/{exp_name}"):
+        os.mkdir(f"{results_dir}/{exp_name}")
 
     # Directory for current experiment
-    experiment_dir = f"{results_dir}/{version_name}/{fold}"
+    experiment_dir = f"{results_dir}/{exp_name}/{fold}"
 
     # Create model (from scratch) or load pretrained
     model = load_model.load_model(hparams=hparams)
 
     # Loggers
-    csv_logger = FriendlyCSVLogger(results_dir, name=version_name,
-                                   version=str(fold))
-    tensorboard_logger = TensorBoardLogger(results_dir, name=version_name,
-                                           version=str(fold))
-    # TODO: Consider logging experiments on Weights & Biases
-    # wandb_logger = WandbLogger(save_dir=results_dir, name=version_name,
-    #                            version=str(fold), project="view_hn")
+    loggers = []
+    loggers.append(FriendlyCSVLogger(results_dir, name=exp_name, version=str(fold)))
+    # TODO: Handle case when resuming training on a model
+    if comet_logger:
+        comet_logger = CometLogger(
+            api_key=os.environ.get("COMET_API_KEY"),
+            project_name=COMET_PROJECT,
+            experiment_name=exp_name,
+        )
+        tags = hparams.get("tags")
+        if tags:
+            comet_logger.experiment.add_tags(tags)
+    loggers.append(comet_logger)
 
     # Flag for presence of validation set
     includes_val = (hparams["train_val_split"] < 1.0) or \
         (hparams["cross_val_folds"] > 1)
 
-    # Callbacks (model checkpoint)
+    # Callbacks
     callbacks = []
+    # 1. Model checkpointing
     if checkpoint:
         callbacks.append(
             ModelCheckpoint(dirpath=experiment_dir, save_last=True,
                             monitor="val_loss" if includes_val else None))
+    # 2. Stochastic Weight Averaging
+    if swa:
+        callbacks.append(StochasticWeightAveraging(swa_lrs=1e-2))
+    # 3. Early stopping
     if early_stopping:
-        # TODO: Implement this
-        raise NotImplementedError
+        callbacks.append(EarlyStopping(monitor="val_loss", mode="min"))
 
     # Initialize Trainer
     trainer = Trainer(default_root_dir=experiment_dir,
@@ -343,9 +362,8 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
                       gradient_clip_val=hparams["grad_clip_norm"],
                       max_epochs=hparams["stop_epoch"],
                       enable_checkpointing=checkpoint,
-                      # stochastic_weight_avg=True,
                       callbacks=callbacks,
-                      logger=[csv_logger, tensorboard_logger],
+                      logger=loggers,
                       fast_dev_run=hparams["debug"],
                       )
 
@@ -368,34 +386,49 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
         trainer.test(model=model, test_dataloaders=dm.test_dataloader())
 
 
-def main(args):
+def main(conf):
     """
     Main method to run experiments
 
     Parameters
     ----------
-    args : argparse.Namespace
-        Contains arguments needed to run experiments
+    conf : configobj.ConfigObj
+        Contains configurations needed to run experiments
     """
     # 0. Set random seed
-    set_seed(args.seed)
+    set_seed(conf.seed)
+
+    # Use Comet to save hyperparameters
+    comet_logger = CometLogger(
+        api_key=os.environ.get("COMET_API_KEY"),
+        project_name=COMET_PROJECT,
+        experiment_name=conf["exp_name"],
+    )
+    # Add tags
+    tags = conf.get("tags")
+    if tags:
+        comet_logger.experiment.add_tags(tags)
+    # Save hyperparameters
+    comet_logger.log_hyperparams(conf)
 
     # 0. Set up hyperparameters
     hparams = {
         "img_size": constants.IMG_SIZE,
         "num_classes": \
-            len(constants.LABEL_PART_TO_CLASSES[args.label_part]["classes"])}
-    hparams.update(vars(args))
+            len(constants.LABEL_PART_TO_CLASSES[conf.label_part]["classes"])}
+    hparams.update(config_utils.flatten_nested_dict(conf))
 
     # 0. Arguments for experiment
     experiment_hparams = {
         "train": hparams["train"],
         "test": hparams["test"],
         "checkpoint": hparams["checkpoint"],
-        "version_name": hparams["exp_name"],
+        "exp_name": hparams["exp_name"],
+        "comet_logger": comet_logger,
     }
 
-    hparams["accum_batches"] = args.batch_size if args.full_seq else None
+    # May run out of memory on full videos, so accumulate gradients instead
+    hparams["accum_batches"] = conf.batch_size if conf.full_seq else None
 
     # 1. Set up data module
     dm = load_data.setup_data_module(hparams)
@@ -414,10 +447,17 @@ def main(args):
 if __name__ == "__main__":
     # 0. Initialize ArgumentParser
     PARSER = argparse.ArgumentParser()
-    init(PARSER)
+    PARSER.add_argument(
+        "-c", "--config",
+        type=str,
+        help=f"Name of configuration file under `{constants.DIR_CONFIG}`"
+    )
 
     # 1. Get arguments
     ARGS = PARSER.parse_args()
 
+    # 2. Load configurations
+    CONF = config_utils.load_config(__file__, ARGS.config)
+
     # 2. Run main
-    main(ARGS)
+    main(CONF)

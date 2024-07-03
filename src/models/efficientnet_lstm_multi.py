@@ -31,7 +31,7 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
     EfficientNet + LSTM model for sequence-based classification.
     """
     def __init__(self, label_to_num_classes=None, img_size=(256, 256),
-                 adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=512, bidirectional=False,
                  *args, **kwargs):
         """
@@ -45,9 +45,8 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
             DEFAULT_LABEL_TO_NUM_CLASSES
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -140,18 +139,18 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam or SGD).
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
         torch.optim.Optimizer
             Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,

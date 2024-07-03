@@ -54,7 +54,6 @@ DEFAULT_ARGS = [
     "--num_workers", "4",
     "--pin_memory",
     "--precision", "16",
-    "--adam",
     "--lr", "0.001",
     "--stop_epoch", "25",
 ]
