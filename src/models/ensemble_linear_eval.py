@@ -6,7 +6,7 @@ Description: Used to provide a linear classification evaluation over
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet
@@ -14,7 +14,7 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
-class EnsembleLinear(pl.LightningModule):
+class EnsembleLinear(L.LightningModule):
     """
     EnsembleLinear object, wrapping over 2+ convolutional backbones.
     """

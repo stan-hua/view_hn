@@ -9,7 +9,7 @@ Description: Implementation of TCLR (Temporal Contrastive Learning) with an
 # Non-standard libraries
 import numpy as np
 import lightly
-import pytorch_lightning as pl
+import lightning as L
 import torch
 from efficientnet_pytorch import EfficientNet
 from lightly.models.modules.heads import SimCLRProjectionHead
@@ -18,7 +18,7 @@ from lightly.models.modules.heads import SimCLRProjectionHead
 ################################################################################
 #                               TCLR Model Class                               #
 ################################################################################
-class TCLR(pl.LightningModule):
+class TCLR(L.LightningModule):
     """
     TCLR class for self-supervised pretraining
     """

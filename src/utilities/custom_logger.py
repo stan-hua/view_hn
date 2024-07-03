@@ -10,8 +10,8 @@ import os
 
 # Non-standard libraries
 import pandas as pd
-from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.utilities.distributed import rank_zero_only
+from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.utilities import rank_zero_only
 
 
 class FriendlyCSVLogger(CSVLogger):

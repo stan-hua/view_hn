@@ -10,7 +10,7 @@ import copy
 
 # Non-standard libraries
 import lightly
-import pytorch_lightning as pl
+import lightning as L
 import torch
 from efficientnet_pytorch import EfficientNet
 from lightly.models.modules.heads import MoCoProjectionHead
@@ -28,7 +28,7 @@ from src.utilities import efficientnet_pytorch_utils as effnet_utils
 ################################################################################
 # TODO: Consider same-patient memory banks to avoid conflict between
 # `memory_bank_size` and `same_label` (in SSL data module)
-class MoCo(pl.LightningModule):
+class MoCo(L.LightningModule):
     """
     MoCo for self-supervised learning.
     """

@@ -12,7 +12,7 @@ import os
 # Non-standard libraries
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader
@@ -36,7 +36,7 @@ IMAGE_MODES = {1: ImageReadMode.GRAY, 3: ImageReadMode.RGB}
 ################################################################################
 #                                   Classes                                    #
 ################################################################################
-class SegmentedUSModule(pl.LightningDataModule):
+class SegmentedUSModule(L.LightningDataModule):
     """
     Top-level object used to access all data preparation and loading
     functionalities.

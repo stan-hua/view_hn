@@ -84,7 +84,7 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
 
     Returns
     -------
-    pytorch_lightning.LightningDataModule
+    lightning.pytorch.LightningDataModule
     """
     all_hparams = {
         "full_path": full_path,
@@ -152,7 +152,7 @@ def get_dset_data_module(dset, **kwargs):
         
     Returns
     -------
-    pytorch_lightning.DataModule
+    lightning.pytorch.DataModule
         Each batch returns images and a dict containing metadata
     """
     # Prepare arguments for data module
@@ -291,7 +291,7 @@ def get_dset_metadata(dm, hparams=None,
 
     Parameters
     ----------
-    dm : pl.LightningDataModule
+    dm : L.LightningDataModule
         DataModule used in model training run, used to load exact dset split
     hparams : dict, optional
         Experiment hyperparameters. If not provided, resort to defaults.

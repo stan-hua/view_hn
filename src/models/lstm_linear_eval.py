@@ -6,14 +6,14 @@ Description: Used to provide a lstm + linear classification evaluation over
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
-class LSTMLinearEval(pl.LightningModule):
+class LSTMLinearEval(L.LightningModule):
     """
     LSTMLinearEval object, wrapping over convolutional backbone.
     """

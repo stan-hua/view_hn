@@ -14,11 +14,11 @@ from datetime import datetime
 # Non-standard libraries
 import numpy as np
 import torch
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import (
+from lightning.pytorch import Trainer
+from lightning.pytorch.callbacks import (
     ModelCheckpoint, StochasticWeightAveraging, EarlyStopping
 )
-from pytorch_lightning.loggers import CometLogger
+from lightning.pytorch.loggers import CometLogger
 
 # Custom libraries
 from src.data import constants
@@ -33,6 +33,9 @@ from src.utilities.custom_logger import FriendlyCSVLogger
 # Configure logging
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
 # Default random seed
 SEED = None
@@ -284,7 +287,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     hparams : dict
         Contains (data-related, model-related) setup parameters for training and
         testing
-    dm : pl.LightningDataModule
+    dm : L.LightningDataModule
         Data module, which already called .setup()
     results_dir : str
         Path to directory containing trained model and/or test results

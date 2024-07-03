@@ -7,7 +7,7 @@ Description: Multi-output CNN-LSTM using an EfficientNet convolutional backbone.
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
@@ -26,7 +26,7 @@ DEFAULT_LABEL_TO_NUM_CLASSES = {
 ################################################################################
 #                         EfficientNetLSTMMulti Class                          #
 ################################################################################
-class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
+class EfficientNetLSTMMulti(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model for sequence-based classification.
     """

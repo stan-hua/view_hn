@@ -8,14 +8,14 @@ Description: Implementation of Contrastive Predictive Coding (CPC) via CNN-LSTM
 
 # Non-standard libraries
 import numpy as np
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
 from torch.nn import functional as F
 
 
-class CPC(EfficientNet, pl.LightningModule):
+class CPC(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model, implementation of Contrastive Predictive Coding
     (CPC).

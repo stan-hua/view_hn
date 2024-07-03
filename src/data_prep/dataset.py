@@ -12,7 +12,7 @@ from abc import abstractmethod
 # Non-standard libraries
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader
@@ -89,7 +89,7 @@ def load_dataset_from_dataframe(df, img_dir=None, full_seq=True):
 ################################################################################
 #                             Data Module Classes                              #
 ################################################################################
-class UltrasoundDataModule(pl.LightningDataModule):
+class UltrasoundDataModule(L.LightningDataModule):
     """
     Top-level object used to access all data preparation and loading
     functionalities.

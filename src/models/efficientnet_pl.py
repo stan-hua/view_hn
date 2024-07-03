@@ -5,7 +5,7 @@ Description: PyTorch Lightning wrapper over efficientnet-pytorch library.
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
@@ -15,7 +15,7 @@ from torch.nn import functional as F
 from src.utilities import efficientnet_pytorch_utils as effnet_utils
 
 
-class EfficientNetPL(EfficientNet, pl.LightningModule):
+class EfficientNetPL(EfficientNet, L.LightningModule):
     """
     PyTorch Lightning wrapper module over EfficientNet.
     """

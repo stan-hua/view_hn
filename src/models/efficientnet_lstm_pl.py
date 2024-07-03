@@ -6,7 +6,7 @@ Description: CNN-LSTM using an EfficientNet convolutional backbone. PyTorch
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
@@ -16,7 +16,7 @@ from torch.nn import functional as F
 from src.utilities import efficientnet_pytorch_utils as effnet_utils
 
 
-class EfficientNetLSTM(EfficientNet, pl.LightningModule):
+class EfficientNetLSTM(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model for sequence-based classification.
     """

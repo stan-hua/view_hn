@@ -15,7 +15,7 @@ import os
 import shutil
 
 # Non-standard libraries
-from pytorch_lightning.utilities.exceptions import MisconfigurationException
+from lightning.pytorch.utilities.exceptions import MisconfigurationException
 from jinja2 import Environment
 
 # Custom libraries
