@@ -23,7 +23,7 @@ from sklearn.preprocessing import StandardScaler
 # Custom libraries
 from src.data import constants
 from src.data_prep import utils
-from src.drivers.embed import get_embeds
+from src.scripts.embed import get_embeds
 from src.data_viz import utils as viz_utils
 
 

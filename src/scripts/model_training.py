@@ -22,7 +22,7 @@ from pytorch_lightning.loggers import CometLogger
 
 # Custom libraries
 from src.data import constants
-from src.drivers import load_data, load_model
+from src.scripts import load_data, load_model
 from src.utilities import config as config_utils
 from src.utilities.custom_logger import FriendlyCSVLogger
 
