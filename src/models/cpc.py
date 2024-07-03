@@ -289,7 +289,7 @@ class CPC(EfficientNet, L.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for training epoch.
 
@@ -302,7 +302,7 @@ class CPC(EfficientNet, L.LightningModule):
         self.log('train_loss', loss)
 
 
-    def validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self, validation_step_outputs):
         """
         Compute and log evaluation metrics for validation epoch.
 
@@ -315,7 +315,7 @@ class CPC(EfficientNet, L.LightningModule):
         self.log('val_loss', loss)
 
 
-    def test_epoch_end(self, test_step_outputs):
+    def on_test_epoch_end(self, test_step_outputs):
         """
         Compute and log evaluation metrics for test epoch.
 

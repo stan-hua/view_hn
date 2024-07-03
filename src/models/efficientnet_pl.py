@@ -61,7 +61,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
         for dset in dsets:
-            exec(f"self.{dset}_acc = torchmetrics.Accuracy(task='multiclass')")
+            exec(f"self.{dset}_acc = torchmetrics.Accuracy("
+                 f"num_classes={self.hparams.num_classes}, task='multiclass')")
 
             # Metrics for binary classification
             if self.hparams.num_classes == 2:
@@ -242,7 +243,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for training epoch.
 
@@ -270,7 +271,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             self.train_auprc.reset()
 
 
-    def validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self, validation_step_outputs):
         """
         Compute and log evaluation metrics for validation epoch.
 
@@ -296,7 +297,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             self.val_auprc.reset()
 
 
-    def test_epoch_end(self, test_step_outputs):
+    def on_test_epoch_end(self, test_step_outputs):
         """
         Compute and log evaluation metrics for test epoch.
 

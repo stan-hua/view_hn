@@ -310,7 +310,7 @@ class MoCo(L.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for training epoch.
 
@@ -326,7 +326,7 @@ class MoCo(L.LightningModule):
         self.custom_histogram_weights()
 
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for validation epoch.
 

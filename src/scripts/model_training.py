@@ -9,6 +9,7 @@ import argparse
 import logging
 import os
 import random
+import sys
 from datetime import datetime
 
 # Non-standard libraries
@@ -35,7 +36,9 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(level=logging.DEBUG)
 logging.basicConfig(
     level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
 
 # Default random seed
 SEED = None
@@ -314,7 +317,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     """
     # Create parent directory if not exists
     if not os.path.exists(f"{results_dir}/{exp_name}"):
-        os.mkdir(f"{results_dir}/{exp_name}")
+        os.makedirs(f"{results_dir}/{exp_name}")
 
     # Directory for current experiment
     experiment_dir = f"{results_dir}/{exp_name}/{fold}"
@@ -325,17 +328,9 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     # Loggers
     loggers = []
     loggers.append(FriendlyCSVLogger(results_dir, name=exp_name, version=str(fold)))
-    # TODO: Handle case when resuming training on a model
     if comet_logger:
-        comet_logger = CometLogger(
-            api_key=os.environ.get("COMET_API_KEY"),
-            project_name=COMET_PROJECT,
-            experiment_name=exp_name,
-        )
-        tags = hparams.get("tags")
-        if tags:
-            comet_logger.experiment.add_tags(tags)
-    loggers.append(comet_logger)
+        # TODO: Handle case when resuming training on a model
+        loggers.append(comet_logger)
 
     # Flag for presence of validation set
     includes_val = (hparams["train_val_split"] < 1.0) or \
@@ -357,7 +352,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
 
     # Initialize Trainer
     trainer = Trainer(default_root_dir=experiment_dir,
-                      gpus=1,
+                      devices="auto", accelerator="auto",
                       num_sanity_val_steps=0,
                       log_every_n_steps=20,
                       accumulate_grad_batches=hparams["accum_batches"],
@@ -386,7 +381,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
 
     # (2) Perform testing
     if test:
-        trainer.test(model=model, test_dataloaders=dm.test_dataloader())
+        trainer.test(model=model, dataloaders=dm.test_dataloader())
 
 
 def main(conf):
@@ -398,28 +393,39 @@ def main(conf):
     conf : configobj.ConfigObj
         Contains configurations needed to run experiments
     """
+    # Process configuration parameters
+    # Flatten nesting in configuration file
+    hparams = config_utils.flatten_nested_dict(conf)
+    # Add constants
+    if "img_size" not in hparams:
+        hparams["img_size"] = constants.IMG_SIZE
+    if "num_classes" not in hparams:
+        hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"])
+
     # 0. Set random seed
-    set_seed(conf.seed)
+    set_seed(hparams.get("seed"))
 
-    # Use Comet to save hyperparameters
-    comet_logger = CometLogger(
-        api_key=os.environ.get("COMET_API_KEY"),
-        project_name=COMET_PROJECT,
-        experiment_name=conf["exp_name"],
-    )
-    # Add tags
-    tags = conf.get("tags")
-    if tags:
-        comet_logger.experiment.add_tags(tags)
-    # Save hyperparameters
-    comet_logger.log_hyperparams(conf)
-
-    # 0. Set up hyperparameters
-    hparams = {
-        "img_size": constants.IMG_SIZE,
-        "num_classes": \
-            len(constants.LABEL_PART_TO_CLASSES[conf.label_part]["classes"])}
-    hparams.update(config_utils.flatten_nested_dict(conf))
+    # If specified, use Comet to save hyperparameters
+    comet_logger = None
+    if hparams.get("use_comet_logger"):
+        if not os.environ.get("COMET_API_KEY"):
+            LOGGER.error(
+                "Please set `COMET_API_KEY` environment variable before running! "
+                "Or set `use_comet_logger` to false in config file..."
+            )
+        else:
+            # Set up LOGGER
+            comet_logger = CometLogger(
+                api_key=os.environ["COMET_API_KEY"],
+                project_name=COMET_PROJECT,
+                experiment_name=hparams["exp_name"],
+            )
+            # Add tags
+            tags = hparams.get("tags")
+            if tags:
+                comet_logger.experiment.add_tags(tags)
+            # Save hyperparameters
+            comet_logger.log_hyperparams(conf)
 
     # 0. Arguments for experiment
     experiment_hparams = {
@@ -431,7 +437,7 @@ def main(conf):
     }
 
     # May run out of memory on full videos, so accumulate gradients instead
-    hparams["accum_batches"] = conf.batch_size if conf.full_seq else None
+    hparams["accum_batches"] = hparams["batch_size"] if hparams["full_seq"] else 1
 
     # 1. Set up data module
     dm = load_data.setup_data_module(hparams)
@@ -461,6 +467,11 @@ if __name__ == "__main__":
 
     # 2. Load configurations
     CONF = config_utils.load_config(__file__, ARGS.config)
+    LOGGER.debug("""
+################################################################################
+#                       Starting `model_training` Script                       #
+################################################################################""")
+    LOGGER.debug(CONF)
 
-    # 2. Run main
+    # 3. Run main
     main(CONF)
