@@ -127,6 +127,9 @@ class MoCo(L.LightningModule):
             num_classes = kwargs.get("num_classes", 5)
             self.fc_1 = torch.nn.Linear(self.feature_dim, num_classes)
 
+        # Store outputs
+        self.dset_to_outputs = {"train": [], "val": [], "test": []}
+
 
     def load_imagenet_weights(self):
         """
@@ -232,6 +235,9 @@ class MoCo(L.LightningModule):
 
         self.log("train_loss", loss)
 
+        # Prepare result
+        self.dset_to_outputs["train"].append({"loss": loss})
+
         return loss
 
 
@@ -304,21 +310,20 @@ class MoCo(L.LightningModule):
 
         self.log("val_loss", loss)
 
+        # Prepare result
+        self.dset_to_outputs["val"].append({"loss": loss})
+
         return loss
 
 
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def on_train_epoch_end(self, outputs):
+    def on_train_epoch_end(self):
         """
         Compute and log evaluation metrics for training epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every training step in the epoch
         """
+        outputs = self.dset_to_outputs["train"]
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         self.log('epoch_train_loss', loss)
 
@@ -326,15 +331,11 @@ class MoCo(L.LightningModule):
         self.custom_histogram_weights()
 
 
-    def on_validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """
         Compute and log evaluation metrics for validation epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every validation step in the epoch
         """
+        outputs = self.dset_to_outputs["val"]
         loss = torch.stack(outputs).mean()
         self.log('epoch_val_loss', loss)
 

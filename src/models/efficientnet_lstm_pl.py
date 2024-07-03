@@ -13,6 +13,7 @@ from efficientnet_pytorch import EfficientNet, get_model_params
 from torch.nn import functional as F
 
 # Custom libraries
+from src.data import constants
 from src.utilities import efficientnet_pytorch_utils as effnet_utils
 
 
@@ -98,6 +99,9 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
         ########################################################################
         # Freeze convolutional weights, if specified
         self.prep_conv_weights()
+
+        # Store outputs
+        self.dset_to_outputs = {"train": [], "val": [], "test": []}
 
 
     def prep_conv_weights(self):
@@ -253,7 +257,15 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.train_auroc.update(out[:, 1], y_true)
             self.train_auprc.update(out[:, 1], y_true)
 
-        return loss
+        # Prepare result
+        ret = {
+            "loss": loss,
+            "y_pred": y_pred,
+            "y_true": y_true,
+        }
+        self.dset_to_outputs["train"].append(ret)
+
+        return ret
 
 
     def validation_step(self, val_batch, batch_idx):
@@ -305,7 +317,15 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.val_auroc.update(out[:, 1], y_true)
             self.val_auprc.update(out[:, 1], y_true)
 
-        return loss
+        # Prepare result
+        ret = {
+            "loss": loss,
+            "y_pred": y_pred,
+            "y_true": y_true,
+        }
+        self.dset_to_outputs["val"].append(ret)
+
+        return ret
 
 
     def test_step(self, test_batch, batch_idx):
@@ -357,21 +377,25 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.test_auroc.update(out[:, 1], y_true)
             self.test_auprc.update(out[:, 1], y_true)
 
-        return loss
+        # Prepare result
+        ret = {
+            "loss": loss,
+            "y_pred": y_pred,
+            "y_true": y_true,
+        }
+        self.dset_to_outputs["test"].append(ret)
+
+        return ret
 
 
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def on_train_epoch_end(self, outputs):
+    def on_train_epoch_end(self):
         """
         Compute and log evaluation metrics for training epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every training step in the epoch
         """
+        outputs = self.dset_to_outputs["train"]
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         acc = self.train_acc.compute()
 
@@ -391,16 +415,12 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.train_auprc.reset()
 
 
-    def on_validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self):
         """
         Compute and log evaluation metrics for validation epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every validation step in the epoch
         """
-        loss = torch.tensor(validation_step_outputs).mean()
+        outputs = self.dset_to_outputs["val"]
+        loss = torch.tensor([o["loss"] for o in outputs]).mean()
         acc = self.val_acc.compute()
 
         self.log('val_loss', loss)
@@ -416,19 +436,23 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.val_auroc.reset()
             self.val_auprc.reset()
 
+        # Create confusion matrix
+        if self.logger.experiment is not None:
+            self.logger.experiment.log_confusion_matrix(
+                y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
+                y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
+                labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
+                title="Validation Confusion Matrix",
+            )
 
-    def on_test_epoch_end(self, test_step_outputs):
+
+    def on_test_epoch_end(self):
         """
         Compute and log evaluation metrics for test epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every test step in the epoch
         """
         dset = f'test'
-
-        loss = torch.tensor(test_step_outputs).mean()
+        outputs = self.dset_to_outputs[dset]
+        loss = torch.tensor([o["loss"] for o in outputs]).mean()
         acc = eval(f'self.{dset}_acc.compute()')
 
         self.log(f'{dset}_loss', loss)
@@ -443,6 +467,15 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.log(f'{dset}_auprc', auprc, prog_bar=True)
             exec(f'self.{dset}_auroc.reset()')
             exec(f'self.{dset}_auprc.reset()')
+
+        # Create confusion matrix
+        if self.logger.experiment is not None:
+            self.logger.experiment.log_confusion_matrix(
+                y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
+                y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
+                labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
+                title="Test Confusion Matrix",
+            )
 
 
     ############################################################################

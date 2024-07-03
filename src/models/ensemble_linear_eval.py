@@ -14,6 +14,8 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
 class EnsembleLinear(L.LightningModule):
     """
     EnsembleLinear object, wrapping over 2+ convolutional backbones.
@@ -54,6 +56,7 @@ class EnsembleLinear(L.LightningModule):
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
         """
+        raise RuntimeError("Do TODOs before using!")
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)

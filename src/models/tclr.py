@@ -18,6 +18,8 @@ from lightly.models.modules.heads import SimCLRProjectionHead
 ################################################################################
 #                               TCLR Model Class                               #
 ################################################################################
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
 class TCLR(L.LightningModule):
     """
     TCLR class for self-supervised pretraining
@@ -59,6 +61,7 @@ class TCLR(L.LightningModule):
         extract_features : bool, optional
             If True, forward pass returns model output before penultimate layer.
         """
+        raise NotImplementedError("Fix TODOs before using!")
         super().__init__()
 
         self.model_name = "efficientnet-b0"

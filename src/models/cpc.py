@@ -15,6 +15,8 @@ from efficientnet_pytorch import EfficientNet, get_model_params
 from torch.nn import functional as F
 
 
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
 class CPC(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model, implementation of Contrastive Predictive Coding
@@ -54,6 +56,8 @@ class CPC(EfficientNet, L.LightningModule):
         extract_features : bool, optional
             If True, forward pass returns model output after LSTM.
         """
+        raise NotImplementedError("Fix TODOs before using!")
+
         # Instantiate EfficientNet
         self.model_name = "efficientnet-b0"
         self.feature_dim = 1280      # expected feature size from EfficientNetB0

@@ -26,6 +26,8 @@ DEFAULT_LABEL_TO_NUM_CLASSES = {
 ################################################################################
 #                         EfficientNetLSTMMulti Class                          #
 ################################################################################
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
 class EfficientNetLSTMMulti(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model for sequence-based classification.
@@ -62,6 +64,8 @@ class EfficientNetLSTMMulti(EfficientNet, L.LightningModule):
         bidirectional : bool, optional
             If True, trains a bidirectional LSTM, by default True
         """
+        raise NotImplementedError("Fix TODOs before using!")
+
         # INPUT: Default multi-output prediction
         if not label_to_num_classes:
             label_to_num_classes = DEFAULT_LABEL_TO_NUM_CLASSES

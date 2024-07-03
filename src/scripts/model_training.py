@@ -13,6 +13,7 @@ import sys
 from datetime import datetime
 
 # Non-standard libraries
+import comet_ml
 import numpy as np
 import torch
 from lightning.pytorch import Trainer
@@ -327,10 +328,10 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
 
     # Loggers
     loggers = []
-    loggers.append(FriendlyCSVLogger(results_dir, name=exp_name, version=str(fold)))
     if comet_logger:
         # TODO: Handle case when resuming training on a model
         loggers.append(comet_logger)
+    loggers.append(FriendlyCSVLogger(results_dir, name=exp_name, version=str(fold)))
 
     # Flag for presence of validation set
     includes_val = (hparams["train_val_split"] < 1.0) or \

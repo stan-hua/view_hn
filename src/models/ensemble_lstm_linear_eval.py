@@ -13,6 +13,8 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
 class EnsembleLSTMLinear(L.LightningModule):
     """
     EnsembleLSTMLinear object, wrapping over 2+ convolutional backbones.
@@ -64,6 +66,8 @@ class EnsembleLSTMLinear(L.LightningModule):
         bidirectional : bool, optional
             If True, trains a bidirectional LSTM, by default False
         """
+        raise NotImplementedError("Fix TODOs before using!")
+
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
