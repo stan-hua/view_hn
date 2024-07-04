@@ -402,7 +402,7 @@ class LSTMLinearEval(L.LightningModule):
             self.val_auprc.reset()
 
         # Create confusion matrix
-        if self.logger.experiment is not None:
+        if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
                 y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
                 y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
@@ -434,7 +434,7 @@ class LSTMLinearEval(L.LightningModule):
             exec(f'self.{dset}_auprc.reset()')
 
         # Create confusion matrix
-        if self.logger.experiment is not None:
+        if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
                 y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
                 y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),

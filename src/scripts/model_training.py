@@ -282,7 +282,7 @@ def set_seed(seed=SEED, include_algos=False):
 #                           Training/Inference Flow                            #
 ################################################################################
 def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
-        checkpoint=True, early_stopping=False, exp_name="1", comet_logger=None):
+        checkpoint=True, early_stopping=False, exp_name="1"):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
 
@@ -313,8 +313,6 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
         False.
     exp_name : str, optional
         Name of experiment, by default "1"
-    comet_logger : pl.loggers.CometLogger
-        ML Comet Logger object. If not provided, creates one.
     """
     # Create parent directory if not exists
     if not os.path.exists(f"{results_dir}/{exp_name}"):
@@ -323,14 +321,48 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     # Directory for current experiment
     experiment_dir = f"{results_dir}/{exp_name}/{fold}"
 
+    # Check if experiment run exists (i.e., resuming training / evaluation)
+    run_exists = os.path.exists(experiment_dir)
+    if run_exists and os.listdir(experiment_dir):
+        LOGGER.info("Found pre-existing experiment directory! Resuming training/evaluation...")
+
     # Create model (from scratch) or load pretrained
     model = load_model.load_model(hparams=hparams)
 
     # Loggers
     loggers = []
-    if comet_logger:
-        # TODO: Handle case when resuming training on a model
-        loggers.append(comet_logger)
+    # If specified, use Comet ML for logging
+    if hparams.get("use_comet_logger"):
+        if not os.environ.get("COMET_API_KEY"):
+            LOGGER.error(
+                "Please set `COMET_API_KEY` environment variable before running! "
+                "Or set `use_comet_logger` to false in config file..."
+            )
+        else:
+            exp_key = None
+            # If run exists, get stored experiment key to resume logging
+            if run_exists:
+                old_hparams = load_model.get_hyperparameters(
+                    exp_name=hparams["exp_name"], on_error="raise")
+                exp_key = old_hparams.get("comet_exp_key")
+
+            # Set up LOGGER
+            comet_logger = CometLogger(
+                api_key=os.environ["COMET_API_KEY"],
+                project_name=COMET_PROJECT,
+                experiment_name=hparams["exp_name"],
+                experiment_key=exp_key
+            )
+
+            # Store experiment key
+            hparams["comet_exp_key"] = comet_logger.experiment.get_key()
+
+            # Add tags
+            tags = hparams.get("tags")
+            if tags:
+                comet_logger.experiment.add_tags(tags)
+            loggers.append(comet_logger)
+    # Add custom CSV logger
     loggers.append(FriendlyCSVLogger(results_dir, name=exp_name, version=str(fold)))
 
     # Flag for presence of validation set
@@ -375,10 +407,17 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
 
     # (1) Perform training
     if train:
+        # If resuming training
+        ckpt_path = None
+        if run_exists:
+            ckpt_path = "last"
+
+        # Perform training
         train_loader = dm.train_dataloader()
         val_loader = dm.val_dataloader() if includes_val else None
         trainer.fit(model, train_dataloaders=train_loader,
-                    val_dataloaders=val_loader)
+                    val_dataloaders=val_loader,
+                    ckpt_path=ckpt_path)
 
     # (2) Perform testing
     if test:
@@ -406,35 +445,12 @@ def main(conf):
     # 0. Set random seed
     set_seed(hparams.get("seed"))
 
-    # If specified, use Comet to save hyperparameters
-    comet_logger = None
-    if hparams.get("use_comet_logger"):
-        if not os.environ.get("COMET_API_KEY"):
-            LOGGER.error(
-                "Please set `COMET_API_KEY` environment variable before running! "
-                "Or set `use_comet_logger` to false in config file..."
-            )
-        else:
-            # Set up LOGGER
-            comet_logger = CometLogger(
-                api_key=os.environ["COMET_API_KEY"],
-                project_name=COMET_PROJECT,
-                experiment_name=hparams["exp_name"],
-            )
-            # Add tags
-            tags = hparams.get("tags")
-            if tags:
-                comet_logger.experiment.add_tags(tags)
-            # Save hyperparameters
-            comet_logger.log_hyperparams(conf)
-
     # 0. Arguments for experiment
     experiment_hparams = {
         "train": hparams["train"],
         "test": hparams["test"],
         "checkpoint": hparams["checkpoint"],
         "exp_name": hparams["exp_name"],
-        "comet_logger": comet_logger,
     }
 
     # May run out of memory on full videos, so accumulate gradients instead
@@ -472,7 +488,6 @@ if __name__ == "__main__":
 ################################################################################
 #                       Starting `model_training` Script                       #
 ################################################################################""")
-    LOGGER.debug(CONF)
 
     # 3. Run main
     main(CONF)
