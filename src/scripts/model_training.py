@@ -326,9 +326,6 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     if run_exists and os.listdir(experiment_dir):
         LOGGER.info("Found pre-existing experiment directory! Resuming training/evaluation...")
 
-    # Create model (from scratch) or load pretrained
-    model = load_model.load_model(hparams=hparams)
-
     # Loggers
     loggers = []
     # If specified, use Comet ML for logging
@@ -404,6 +401,9 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     if dm.dset_to_ids["val"] is not None:
         num_patients_val = len(np.unique(dm.dset_to_ids["val"]))
         LOGGER.info(f"[Validation] Num Patients: {num_patients_val}")
+
+    # Create model (from scratch) or load pretrained
+    model = load_model.load_model(hparams=hparams)
 
     # (1) Perform training
     if train:
