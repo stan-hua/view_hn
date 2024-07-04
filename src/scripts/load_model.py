@@ -111,6 +111,12 @@ def load_model(hparams):
         else:
             raise NotImplementedError
 
+    # If specified, compile model
+    if hparams.get("torch_compile"):
+        LOGGER.debug("Compiling model...")
+        model = torch.compile(model)
+        LOGGER.debug("Compiling model...DONE")
+
     return model
 
 
@@ -167,6 +173,12 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
         model = model_cls.load_from_checkpoint(
             checkpoint_path=ckpt_path,
             **model_cls_kwargs)
+
+    # If specified, compile model
+    if hparams.get("torch_compile"):
+        LOGGER.debug("Compiling model...")
+        model = torch.compile(model)
+        LOGGER.debug("Compiling model...DONE")
 
     return model
 
