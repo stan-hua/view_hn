@@ -167,9 +167,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         # Prepare result
         ret = {
-            "loss": loss,
-            "y_pred": y_pred,
-            "y_true": y_true,
+            "loss": loss.detach().cpu(),
         }
         self.dset_to_outputs["train"].append(ret)
 
@@ -213,9 +211,9 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         # Prepare result
         ret = {
-            "loss": loss,
-            "y_pred": y_pred,
-            "y_true": y_true,
+            "loss": loss.detach().cpu(),
+            "y_pred": y_pred.detach().cpu(),
+            "y_true": y_true.detach().cpu(),
         }
         self.dset_to_outputs["val"].append(ret)
 
@@ -259,9 +257,9 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         # Prepare result
         ret = {
-            "loss": loss,
-            "y_pred": y_pred,
-            "y_true": y_true,
+            "loss": loss.detach().cpu(),
+            "y_pred": y_pred.detach().cpu(),
+            "y_true": y_true.detach().cpu(),
         }
         self.dset_to_outputs["test"].append(ret)
 
@@ -322,8 +320,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # Create confusion matrix
         if self.logger.experiment is not None:
             self.logger.experiment.log_confusion_matrix(
-                y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
-                y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
+                y_true=torch.cat([o["y_true"] for o in outputs]),
+                y_predicted=torch.cat([o["y_pred"] for o in outputs]),
                 labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
                 title="Validation Confusion Matrix",
             )

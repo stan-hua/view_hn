@@ -259,9 +259,7 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
 
         # Prepare result
         ret = {
-            "loss": loss,
-            "y_pred": y_pred,
-            "y_true": y_true,
+            "loss": loss.detach().cpu(),
         }
         self.dset_to_outputs["train"].append(ret)
 
@@ -319,9 +317,9 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
 
         # Prepare result
         ret = {
-            "loss": loss,
-            "y_pred": y_pred,
-            "y_true": y_true,
+            "loss": loss.detach().cpu(),
+            "y_pred": y_pred.detach().cpu(),
+            "y_true": y_true.detach().cpu(),
         }
         self.dset_to_outputs["val"].append(ret)
 
@@ -379,9 +377,9 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
 
         # Prepare result
         ret = {
-            "loss": loss,
-            "y_pred": y_pred,
-            "y_true": y_true,
+            "loss": loss.detach().cpu(),
+            "y_pred": y_pred.detach().cpu(),
+            "y_true": y_true.detach().cpu(),
         }
         self.dset_to_outputs["test"].append(ret)
 
