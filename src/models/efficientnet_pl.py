@@ -22,7 +22,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
     """
     def __init__(self, num_classes=5, img_size=(256, 256),
                  optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
-                 freeze_weights=False,
+                 freeze_weights=False, effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
         Initialize EfficientNetPL object.
@@ -45,9 +45,11 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             worsens, by default 0.0005
         freeze_weights : bool, optional
             If True, freeze convolutional weights, by default False.
+        effnet_name : str, optional
+            Name of EfficientNet backbone to use
         """
         # Instantiate EfficientNet
-        self.model_name = "efficientnet-b0"
+        self.model_name = effnet_name
         blocks_args, global_params = get_model_params(
             self.model_name, {"num_classes": num_classes,
                               "image_size": img_size})
@@ -318,7 +320,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             self.val_auprc.reset()
 
         # Create confusion matrix
-        if self.logger.experiment is not None:
+        if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
                 y_true=torch.cat([o["y_true"] for o in outputs]),
                 y_predicted=torch.cat([o["y_pred"] for o in outputs]),
@@ -354,7 +356,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             exec(f'self.{dset}_auprc.reset()')
 
         # Create confusion matrix
-        if self.logger.experiment is not None:
+        if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
                 y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
                 y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),

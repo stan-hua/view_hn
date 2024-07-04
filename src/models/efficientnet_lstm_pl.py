@@ -25,7 +25,7 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
                  optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=512, bidirectional=True,
                  from_imagenet=False,
-                 freeze_weights=False,
+                 freeze_weights=False, effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
         Initialize EfficientNetLSTM object.
@@ -56,9 +56,11 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             If True, load ImageNet pretrained weights, by default False.
         freeze_weights : bool, optional
             If True, freeze convolutional weights, by default False.
+        effnet_name : str, optional
+            Name of EfficientNet backbone to use
         """
         # Instantiate EfficientNet
-        self.model_name = "efficientnet-b0"
+        self.model_name = effnet_name
         feature_dim = 1280      # expected feature size from EfficientNetB0
         blocks_args, global_params = get_model_params(
             self.model_name, {"image_size": img_size,
@@ -435,7 +437,7 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.val_auprc.reset()
 
         # Create confusion matrix
-        if self.logger.experiment is not None:
+        if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
                 y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
                 y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
@@ -467,7 +469,7 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             exec(f'self.{dset}_auprc.reset()')
 
         # Create confusion matrix
-        if self.logger.experiment is not None:
+        if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
                 y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
                 y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
