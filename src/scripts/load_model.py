@@ -31,7 +31,7 @@ from src.models.linear_eval import LinearEval
 from src.models.lstm_linear_eval import LSTMLinearEval
 from src.models.moco import MoCo
 from src.models.tclr import TCLR
-from src.utilities import efficientnet_pytorch_utils as effnet_utils
+from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
 ################################################################################
