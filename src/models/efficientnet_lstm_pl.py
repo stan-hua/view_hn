@@ -184,7 +184,6 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
         return x
 
 
-
     def configure_optimizers(self):
         """
         Initialize and return optimizer (AdamW or SGD).
@@ -391,6 +390,18 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
+    def on_train_epoch_start(self):
+        """
+        Deal with Stochastic Weight Averaging (SWA) Issue in Lightning<=2.3.2
+        """
+        if self.current_epoch == self.trainer.max_epochs - 1:
+            # Workaround to always save the last epoch until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/4539)
+            self.trainer.check_val_every_n_epoch = 1
+
+            # Disable backward pass for SWA until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/17245)
+            self.automatic_optimization = False
+
+
     def on_train_epoch_end(self):
         """
         Compute and log evaluation metrics for training epoch.
