@@ -57,20 +57,27 @@ def print_table(df, show_cols=True, show_index=True):
                    showindex=show_index))
 
 
-def gridplot_images(imgs, filename, save_dir, title=None):
+def gridplot_images(imgs, labels=None, title=None, filename=None, save_dir=None):
     """
     Plot example images on a grid plot
 
     Parameters
     ----------
-    example_imgs : np.array
+    imgs : np.array
         Images to visualize
-    filename : str
-        Path to save figure to
-    save_dir : str
-        Path to directory to save images
+    labels : np.array, optional
+        Labels corresponding to images
     title : str, optional
         Plot title, by default None
+    filename : str, optional
+        Path to save figure to
+    save_dir : str, optional
+        Path to directory to save images
+
+    Returns
+    -------
+    plt.Figure
+        Matplotlib Figure
     """
     # Determine number of images to plot
     num_imgs_sqrt = int(np.sqrt(len(imgs)))
@@ -91,7 +98,11 @@ def gridplot_images(imgs, filename, save_dir, title=None):
         axes_pad=0.01,      # padding between axes
     )
 
-    for ax, img_arr in zip(grid, imgs[:num_imgs]):
+    for idx, (ax, img_arr) in enumerate(zip(grid, imgs[:num_imgs])):
+        # Set label as title
+        if labels:
+            ax.set_title(labels[idx])
+
         # Set x and y axis to be invisible
         ax.axes.xaxis.set_visible(False)
         ax.axes.yaxis.set_visible(False)
@@ -110,6 +121,10 @@ def gridplot_images(imgs, filename, save_dir, title=None):
     # Make plot have tight layout
     plt.tight_layout()
 
+    # Early return, if no path is provided
+    if not filename:
+        return fig
+
     # Create subdirectories, if not exists
     save_path = os.path.join(save_dir, filename)
     dir_name = os.path.dirname(save_path)
@@ -119,8 +134,10 @@ def gridplot_images(imgs, filename, save_dir, title=None):
     # Save image
     plt.savefig(save_path)
 
+    return fig
 
-def gridplot_images_from_paths(paths, filename, save_dir, title=None):
+
+def gridplot_images_from_paths(paths, title=None, filename=None, save_dir=None):
     """
     Create grid plot from provided list of image paths
 
@@ -128,15 +145,21 @@ def gridplot_images_from_paths(paths, filename, save_dir, title=None):
     ----------
     paths : list
         List of full paths to images
+    title : str
+        Plot title, by default None
     filename : str
         Path to save figure to
     save_dir : str
         Path to directory to save images
-    title : str
-        Plot title, by default None
+
+    Returns
+    -------
+    plt.Figure
+        Matplotlib Figure
     """
     imgs = np.stack([cv2.imread(path) for path in paths])
-    gridplot_images(imgs, filename, save_dir, title=title)
+    ax = gridplot_images(imgs, filename=filename, save_dir=save_dir, title=title)
+    return ax
 
 
 def grouped_barplot(data, x, y, hue, yerr_low, yerr_high, legend=False,
