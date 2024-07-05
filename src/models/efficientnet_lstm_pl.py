@@ -236,8 +236,7 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
         # If shape is (1, seq_len, C, H, W), flatten first dimension
         if len(data.size()) == 5:
             data = data.squeeze(dim=0)
-################################################################################
-################################################################################
+
         # Get prediction
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
@@ -265,7 +264,7 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
         }
         self.dset_to_outputs["train"].append(ret)
 
-        return ret
+        return loss
 
 
     def validation_step(self, val_batch, batch_idx):
