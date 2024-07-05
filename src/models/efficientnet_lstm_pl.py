@@ -454,6 +454,8 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
                 y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
                 labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
                 title="Validation Confusion Matrix",
+                file_name="val_confusion-matrix.json",
+                overwrite=True,
             )
 
 
@@ -486,6 +488,8 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
                 y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
                 labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
                 title="Test Confusion Matrix",
+                file_name="test_confusion-matrix.json",
+                overwrite=True,
             )
 
 
