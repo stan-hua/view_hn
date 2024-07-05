@@ -88,7 +88,8 @@ class EnsembleLinear(L.LightningModule):
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
         for dset in dsets:
-            exec(f"self.{dset}_acc = torchmetrics.Accuracy(task='multiclass')")
+            exec(f"self.{dset}_acc = torchmetrics.Accuracy("
+                 f"num_classes={self.hparams.num_classes}, task='multiclass')")
 
             # Metrics for binary classification
             if self.hparams.num_classes == 2:
