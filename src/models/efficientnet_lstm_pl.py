@@ -14,7 +14,7 @@ from torch.nn import functional as F
 
 # Custom libraries
 from src.data import constants
-from src.utilities import efficientnet_pytorch_utils as effnet_utils
+from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
 class EfficientNetLSTM(EfficientNet, L.LightningModule):

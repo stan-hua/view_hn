@@ -25,8 +25,8 @@ from lightning.pytorch.loggers import CometLogger
 # Custom libraries
 from src.data import constants
 from src.scripts import load_data, load_model
-from src.utilities import config as config_utils
-from src.utilities.custom_logger import FriendlyCSVLogger
+from src.utils import config as config_utils
+from src.utils.custom_logger import FriendlyCSVLogger
 
 
 ################################################################################
@@ -405,7 +405,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     # Create model (from scratch) or load pretrained
     model = load_model.load_model(hparams=hparams)
 
-    # (1) Perform training
+    # 1. Perform training
     if train:
         # If resuming training
         ckpt_path = None
@@ -419,9 +419,13 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
                     val_dataloaders=val_loader,
                     ckpt_path=ckpt_path)
 
-    # (2) Perform testing
+    # 2. Perform testing
     if test:
         trainer.test(model=model, dataloaders=dm.test_dataloader())
+
+    # 3. Use influence functions to find harmful training images
+    if hparams.get("use_influence_function"):
+        raise NotImplementedError()
 
 
 def main(conf):

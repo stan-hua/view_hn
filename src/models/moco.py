@@ -20,7 +20,7 @@ from lightly.models.utils import (batch_shuffle, batch_unshuffle,
 # Custom libraries
 from src.loss.soft_ntx_ent_loss import SoftNTXentLoss
 from src.loss.same_label_con_loss import SameLabelConLoss
-from src.utilities import efficientnet_pytorch_utils as effnet_utils
+from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
 ################################################################################
