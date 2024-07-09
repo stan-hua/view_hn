@@ -48,10 +48,18 @@ mklink /d ".\src\data" "PATH\TO\DATA\DIRECTORY"
 ln -s /PATH/TO/DATA/DIRECTORY ./src/data
 ```
 
-#### 3. Set up Comet ML Logging
+#### 3. Set up Comet ML for Online Logging
 ```
 # pip install comet_ml
 comet init                  # create account, if not already
+```
+
+#### (Optional) 4. Set up influence functions
+```
+# Install to a package directory of your choice
+git clone https://github.com/alstonlo/torch-influence
+cd torch-influence
+pip install -e .
 ```
 
 

@@ -6,3 +6,5 @@ src/models/siamnet.py
 .vscode/settings.json
 *.out
 renal-view
+.vscode
+config/model_training/*
