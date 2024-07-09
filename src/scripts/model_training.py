@@ -9,11 +9,12 @@ import argparse
 import logging
 import os
 import random
+import shutil
 import sys
 from datetime import datetime
 
 # Non-standard libraries
-import comet_ml
+import comet_ml             # NOTE: Recommended by Comet ML
 import numpy as np
 import torch
 from lightning.pytorch import Trainer
@@ -27,6 +28,7 @@ from src.data import constants
 from src.scripts import load_data, load_model
 from src.utils import config as config_utils
 from src.utils.custom_logger import FriendlyCSVLogger
+from src.utils.influence import plot_most_helpful_harmful_examples
 
 
 ################################################################################
@@ -330,7 +332,10 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     loggers = []
     # If specified, use Comet ML for logging
     if hparams.get("use_comet_logger"):
-        if not os.environ.get("COMET_API_KEY"):
+        if hparams.get("debug"):
+            LOGGER.info("Comet ML Logger disabled during debugging...")
+            hparams["use_comet_logger"] = False
+        elif not os.environ.get("COMET_API_KEY"):
             LOGGER.error(
                 "Please set `COMET_API_KEY` environment variable before running! "
                 "Or set `use_comet_logger` to false in config file..."
@@ -412,20 +417,44 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
         if run_exists:
             ckpt_path = "last"
 
-        # Perform training
+        # Create dataloaders
         train_loader = dm.train_dataloader()
         val_loader = dm.val_dataloader() if includes_val else None
-        trainer.fit(model, train_dataloaders=train_loader,
-                    val_dataloaders=val_loader,
-                    ckpt_path=ckpt_path)
+
+        # Perform training
+        try:
+            trainer.fit(model, train_dataloaders=train_loader,
+                        val_dataloaders=val_loader,
+                        ckpt_path=ckpt_path)
+        except KeyboardInterrupt:
+            # Delete experiment directory
+            if os.path.exists(experiment_dir):
+                LOGGER.error("Caught keyboard interrupt! Deleting experiment directory")
+                shutil.rmtree(experiment_dir)
+            exit(1)
 
     # 2. Perform testing
     if test:
         trainer.test(model=model, dataloaders=dm.test_dataloader())
 
     # 3. Use influence functions to find harmful training images
-    if hparams.get("use_influence_function"):
-        raise NotImplementedError()
+    # TODO: Consider dumping to a file, if comet not available
+    if hparams.get("use_influence_function") and hparams.get("use_comet_logger"):
+        LOGGER.info("Now using influence functions to compute the most helpful/harmful training examples")
+        # For each label, get the most helpful/harmful training examples across
+        # all misclassified examples
+        fig = plot_most_helpful_harmful_examples(
+            model, hparams,
+            train_loader=dm.train_dataloader(),
+            test_loader=dm.val_dataloader(),
+        )
+
+        # Log figures
+        comet_logger.experiment.log_figure(
+            figure_name=f"Influential Training Examples for Worst Misclassified Validation Set Images",
+            figure=fig,
+            overwrite=True,
+        )
 
 
 def main(conf):
@@ -460,13 +489,17 @@ def main(conf):
     # May run out of memory on full videos, so accumulate gradients instead
     hparams["accum_batches"] = hparams["batch_size"] if hparams["full_seq"] else 1
 
+    # If specified to use GradCAM loss, ensure segmentation masks are loaded
+    if hparams.get("use_gradcam_loss"):
+        hparams["load_seg_mask"] = True
+
     # 1. Set up data module
     dm = load_data.setup_data_module(hparams)
 
     # 2.1 Run experiment
     if hparams["cross_val_folds"] == 1:
         run(hparams, dm, constants.DIR_RESULTS, **experiment_hparams)
-    # 2.2 Run experiment  w/ kfold cross-validation)
+    # 2.2 Run experiment w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)

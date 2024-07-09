@@ -8,6 +8,7 @@ import glob
 import logging
 import os
 from abc import abstractmethod
+from collections import defaultdict
 
 # Non-standard libraries
 import numpy as np
@@ -89,6 +90,7 @@ def load_dataset_from_dataframe(df, img_dir=None, full_seq=True):
 ################################################################################
 #                             Data Module Classes                              #
 ################################################################################
+# TODO: Allow filtering training set for proportion of images with masks
 class UltrasoundDataModule(L.LightningDataModule):
     """
     Top-level object used to access all data preparation and loading
@@ -157,6 +159,7 @@ class UltrasoundDataModule(L.LightningDataModule):
             "label_part": kwargs.get("label_part"),
             "split_label": kwargs.get("multi_output", False),
             "full_path": full_path,
+            **kwargs,
         }
 
         # Get image paths, patient IDs, and labels (and visit)
@@ -244,10 +247,10 @@ class UltrasoundDataModule(L.LightningDataModule):
         """
         # (1) Split into training and test sets
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
-            train_idx, test_idx = utils.split_by_ids(self.patient_ids, 
+            train_idx, test_idx = utils.split_by_ids(self.patient_ids,
                                                      self.train_test_split)
             self._assign_dset_idx("train", "test", train_idx, test_idx)
-        
+
         # (2) Further split training set into train-val or cross-val sets
         # (2.1) Train-Val Split
         if hasattr(self, "train_val_split"):
@@ -463,6 +466,7 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         seq_number = self.seq_numbers[index]
         hospital = self.hospitals[index]
 
+        # Prepare metadata
         metadata = {
             "filename": filename,
             "id": patient_id,
@@ -637,7 +641,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         # 4. Load images
         imgs = []
         for path in paths:
-            imgs.append(self.load_image(path)) 
+            imgs.append(self.load_image(path))
         X = torch.stack(imgs)
 
         # 4.1 If only 1 image for a sequence, pad first dimension
@@ -678,9 +682,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     """
     def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
                  label_part=None, split_label=False,
-                 transforms=None,
-                 full_path=False,
-                 **ignore_kwargs,
+                 load_seg_mask=False, include_liver_seg=False,
+                 transforms=None, full_path=False, **ignore_kwargs,
                 ):
         """
         Initialize UltrasoundDatasetDataFrame object.
@@ -714,6 +717,12 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         split_label : bool, optional
             If True, additionally provide both side/plane separately in metadata
             dict, by default False.
+        load_seg_mask : bool, optional
+            If True, load (available) segmentation masks for each image into
+            one mask and store in the metadata, by default False
+        include_liver_seg : bool, optional
+            If True, include liver segmentation, if available. Otherwise, only
+            use kidney/bladder segmentations, by default False.
         transforms : torchvision.transforms.Compose or Transforms, optional
             If provided, perform transform on images loaded, by default None.
         full_path : bool, optional
@@ -724,6 +733,11 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
+        self.img_size = img_size
+
+        # Set to load available masks
+        self.load_seg_mask = load_seg_mask
+        self.include_liver_seg = include_liver_seg
 
         # Get paths to images. Add directory to path, if not already in.
         if img_dir:
@@ -802,6 +816,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # Encode label to integer (-1, if not found)
         class_to_idx = \
             constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
+        # NOTE: This assumes that label part was extracted prior to this
         metadata["label"] = class_to_idx.get(self.labels[index], -1)
         # If specified, split label into side/plane, and store separately
         if self.split_label and not self.label_part:
@@ -809,9 +824,93 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
                 metadata[label_part] = utils.extract_from_label(
                     self.labels[index], label_part)
 
+        # Record if has segmentation mask or not
+        metadata["has_seg_mask"] = False
+
+        # Early return, if not loading segmentation masks
+        if not self.load_seg_mask:
+            return X, metadata
+
+        # Load and store segmentation masks
+        metadata.update(self.get_segmentation_mask(index))
         return X, metadata
 
 
+    def get_segmentation_mask(self, index):
+        """
+        Get segmentation masks for image at index.
+
+        Parameters
+        ----------
+        index : int
+            Integer index to paths.
+
+        Returns
+        -------
+        dict
+            Contains flag if segmentation mask exists and segmentation mask
+        """
+        metadata_overwrite = {}
+        metadata_overwrite["seg_mask"] = None
+
+        # CASE 1: Bladder image
+        seg_fname_suffixes = []
+        if self.labels[index] in ("bladder", "none"):
+            seg_fname_suffixes.append("_bseg")
+        # CASE 2: Kidney image
+        else:
+            seg_fname_suffixes.append("_kseg")
+
+        # Add flag to include liver
+        if self.include_liver_seg:
+            seg_fname_suffixes.append("_lseg")
+
+        # Load kidney/bladder/liver segmentations
+        # NOTE: If 2+ exist, they're combined into 1 mask
+        has_mask = False
+        img_path = self.paths[index]
+        for suffix in seg_fname_suffixes:
+            # Create potential name of mask image (located in the same directory)
+            fname = os.path.basename(img_path)
+            split_fname = fname.split(".")
+            mask_fname = ".".join(split_fname[:-1]) + suffix + "." + split_fname[-1]
+            mask_path = os.path.join(os.path.dirname(img_path), mask_fname)
+
+            # Skip, if mask doesn't exist
+            if not os.path.exists(mask_path):
+                continue
+
+            # Load segmentation mask
+            has_mask = True
+            curr_mask = read_image(mask_path, IMAGE_MODES[3])
+            # Extract mask by getting red pixels (236, 28, 36)
+            curr_mask = (
+                torch.where(torch.isin(curr_mask[0], torch.arange(200, 250)), 1, 0) *
+                torch.where(torch.isin(curr_mask[1], torch.arange(15, 35)), 1, 0) *
+                torch.where(torch.isin(curr_mask[2], torch.arange(26, 46)), 1, 0)
+            )
+            curr_mask = curr_mask.bool()
+
+            # CASE 1: No previous segmentation mask
+            if metadata_overwrite["seg_mask"] is None:
+                metadata_overwrite["seg_mask"] = curr_mask
+            # CASE 2: 2+ masks found for image
+            # NOTE: Used if liver segmentation is added
+            else:
+                metadata_overwrite["seg_mask"] = metadata_overwrite["seg_mask"] | curr_mask
+
+        # If no mask loaded, make placeholder mask
+        if not has_mask:
+            img_size = self.img_size or (256, 256)
+            metadata_overwrite["seg_mask"] = torch.full(img_size, True,
+                                                        dtype=torch.bool)
+
+        # Record if has mask or not
+        metadata_overwrite["has_seg_mask"] = has_mask
+        return metadata_overwrite
+
+
+    # TODO: Implement getting masks
     def get_sequence(self, index):
         """
         Used to override __getitem__ when loading ultrasound sequences as each
@@ -887,6 +986,30 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
                     [class_to_idx.get(label, -1) for label in extracted_labels])
                 metadata[label_part] = encoded_labels
 
+        # Early return, if not loading segmentation masks
+        if not self.load_seg_mask:
+            return X, metadata
+
+        # Get segmentation mask for each image and concatenate them
+        img_indices = np.nonzero(mask)
+        accum_seg_metadata = defaultdict(list)
+        for img_index in img_indices:
+            curr_seg_metadata = self.get_segmentation_mask(img_index)
+            for key, val in curr_seg_metadata.items():
+                accum_seg_metadata[key].append(val)
+        accum_seg_metadata = dict(accum_seg_metadata)
+
+        # Get image size
+        img_size = None
+        for mask in accum_seg_metadata["seg_mask"]:
+            if mask is not None:
+                img_size = mask.shape
+                break
+
+        # TODO: Consider adding 1-only mask for missing masks
+        raise NotImplementedError("Getting segmentation masks is not yet implemented for videos!")
+
+        metadata.update(accum_seg_metadata)
         return X, metadata
 
 

@@ -1311,7 +1311,7 @@ def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
             train_ids.add(_id)
             n_train_curr += id_to_len[_id]
 
-        # Stop when there is roughly enough in the training set 
+        # Stop when there is roughly enough in the training set
         if n_train_curr >= n_train_min:
             break
 

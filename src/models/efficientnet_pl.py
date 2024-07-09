@@ -14,6 +14,7 @@ from torch.nn import functional as F
 # Custom libraries
 from src.data import constants
 from src.utils import efficientnet_pytorch_utils as effnet_utils
+from src.loss.gradcam_loss import ViewGradCAMLoss
 
 
 class EfficientNetPL(EfficientNet, L.LightningModule):
@@ -22,6 +23,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
     """
     def __init__(self, num_classes=5, img_size=(256, 256),
                  optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 use_gradcam_loss=False,
                  freeze_weights=False, effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
@@ -43,6 +45,9 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         weight_decay : float, optional
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
+        use_gradcam_loss : bool, optional
+            If True, add auxiliary segmentation-attention GradCAM loss, by
+            default False.
         freeze_weights : bool, optional
             If True, freeze convolutional weights, by default False.
         effnet_name : str, optional
@@ -60,6 +65,10 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         # Define loss
         self.loss = torch.nn.NLLLoss()
+        # If specified, include auxiliary GradCAM loss
+        self.gradcam_loss = None
+        if use_gradcam_loss:
+            self.gradcam_loss = ViewGradCAMLoss(self, self.hparams)
 
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
@@ -158,7 +167,13 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         y_true = metadata["label"]
 
         # Get loss
-        loss = self.loss(F.log_softmax(out, dim=1), y_true)
+        ce_loss = self.loss(F.log_softmax(out, dim=1), y_true)
+        # If specified, compute GradCAM loss
+        if self.hparams.use_gradcam_loss:
+            gradcam_loss = self.gradcam_loss(*train_batch)
+            loss = ce_loss + gradcam_loss
+        else:
+            loss = ce_loss
 
         # Log training metrics
         self.train_acc.update(y_pred, y_true)
