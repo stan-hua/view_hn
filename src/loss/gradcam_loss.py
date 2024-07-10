@@ -43,6 +43,15 @@ class ViewGradCAMLoss(torch.nn.Module):
         # Store hyperparameters
         self.hparams = hparams
 
+        # Flag to penalize ALL classes for having gradients OUTSIDE the positive class mask
+        self.use_all_class_gradcam_loss = hparams.get("use_all_class_gradcam_loss", True)
+
+        # Flag to penalize negative class for having gradients in true class segmentation masks
+        self.add_neg_class_gradcam_loss = hparams.get("add_neg_class_gradcam_loss", False)
+        # NOTE: The two flags conflict
+        if self.use_all_class_gradcam_loss:
+            self.add_neg_class_gradcam_loss = False
+
         # Create GradCAM
         self.cam = create_cam(model)
 
@@ -83,19 +92,21 @@ class ViewGradCAMLoss(torch.nn.Module):
         # Prepare targets from labels
         # NOTE: Used to index class-specific gradients
         target_categories = labels.cpu().data.numpy()
-        targets = [ClassifierOutputTarget(category) for category in target_categories]
+        target_cls = ClassifierOutputAllTargets if self.use_all_class_gradcam_loss else ClassifierOutputTarget
+        pos_targets = [target_cls(category) for category in target_categories]
 
-        # Create GradCAM
-        grayscale_cam = self.cam(X, targets)
+        # Create GradCAM for positive class
+        pos_cam = self.cam(X, pos_targets)
 
         # Compute mean-squared error loss
         # NOTE: Penalize activations outside of segmentation mask
-        loss = (grayscale_cam[~seg_masks] ** 2).sum()
+        pos_loss = (pos_cam[~seg_masks] ** 2).sum()
         # Normalize to pixel-level loss (across channels)
-        loss = loss / (N * H * W)
+        pos_loss = pos_loss / (N * H * W)
 
         # [ORIGINAL IMPLEMENTATION]
         # 1. Remove placeholder (zero) masks
+        # NOTE: We remove placeholder masks before this step
         # 2. Compute MSE between segmentation mask and GradCAM
         # loss = torch.sum(torch.where(
         #     torch.sum(torch.sum(seg_masks, dim=1), dim=1) == 0,
@@ -104,11 +115,68 @@ class ViewGradCAMLoss(torch.nn.Module):
         # ))
         # loss = loss / (N * H * W)
 
+        # Early exit, if not penalizing negative classes
+        if not self.add_neg_class_gradcam_loss:
+            return pos_loss
+
+        # Index negative class specific gradients
+        neg_targets = [ClassifierOutputNegativeTarget(category) for category in target_categories]
+        # Create GradCAMs for negative (all other) classes
+        neg_cam = self.cam(X, neg_targets)
+
+        # Compute mean-squared error loss
+        # NOTE: Penalize activations inside of segmentation mask
+        neg_loss = (neg_cam[seg_masks] ** 2).sum()
+        # Normalize to pixel-level loss (across channels)
+        neg_loss = neg_loss / (N * H * W)
+
+        # Compute GradCAM loss as their weighted sum
+        loss = (0.5 * pos_loss) + (0.5 * neg_loss)
+
         return loss
 
 
 # Adapted from `pytorch_grad_cam`
 # Inspired by https://github.com/MeriDK/segmentation-guided-attention/
+class ClassifierOutputAllTargets(ClassifierOutputTarget):
+    """
+    A sub-class of ClassifierOutputTarget to extract gradients related to
+    all the classes.
+
+    Note
+    ----
+    This means that the GradCAM will be for all classes.
+    """
+
+    def __call__(self, model_output):
+        # NOTE: Simply an identity
+        return model_output
+
+
+class ClassifierOutputNegativeTarget(ClassifierOutputTarget):
+    """
+    A sub-class of ClassifierOutputTarget to extract gradients related to
+    all the negative classes.
+
+    Note
+    ----
+    This may be useful if the positive and negative classes shouldn't have
+    gradients that overlap their segmented regions.
+    """
+
+    def __call__(self, model_output):
+        # Filter for output for all of the negative classes
+        if len(model_output.shape) == 1:
+            mask = torch.ones(model_output.shape[0], dtype=bool)
+            mask[self.category] = False
+            return model_output[mask]
+
+        assert len(model_output.shape) == 2
+        mask = torch.ones(model_output.shape[1], dtype=bool)
+        mask[self.category] = False
+        return model_output[:, mask]
+
+
 class DifferentiableActivationsAndGradients(ActivationsAndGradients):
     """
     Sub-class of ActivationsAndGradients that can be back-propagated.
@@ -139,6 +207,9 @@ class DifferentiableGradCAM(GradCAM):
 
     def __init__(self, model, target_layers, reshape_transform=None):
         super().__init__(model, target_layers, reshape_transform)
+
+        # Ignore model call to `eval()` in BaseCAM
+        self.model = model
 
         # Replace ActivationsAndGradients
         self.activations_and_grads = DifferentiableActivationsAndGradients(
@@ -197,6 +268,13 @@ class DifferentiableGradCAM(GradCAM):
 
         # Normalize CAM
         return scale_cam_image(result)
+
+
+    # HACK: Handle case where model device changed since this object was made.
+    def forward(self, *args, **kwargs):
+        # Ensure device is correct (in case model device changed)
+        self.device = next(self.model.parameters()).device
+        return super().forward(*args, **kwargs)
 
 
 ################################################################################
