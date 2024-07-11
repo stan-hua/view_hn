@@ -149,8 +149,8 @@ class ClassifierOutputAllTargets(ClassifierOutputTarget):
     """
 
     def __call__(self, model_output):
-        # NOTE: Simply an identity
-        return model_output
+        # NOTE: Need to sum up activations across classes
+        return model_output.sum(dim=-1)
 
 
 class ClassifierOutputNegativeTarget(ClassifierOutputTarget):
