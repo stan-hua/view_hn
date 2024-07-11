@@ -5,6 +5,9 @@ Description: Implementation of segmentation-guided GradCAM loss. This loss
              penalizes gradients that fall outside of given segmentations.
              Code adapted from original repository linked below.
 
+Warning: GradCAMLoss does NOT work with gradient accumulation because of
+         gradient zero-ing needed.
+
 Source Repo: https://github.com/MeriDK/segmentation-guided-attention/tree/master
 """
 
@@ -72,7 +75,7 @@ class ViewGradCAMLoss(torch.nn.Module):
         torch.Tensor
             GradCAM loss
         """
-        N, C, H, W = X.shape
+        N, _, H, W = X.shape
 
         # Early return, if no segmentation masks in batch
         has_seg_mask = metadata["has_seg_mask"]
@@ -102,7 +105,7 @@ class ViewGradCAMLoss(torch.nn.Module):
         # NOTE: Penalize activations outside of segmentation mask
         pos_loss = (pos_cam[~seg_masks] ** 2).sum()
         # Normalize to pixel-level loss (across channels)
-        pos_loss = pos_loss / (N * H * W)
+        pos_loss = pos_loss / (N * (len(seg_masks[~seg_masks])))
 
         # [ORIGINAL IMPLEMENTATION]
         # 1. Remove placeholder (zero) masks
@@ -116,7 +119,8 @@ class ViewGradCAMLoss(torch.nn.Module):
         # loss = loss / (N * H * W)
 
         # Early exit, if not penalizing negative classes
-        if not self.add_neg_class_gradcam_loss:
+        # NOTE: Don't penalize negative class if already penalizing all classes
+        if not self.add_neg_class_gradcam_loss or self.use_all_class_gradcam_loss:
             return pos_loss
 
         # Index negative class specific gradients
@@ -128,7 +132,7 @@ class ViewGradCAMLoss(torch.nn.Module):
         # NOTE: Penalize activations inside of segmentation mask
         neg_loss = (neg_cam[seg_masks] ** 2).sum()
         # Normalize to pixel-level loss (across channels)
-        neg_loss = neg_loss / (N * H * W)
+        neg_loss = neg_loss / (N * (len(seg_masks[seg_masks])))
 
         # Compute GradCAM loss as their weighted sum
         loss = (0.5 * pos_loss) + (0.5 * neg_loss)
@@ -206,12 +210,23 @@ class DifferentiableGradCAM(GradCAM):
     """
 
     def __init__(self, model, target_layers, reshape_transform=None):
-        super().__init__(model, target_layers, reshape_transform)
+        """
+        Overwrite `__init__` to avoid setting `model.eval()`
+        """
+        self.target_layers = target_layers
 
-        # Ignore model call to `eval()` in BaseCAM
+        # NOTE: Ignore model call to `eval()` in BaseCAM
         self.model = model
+        self.device = next(self.model.parameters()).device
 
-        # Replace ActivationsAndGradients
+        # Default parameters
+        self.reshape_transform = reshape_transform
+        self.compute_input_gradient = False
+        self.uses_gradients = True
+        # Following is not used by GradCAM specifically
+        self.tta_transforms = None
+
+        # NOTE: Replaced ActivationsAndGradients with differentiable version
         self.activations_and_grads = DifferentiableActivationsAndGradients(
             model, target_layers, reshape_transform
         )
@@ -271,10 +286,18 @@ class DifferentiableGradCAM(GradCAM):
 
 
     # HACK: Handle case where model device changed since this object was made.
+    # HACK: Ensure gradients from computing GradCAM aren't kept
     def forward(self, *args, **kwargs):
         # Ensure device is correct (in case model device changed)
         self.device = next(self.model.parameters()).device
-        return super().forward(*args, **kwargs)
+
+        # Compute GradCAM
+        out = super().forward(*args, **kwargs)
+
+        # Zero out gradients from computing GradCAM
+        self.model.zero_grad()
+
+        return out
 
 
 ################################################################################
