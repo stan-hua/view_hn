@@ -31,7 +31,7 @@ from src.data import constants
 from src.data_prep import utils
 from src.data_viz import plot_umap
 from src.data_viz import utils as viz_utils
-from src.drivers import embed, load_model, load_data
+from src.scripts import embed, load_model, load_data
 
 
 # Configure logging
