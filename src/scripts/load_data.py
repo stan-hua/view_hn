@@ -106,14 +106,22 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
         else constants.HOSPITAL_TO_IMG_DIR.get(all_hparams["hospital"])
 
     # 1. Load metadata
+    # 1.1 Prepare keyword arguments
+    load_meta_kwargs = {
+        "label_part": all_hparams.get("label_part"),
+        "relative_side": all_hparams.get("relative_side", False),
+        "include_unlabeled": all_hparams.get("include_unlabeled", False),
+        "keep_orig_label": all_hparams.get("keep_orig_label", False),
+    }
+    # NOTE: Option to load in SickKids test data
+    if all_hparams["hospital"] == "sickkids" and all_hparams.get("include_sickkids_test_set"):
+        load_meta_kwargs["include_test_set"] = True
+    # 1.2 Load metadata
     df_metadata = utils.load_metadata(
         hospital=all_hparams["hospital"],
         extract=True,
         img_dir=img_dir,
-        label_part=all_hparams.get("label_part"),
-        relative_side=all_hparams.get("relative_side", False),
-        include_unlabeled=all_hparams.get("include_unlabeled", False),
-        keep_orig_label=all_hparams.get("keep_orig_label", False),
+        **load_meta_kwargs
     )
 
     # 2. Instantiate data module

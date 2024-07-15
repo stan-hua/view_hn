@@ -142,8 +142,10 @@ class UltrasoundDataModule(L.LightningDataModule):
                 train_val_split : float
                     Percentage of training set (test set removed) to leave for
                     validation
-                cross_val_folds : int, 
+                cross_val_folds : int
                     Number of folds to use for cross-validation
+                force_train_ids : list
+                    List of patient IDs to place into training set
         """
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
@@ -209,6 +211,9 @@ class UltrasoundDataModule(L.LightningDataModule):
                               "test": None}
         self.dset_to_labels = {"train": self.labels, "val": None, "test": None}
 
+        # Get list of patient IDs specifically to put in training set
+        self.force_train_ids = kwargs.get("force_train_ids")
+
         # (1) To split dataset into training and test sets
         if "train_test_split" in kwargs:
             self.train_test_split = kwargs.get("train_test_split")
@@ -247,15 +252,19 @@ class UltrasoundDataModule(L.LightningDataModule):
         """
         # (1) Split into training and test sets
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
-            train_idx, test_idx = utils.split_by_ids(self.patient_ids,
-                                                     self.train_test_split)
+            train_idx, test_idx = utils.split_by_ids(
+                self.patient_ids, self.train_test_split,
+                force_train_ids=self.force_train_ids,
+            )
             self._assign_dset_idx("train", "test", train_idx, test_idx)
 
         # (2) Further split training set into train-val or cross-val sets
         # (2.1) Train-Val Split
         if hasattr(self, "train_val_split"):
-            train_idx, val_idx = utils.split_by_ids(self.dset_to_ids["train"], 
-                                                    self.train_val_split)
+            train_idx, val_idx = utils.split_by_ids(
+                self.dset_to_ids["train"], self.train_val_split,
+                force_train_ids=self.force_train_ids,
+            )
             self._assign_dset_idx("train", "val", train_idx, val_idx)
         # (2.2) K-Fold Cross Validation
         elif hasattr(self, "cross_val_folds"):

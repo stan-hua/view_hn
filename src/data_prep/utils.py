@@ -1258,7 +1258,9 @@ def restrict_seq_len(df_metadata, n=18):
 ################################################################################
 #                                Data Splitting                                #
 ################################################################################
-def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
+def split_by_ids(patient_ids, train_split=0.8,
+                 force_train_ids=None,
+                 seed=constants.SEED):
     """
     Splits list of patient IDs into training and val/test set.
 
@@ -1273,6 +1275,8 @@ def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
         List of patient IDs (IDs can repeat).
     train_split : float, optional
         Proportion of total data to leave for training, by default 0.8
+    force_train_ids : list, optional
+        List of patient IDs to force into the training set
     seed : int, optional
         If provided, sets random seed to value, by default constants.SEED
 
@@ -1305,6 +1309,15 @@ def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
     # Randomly choose patients to add to training set until full
     train_ids = set()
     n_train_curr = 0
+
+    # If provided, strictly move patients into training set
+    if force_train_ids:
+        for forced_id in force_train_ids:
+            if forced_id in id_to_len:
+                train_ids.add(forced_id)
+                n_train_curr += 1
+                shuffled_unique_ids.remove(forced_id)
+
     for _id in shuffled_unique_ids:
         # Add patient if number of training samples doesn't exceed upper bound
         if n_train_curr + id_to_len[_id] <= n_train_max:
