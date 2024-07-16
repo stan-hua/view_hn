@@ -192,7 +192,7 @@ def plot_umap(embeds, labels, highlight=None, label_order=None,
 
         # Check if UMAP directory exists
         if not os.path.isdir(f"{save_dir}umap/"):
-            os.mkdir(f"{save_dir}umap/")
+            os.makedirs(f"{save_dir}umap/")
 
         # Check if subdirectory exists
         if not os.path.isdir(os.path.dirname(full_path)):

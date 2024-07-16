@@ -110,9 +110,9 @@ class ImageEmbedder:
         # If more than 1 image, attempt to flatten extra 3rd dimension
         if features.shape[0] > 1:
             features = features.squeeze()
-
         # Convert to numpy
-        features = features.cpu().numpy()
+        if not isinstance(features, np.ndarray):
+            features = features.cpu().numpy()
 
         return features
 
@@ -531,6 +531,11 @@ def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
     str
         Full path to save embeddings
     """
+    # Ensure that embedding directory exists
+    if not os.path.exists(constants.DIR_EMBEDS):
+        LOGGER.info("Embedding directory not found! Creating...")
+        os.makedirs(constants.DIR_EMBEDS)
+
     embed_suffix = EMBED_SUFFIX_RAW if raw else EMBED_SUFFIX
     segmented_suffix = f"_segmented{'_reverse' if reverse_mask else ''}"
     save_path = f"{constants.DIR_EMBEDS}/{name}"\
