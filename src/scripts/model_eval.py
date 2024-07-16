@@ -10,6 +10,7 @@ import argparse
 import logging
 import os
 import random
+import sys
 from collections import OrderedDict
 from colorama import Fore, Style
 
@@ -33,10 +34,6 @@ from src.data_viz import plot_umap
 from src.data_viz import utils as viz_utils
 from src.scripts import embed, load_model, load_data
 
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-
 # Configure seaborn color palette
 sns.set_palette("Paired")
 
@@ -46,7 +43,14 @@ tqdm.pandas()
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
+# Configure logging
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
 
 # Flag to use GPU or not
 DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -1349,7 +1353,7 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
         # Experiment-specific inference directory, to store figures
         inference_dir = os.path.join(constants.DIR_INFERENCE, temp_exp_name)
         if not os.path.isdir(inference_dir):
-            os.mkdir(inference_dir)
+            os.makedirs(inference_dir)
 
         # 4. Calculate metrics
         df_metrics = eval_calculate_all_metrics(df_pred)
@@ -1782,7 +1786,7 @@ def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
     # Create inference directory, if not exists
     inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
     if not os.path.exists(inference_dir):
-        os.mkdir(inference_dir)
+        os.makedirs(inference_dir)
 
     # Expected path to dset inference
     fname = f"{dset}_set_results.csv"
@@ -2284,7 +2288,8 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
     # If specified, create UMAP plots
     if EMBED:
-        plot_umap.main(exp_name, dset=dset)
+        plot_umap.main(exp_name, dset=dset,
+                       comet_exp_key=hparams.get("comet_exp_key"))
 
     # Close all open figures
     plt.close("all")
