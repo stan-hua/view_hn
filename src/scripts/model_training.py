@@ -27,7 +27,7 @@ from lightning.pytorch.loggers import CometLogger
 from src.data import constants
 from src.scripts import load_data, load_model
 from src.utils import config as config_utils
-from src.utils.custom_logger import FriendlyCSVLogger
+from src.utils.logging import FriendlyCSVLogger
 from src.utils.influence import plot_most_helpful_harmful_examples
 
 

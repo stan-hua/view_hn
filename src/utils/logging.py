@@ -1,5 +1,5 @@
 """
-custom_logger.py
+logging.py
 
 Description: Wrapper over PyTorch Lightning's CSVLogger to output a simpler CSV
              file (history.csv) after training.
