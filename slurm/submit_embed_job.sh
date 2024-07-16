@@ -4,14 +4,17 @@
 #SBATCH --gres=gpu:1                      # Request one GPU
 #SBATCH --cpus-per-task=6                 # Number of CPU cores per task
 #SBATCH --mem=32GB
-#SBATCH -o slurm/slurm-%j.out
+#SBATCH -o slurm/logs/slurm-%j.out
 
 # If you want to do it in the terminal,
 # salloc --job-name=stans_terminal --nodes=1 --gres=gpu:1 --cpus-per-task=6 --mem=32GB
 # srun (command)
 
 # Load any necessary modules or activate your virtual environment here
-# conda activate view
+micromamba activate view
 
-# Run your Python script
-srun python -m src.scripts.model_training -c "double_descent/exp_descent-random_seed.ini"
+# Create embeddings
+srun python -m src.scripts.embed --exp_name exp_descent-augment --dset "train" "val"
+
+# Create UMAP
+srun python -m src.data_viz.plot_umap --exp_name exp_descent-augment --dset "train" "val"
