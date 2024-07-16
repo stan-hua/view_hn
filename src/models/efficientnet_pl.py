@@ -171,7 +171,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # If specified, compute GradCAM loss
         if self.hparams.use_gradcam_loss:
             gradcam_loss = self.gradcam_loss(*train_batch)
-            loss = ce_loss + gradcam_loss
+            gradcam_loss_weight = self.hparams.get("gradcam_loss_weight", 1.)
+            loss = ce_loss + (gradcam_loss_weight * gradcam_loss)
         else:
             loss = ce_loss
 

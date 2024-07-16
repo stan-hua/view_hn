@@ -55,6 +55,12 @@ class ViewGradCAMLoss(torch.nn.Module):
         if self.use_all_class_gradcam_loss:
             self.add_neg_class_gradcam_loss = False
 
+        # Flag to use original implementation
+        # NOTE: Original implementation was only for binary. Penalize all classes
+        self.use_orig_implement = hparams.get("use_orig_implement", False)
+        if self.use_orig_implement:
+            self.use_all_class_gradcam_loss = True
+
         # Create GradCAM
         self.cam = create_cam(model)
 
@@ -101,22 +107,24 @@ class ViewGradCAMLoss(torch.nn.Module):
         # Create GradCAM for positive class
         pos_cam = self.cam(X, pos_targets)
 
+        # [ORIGINAL IMPLEMENTATION]
+        # 1. Compute MSE between segmentation mask and GradCAM
+        if self.use_orig_implement:
+            assert (seg_masks.float() > 1.0).sum() == 0, f"Max seg mask exceeds 1! Max: `{seg_masks.float().max()}`"
+            loss = ((pos_cam - seg_masks.float()) ** 2).sum()
+            loss = loss / (N * H * W)
+            return loss
+
         # Compute mean-squared error loss
         # NOTE: Penalize activations outside of segmentation mask
         pos_loss = (pos_cam[~seg_masks] ** 2).sum()
         # Normalize to pixel-level loss (across channels)
         pos_loss = pos_loss / (N * (len(seg_masks[~seg_masks])))
 
-        # [ORIGINAL IMPLEMENTATION]
-        # 1. Remove placeholder (zero) masks
-        # NOTE: We remove placeholder masks before this step
-        # 2. Compute MSE between segmentation mask and GradCAM
-        # loss = torch.sum(torch.where(
-        #     torch.sum(torch.sum(seg_masks, dim=1), dim=1) == 0,
-        #     0,
-        #     torch.sum(torch.sum((grayscale_cam - seg_masks) ** 2, dim=1), dim=1)
-        # ))
-        # loss = loss / (N * H * W)
+        # TODO: Test then remove
+        # Scale loss by inverse proportion of samples with mask
+        inverse_prop = len(has_seg_mask) / sum(has_seg_mask)
+        pos_loss = inverse_prop * pos_loss
 
         # Early exit, if not penalizing negative classes
         # NOTE: Don't penalize negative class if already penalizing all classes
