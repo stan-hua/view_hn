@@ -22,3 +22,5 @@ umap-learn==0.5.3
 torch
 torchvision
 grad-cam>=1.5.2
+comet_ml
+pytables

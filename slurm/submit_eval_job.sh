@@ -1,5 +1,5 @@
 #!/bin/bash -l
-#SBATCH --job-name=stan_embed              # Job name
+#SBATCH --job-name=stan_eval              # Job name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Request one GPU
 #SBATCH --cpus-per-task=6                 # Number of CPU cores per task
@@ -13,8 +13,5 @@
 # Load any necessary modules or activate your virtual environment here
 micromamba activate view
 
-# Create embeddings
-srun python -m src.scripts.embed --exp_name exp_descent-augment --dset  "train" "val"
-
-# Create UMAP
-srun python -m src.data_viz.plot_umap --exp_name exp_descent-augment --dset  "train" "val"
+# Evaluate model
+srun python -m src.scripts.model_eval --exp_name exp_descent-augment --dset "train" "val" "test" --log_to_comet
