@@ -144,6 +144,9 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
                          img_dir=img_dir, **all_hparams)
     dm.setup()
 
+    # Modify hyperparameters to store training/val/test set IDs
+    hparams["dset_to_ids"] = dm.dset_to_ids
+
     return dm
 
 
