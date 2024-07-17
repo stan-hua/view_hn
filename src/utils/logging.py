@@ -16,6 +16,13 @@ from lightning.pytorch.utilities import rank_zero_only
 
 
 ################################################################################
+#                                  Constants                                   #
+################################################################################
+# Comet ML Experiment Cache
+COMET_EXP_CACHE = {}
+
+
+################################################################################
 #                              Custom CSV Logger                               #
 ################################################################################
 class FriendlyCSVLogger(CSVLogger):
@@ -79,8 +86,15 @@ def load_comet_logger(exp_key):
     comet_ml.ExistingExperiment
         Can be used for logging
     """
+    # Check if in cache
+    if exp_key in COMET_EXP_CACHE:
+        return COMET_EXP_CACHE[exp_key]
+
+    # Otherwise, load for the first time
     assert "COMET_API_KEY" in os.environ, "Please set `COMET_API_KEY` before running this script!"
     logger = ExistingExperiment(
         previous_experiment=exp_key,
     )
+    # Store in cache
+    COMET_EXP_CACHE[exp_key] = logger
     return logger

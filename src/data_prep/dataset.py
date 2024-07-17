@@ -146,6 +146,9 @@ class UltrasoundDataModule(L.LightningDataModule):
                     Number of folds to use for cross-validation
                 force_train_ids : list
                     List of patient IDs to place into training set
+                crop_scale : float
+                    If augmenting training samples, lower bound on proportion of
+                    area cropped relative to the full image.
         """
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
@@ -241,7 +244,7 @@ class UltrasoundDataModule(L.LightningDataModule):
                 T.RandomAdjustSharpness(1.25, p=0.25),
                 T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
                 T.RandomRotation(15),
-                T.RandomResizedCrop(self.img_size, scale=(0.5, 1)),
+                T.RandomResizedCrop(self.img_size, scale=(kwargs.get("crop_scale", 0.5), 1)),
             ])
         self.transforms = T.Compose(augmentations)
 

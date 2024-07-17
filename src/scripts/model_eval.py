@@ -33,6 +33,7 @@ from src.data_prep import utils
 from src.data_viz import plot_umap
 from src.data_viz import utils as viz_utils
 from src.scripts import embed, load_model, load_data
+from src.utils.logging import load_comet_logger
 
 # Configure seaborn color palette
 sns.set_palette("Paired")
@@ -67,10 +68,10 @@ THEME = "dark"
 CALCULATE_METRICS = True
 
 # Flag to create embeddings and plot UMAP for each evaluation set
-EMBED = False
+EMBED = True
 
 # Flag to overwrite existing results
-OVERWRITE_EXISTING = True
+OVERWRITE_EXISTING = False
 
 ################################################################################
 #                               Paths Constants                                #
@@ -123,6 +124,7 @@ def init(parser):
     arg_help = {
         "exp_name": "Name/s of experiment/s (to evaluate)",
         "dset": "List of dataset split or test dataset name to evaluate",
+        "log_to_comet": "If True, log results to Comet ML",
     }
     parser.add_argument("--exp_name", required=True,
                         nargs='+',
@@ -130,6 +132,8 @@ def init(parser):
     parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
                         nargs='+',
                         help=arg_help["dset"])
+    parser.add_argument("--log_to_comet", action="store_true",
+                        help=arg_help["log_to_comet"])
 
 
 ################################################################################
@@ -1252,7 +1256,8 @@ def eval_calculate_all_metrics(df_pred):
 
 
 def eval_create_plots(df_pred, hparams, inference_dir,
-                      dset=constants.DEFAULT_EVAL_DSET):
+                      dset=constants.DEFAULT_EVAL_DSET,
+                      comet_logger=None):
     """
     Visual evaluation of model performance
 
@@ -1268,6 +1273,8 @@ def eval_create_plots(df_pred, hparams, inference_dir,
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
         constants.DEFAULT_EVAL_DSET.
+    comet_logger : comet_ml.ExistingExperiment
+        If provided, log figures to Comet ML
     """
     # 0. Reset theme
     viz_utils.set_theme(THEME)
@@ -1280,6 +1287,10 @@ def eval_create_plots(df_pred, hparams, inference_dir,
     plot_confusion_matrix(df_pred, filter_confident=False, ax=ax2, **hparams)
     plt.tight_layout()
     plt.savefig(os.path.join(inference_dir, f"{dset}_confusion_matrix.png"))
+
+    if comet_logger is not None:
+        comet_logger.log_figure(f"{dset}_confusion_matrix.png", plt.gcf(),
+                                overwrite=True)
 
     # 1.3 Print confusion matrix for all predictions
     # NOTE: May error if the same label is predicted for all samples
@@ -1299,7 +1310,8 @@ def eval_create_plots(df_pred, hparams, inference_dir,
                                   label_part=hparams.get("label_part"))
 
 
-def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
+def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
+                          log_to_comet=False):
     """
     Given that inference was performed, compute metrics for experiment model
     and dataset.
@@ -1314,6 +1326,8 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
         Experiment hyperparameters, by default None
     mask_bladder : bool, optional
         If True, bladder predictions are masked out, by default False
+    log_to_comet : bool, optional
+        If True, log metrics and graphs to Comet ML
     """
     # 0. Overwrite `mask_bladder`, based on dset
     if dset in constants.DSETS_MISSING_BLADDER:
@@ -1324,6 +1338,11 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
     # 1. Get experiment hyperparameters (if not provided)
     hparams = hparams if hparams \
         else load_model.get_hyperparameters(exp_name=exp_name)
+
+    # 1.1 Get comet logger, if specified
+    comet_logger = None
+    if log_to_comet:
+        comet_logger = load_comet_logger(exp_key=hparams.get("comet_exp_key"))
 
     # 2. Load inference
     df_pred = load_view_predictions(exp_name, dset, mask_bladder)
@@ -1359,6 +1378,11 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False):
         df_metrics = eval_calculate_all_metrics(df_pred)
         df_metrics.to_csv(os.path.join(inference_dir,
                                         f"{dset}_metrics.csv"))
+
+        # 4.1 Store metrics in Comet ML, if possible
+        if comet_logger is not None:
+            comet_logger.log_table(f"{dset}_metrics.csv", df_metrics,
+                                   overwrite=True)
 
         # 5. Create plots for visual evaluation
         eval_create_plots(df_pred, hparams, inference_dir, dset=dset)
@@ -1724,7 +1748,7 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False,
     if label_part == "side":
         side_func = lambda x: side_to_idx[x]
     else:
-        LOGGER.warning(f"Invalid `label_part` provided! {label_part}")
+        LOGGER.warning(f"Invalid `label_part` provided in `show_example_side_predictions`! Skipping...")
         return
 
     # Apply function above to labels/preds
@@ -2192,7 +2216,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     embed_save_path = embed.get_save_path(exp_name, dset=dset)
 
     # Early return, if embeddings already made
-    if os.path.isfile(embed_save_path):
+    if os.path.isfile(embed_save_path) and not overwrite_existing:
         return
 
     # 0. Get experiment directory, where model was trained
@@ -2235,7 +2259,8 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
 
 def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
-                       mask_bladder=False):
+                       mask_bladder=False,
+                       log_to_comet=False):
     """
     Analyze dset split predictions.
 
@@ -2249,6 +2274,8 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
+    log_to_comet : bool, optional
+        If True, log metrics and UMAPs to Comet ML.
 
     Raises
     ------
@@ -2271,7 +2298,9 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     exp_name=exp_name,
                     dset=dset_,
                     hparams=hparams,
-                    mask_bladder=mask_bladder)
+                    mask_bladder=mask_bladder,
+                    log_to_comet=log_to_comet,
+                )
             except KeyError:
                 # 1. Perform inference
                 infer_dset(
@@ -2284,12 +2313,14 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     exp_name=exp_name,
                     dset=dset_,
                     hparams=hparams,
-                    mask_bladder=mask_bladder)
+                    mask_bladder=mask_bladder,
+                    log_to_comet=log_to_comet,
+                )
 
     # If specified, create UMAP plots
     if EMBED:
         plot_umap.main(exp_name, dset=dset,
-                       comet_exp_key=hparams.get("comet_exp_key"))
+                       comet_exp_key=hparams.get("comet_exp_key") if log_to_comet else None)
 
     # Close all open figures
     plt.close("all")
@@ -2324,7 +2355,9 @@ if __name__ == '__main__':
 
             # 5. Evaluate predictions and embeddings
             analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,
-                               mask_bladder=MASK_BLADDER)
+                               mask_bladder=MASK_BLADDER,
+                               log_to_comet=ARGS.log_to_comet)
 
         # 6. Create UMAPs embeddings on all dsets together
-        analyze_dset_preds(exp_name=EXP_NAME, dset=ARGS.dset)
+        analyze_dset_preds(exp_name=EXP_NAME, dset=ARGS.dset,
+                           log_to_comet=ARGS.log_to_comet)

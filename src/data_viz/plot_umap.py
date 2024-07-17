@@ -841,7 +841,7 @@ def init(parser):
     arg_help = {
         "exp_name": "Name of experiment",
         "dset": "Name of evaluation splits or datasets",
-        "log_to_comet": "If True, log UMAPs to Comet ML."
+        "comet_exp_key": "If logging to Comet ML, the Experiment key"
     }
 
     parser.add_argument("--exp_name", required=True, nargs="+",
@@ -849,7 +849,7 @@ def init(parser):
     parser.add_argument("--dset", required=True, nargs="+",
                         help=arg_help["dset"])
     parser.add_argument("--comet_exp_key", default=None,
-                        help=arg_help["log_to_comet"])
+                        help=arg_help["comet_exp_key"])
 
 
 if __name__ == "__main__":
