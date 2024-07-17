@@ -91,7 +91,6 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
     return df_metadata
 
 
-# TODO: Add second test path
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            keep_orig_label=False,
@@ -182,20 +181,21 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
         assert img_dir is not None, "Please provide `img_dir` as an argument!"
 
         # Get all image paths
-        all_img_paths = glob.glob(os.path.join(img_dir, "*"))
+        all_img_paths = glob.glob(os.path.join(img_dir, "*.*"))
         df_others = pd.DataFrame({"filename": all_img_paths})
-        df_others.filename = df_others.filename.map(os.path.basename)
-        
+        # Only keep filename
+        df_others["filename"] = df_others["filename"].map(os.path.basename)
+
         # Remove found paths to already labeled images
-        labeled_img_paths = set(df_metadata.filename.tolist())
-        df_others = df_others[~df_others.filename.isin(labeled_img_paths)]
+        labeled_img_paths = set(df_metadata["filename"].tolist())
+        df_others = df_others[~df_others["filename"].isin(labeled_img_paths)]
 
         # Exclude Stanford data
-        df_others = df_others[~df_others.filename.str.startswith("SU2")]
+        df_others = df_others[~df_others["filename"].str.startswith("SU2")]
 
         # NOTE: Unlabeled images have label "Other"
         df_others["label"] = "Other"
-        
+
         # Merge labeled and unlabeled data
         df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
 
@@ -290,16 +290,16 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
         assert img_dir is not None, "Please provide `img_dir` as an argument!"
 
         # Get all image paths
-        all_img_paths = glob.glob(os.path.join(img_dir, "*"))
+        all_img_paths = glob.glob(os.path.join(img_dir, "*.*"))
         df_others = pd.DataFrame({"filename": all_img_paths})
-        df_others.filename = df_others.filename.map(os.path.basename)
+        df_others["filename"] = df_others["filename"].map(os.path.basename)
         
         # Remove found paths to already labeled images
-        labeled_img_paths = set(df_metadata.filename.tolist())
-        df_others = df_others[~df_others.filename.isin(labeled_img_paths)]
+        labeled_img_paths = set(df_metadata["filename"].tolist())
+        df_others = df_others[~df_others["filename"].isin(labeled_img_paths)]
 
         # Only include Stanford data
-        df_others = df_others[df_others.filename.str.startswith("SU2")]
+        df_others = df_others[df_others["filename"].str.startswith("SU2")]
 
         # NOTE: Unlabeled images have label "Other"
         df_others["label"] = "Other"
