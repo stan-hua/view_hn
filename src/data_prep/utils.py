@@ -173,7 +173,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -281,7 +281,7 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -390,7 +390,7 @@ def load_uiowa_metadata(path=constants.UIOWA_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -469,7 +469,7 @@ def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -548,7 +548,7 @@ def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -627,7 +627,7 @@ def load_sickkids_silent_trial_metadata(path=constants.SK_ST_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
