@@ -145,7 +145,8 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
     dm.setup()
 
     # Modify hyperparameters to store training/val/test set IDs
-    hparams["dset_to_ids"] = dm.dset_to_ids
+    for dset in ("train", "val", "test"):
+        hparams[f"{dset}_ids"] = tuple(sorted(set(dm.dset_to_ids[dset])))
 
     return dm
 
