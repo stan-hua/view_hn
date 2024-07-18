@@ -13,8 +13,9 @@ from torch.nn import functional as F
 
 # Custom libraries
 from src.data import constants
-from src.utils import efficientnet_pytorch_utils as effnet_utils
 from src.loss.gradcam_loss import ViewGradCAMLoss
+from src.utils import efficientnet_pytorch_utils as effnet_utils
+from src.utils.grokfast import gradfilter_ema
 
 
 class EfficientNetPL(EfficientNet, L.LightningModule):
@@ -136,6 +137,20 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             self, self.model_name,
             load_fc=False,
             advprop=False)
+
+
+
+    ############################################################################
+    #                             Optimization                                 #
+    ############################################################################
+    def on_before_optimizer_step(self, optimizer):
+        """
+        After `loss.backward()` and before `optimizer.step()`, perform any
+        specified operations (e.g., gradient filtering).
+        """
+        # If specified, use Grokfast-EMA algorithm to filter for slow gradients
+        if self.hparams.get("use_grokfast"):
+            gradfilter_ema(self)
 
 
     ############################################################################

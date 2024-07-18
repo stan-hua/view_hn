@@ -16,6 +16,7 @@ from torch.nn import functional as F
 from src.data import constants
 
 
+# TODO: Consider adding Grokfast
 class LinearEval(L.LightningModule):
     """
     LinearEval classifier object, wrapping over convolutional backbone.
