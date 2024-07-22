@@ -91,6 +91,7 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
     return df_metadata
 
 
+# NOTE: Concatenates externally split test set, by default
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            keep_orig_label=False,
@@ -99,7 +100,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            relative_side=False,
                            include_unlabeled=False,
                            img_dir=constants.DIR_IMAGES,
-                           include_test_set=False,
+                           include_test_set=True,
                            test_path=constants.SK_TEST_METADATA_FILE,
                            ):
     """
@@ -139,7 +140,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
         constants.DIR_IMAGES
     include_test_set : bool, optional
         If True and path to test metadata file specified, include test set
-        labels in loaded metadata, by default False.
+        labels in loaded metadata, by default True.
     test_path : bool, optional
         If <include_test_set>, this path points to the metadata file for the
         internal test data, by default constants.SK_TEST_METADATA.
@@ -1434,7 +1435,7 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     Perform preprocessing on image array:
         (1) Center crop 150 x 150 (by default)
         (2) Resize to 256 x 256 (by default)
-        (3) Histogram normalize image
+        (3) Histogram equalize image
 
     Parameters
     ----------
@@ -1471,7 +1472,7 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     # Resize image
     resized_img = cv2.resize(img, resize_dims)
 
-    # Histogram normalize images
+    # Histogram equalize images
     equalized_img = equalize_hist(resized_img)
 
     # Scale back to 255

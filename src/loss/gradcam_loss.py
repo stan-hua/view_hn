@@ -14,7 +14,7 @@ Source Repo: https://github.com/MeriDK/segmentation-guided-attention/tree/master
 # Non-standard libraries
 import torch
 from efficientnet_pytorch import EfficientNet
-from torchvision.transforms.functional import resize
+from torchvision.transforms.v2.functional import resize
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.activations_and_gradients import ActivationsAndGradients
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget

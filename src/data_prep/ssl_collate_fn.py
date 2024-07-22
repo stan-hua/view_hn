@@ -9,7 +9,7 @@ Description: Contains collate functions to augment image batches for
 import lightly
 import numpy as np
 import torch
-from torchvision.transforms import Lambda
+from torchvision.transforms.v2 import Lambda
 
 
 ################################################################################

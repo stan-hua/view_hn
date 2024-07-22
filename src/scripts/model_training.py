@@ -261,7 +261,7 @@ def set_seed(seed=SEED, include_algos=False):
         performance, by default False.
     """
     # If seed is None, don't set seed
-    if seed is None:
+    if seed is None or seed < 0:
         LOGGER.warning(f"Random seed is not set!")
         return
 

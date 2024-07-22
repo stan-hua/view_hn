@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import lightning as L
 import torch
-import torchvision.transforms as T
+import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 
@@ -40,6 +40,10 @@ DEFAULT_DATALOADER_PARAMS = {
     "num_workers": 4,
     "pin_memory": True,
 }
+
+# Pre-Computed Mean & Std for SickKids Training Set
+SK_TRAIN_MEAN = 123
+SK_TRAIN_STD = 74
 
 
 ################################################################################
@@ -155,7 +159,7 @@ class UltrasoundDataModule(L.LightningDataModule):
 
         # General arguments, used to instantiate UltrasoundDataset
         self.df = df
-        self.img_size = kwargs.get("img_size", 258)
+        self.img_size = kwargs.get("img_size", constants.IMG_SIZE)
         self.us_dataset_kwargs = {
             "img_dir": img_dir,
             "full_seq": full_seq,
@@ -174,11 +178,12 @@ class UltrasoundDataModule(L.LightningDataModule):
                     lambda x: os.path.join(img_dir, x))
 
             # Filter for existing images
-            exists_mask = df.filename.map(os.path.exists)
+            exists_mask = df["filename"].map(os.path.exists)
             if not all(exists_mask):
                 num_missing = len(~exists_mask[~exists_mask])
+                missing_paths = "\n\t".join(df[~exists_mask]["filename"].tolist())
                 LOGGER.warning(f"{num_missing} image files in table don't exist "
-                               "at path! Skipping...")
+                               f"at path! Skipping...\n\t{missing_paths}")
                 df = df[exists_mask]
 
             # Get specific metadata for splitting
@@ -506,11 +511,20 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         """
         assert os.path.exists(img_path), "No image at path specified!"
 
+        # Load image
         X = read_image(img_path, self.mode)
+
+        # TODO:
+        # 1. Resize
+        # 2. Histogram equalization
+        # 3. Standardize to training set distribution   # TODO: Get statistics
+
+        # Resize
         X = self.transforms(X)
 
-        # Normalize between [0, 1]
-        X = X / 255.
+        # CASE 1: If still not between 0 and 1, assume pixels and divide by 255
+        if (X > 1).any():
+            X = X / 255.
 
         return X
 
@@ -545,7 +559,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         mode : int
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
-        transforms : torchvision.transforms.Compose or Transforms, optional
+        transforms : torchvision.transforms.v2.Compose or Transforms, optional
             If provided, perform transform on images loaded, by default None.
         full_path : bool, optional
             If True, "filename" metadata contains full path to the image/s.
@@ -695,7 +709,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
                  label_part=None, split_label=False,
                  load_seg_mask=False, include_liver_seg=False,
-                 transforms=None, full_path=False, **ignore_kwargs,
+                 standardize_images=False, transforms=None, full_path=False,
+                 **ignore_kwargs,
                 ):
         """
         Initialize UltrasoundDatasetDataFrame object.
@@ -735,7 +750,9 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         include_liver_seg : bool, optional
             If True, include liver segmentation, if available. Otherwise, only
             use kidney/bladder segmentations, by default False.
-        transforms : torchvision.transforms.Compose or Transforms, optional
+        standardize_images : bool, optional
+            If True, standardize images by the training set pre-computed stats.
+        transforms : torchvision.transforms.v2.Compose or Transforms, optional
             If provided, perform transform on images loaded, by default None.
         full_path : bool, optional
             If True, "filename" metadata contains full path to the image/s.
@@ -753,7 +770,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # Get paths to images. Add directory to path, if not already in.
         if img_dir:
-            has_path = df.filename.map(lambda x: img_dir in x)
+            has_path = df["filename"].map(lambda x: img_dir in x)
             df.loc[~has_path, "filename"] = df.loc[~has_path, "filename"].map(
                 lambda x: os.path.join(img_dir, x))
         self.paths = df["filename"].to_numpy()
@@ -795,9 +812,11 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         if img_size:
             transforms.insert(0, T.Resize(img_size))
 
-        # TODO: Try standardizing image
-        # transforms.append(T.Normalize(mean=[0.5, 0.5, 0.5],
-        #                               std=[0.5, 0.5, 0.5]))
+        # If specified, standardize images by pre-computed channel means/stds
+        if standardize_images:
+            transforms.append(T.ToDtype(torch.float32, scale=True))
+            transforms.append(T.Normalize(mean=[SK_TRAIN_MEAN] * 3,
+                                          std=[SK_TRAIN_STD] * 3))
 
         self.transforms = T.Compose(transforms)
 
@@ -913,7 +932,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # If no mask loaded, make placeholder mask
         if not has_mask:
-            img_size = self.img_size or (256, 256)
+            img_size = self.img_size or constants.IMG_SIZE
             metadata_overwrite["seg_mask"] = torch.full(img_size, True,
                                                         dtype=torch.bool)
 

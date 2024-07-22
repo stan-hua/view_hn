@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import lightning as L
 import torch
-import torchvision.transforms as T
+import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 # from maskedtensor import masked_tensor
@@ -89,7 +89,7 @@ class SegmentedUSModule(L.LightningDataModule):
         self.dataset = None
         self.full_seq = full_seq
         self.mode = mode
-        self.img_size = kwargs.get("img_size", 258)
+        self.img_size = kwargs.get("img_size", constants.IMG_SIZE)
 
         ########################################################################
         #                        DataLoader Parameters                         #

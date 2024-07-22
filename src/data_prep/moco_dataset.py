@@ -10,7 +10,7 @@ Note: Model trained on this dataset does NOT take advantage of temporal
 
 # Non-standard libraries
 import pandas as pd
-import torchvision.transforms as T
+import torchvision.transforms.v2 as T
 from lightly.data import LightlyDataset
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 

@@ -11,16 +11,22 @@ import logging
 import os
 
 # Non-standard libraries
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import torch
+import torchvision.transforms.v2 as T
+from skimage.exposure import equalize_hist
+from torchvision.io import read_image, ImageReadMode
 
 # Custom libraries
 from src.data import constants
 from src.data_prep.moco_dataset import MoCoDataModule
-from src.data_prep.utils import load_sickkids_metadata
+from src.data_prep.utils import load_metadata, load_sickkids_metadata
 from src.data_viz import utils as viz_utils
+
 
 ################################################################################
 #                                  Constants                                   #
@@ -31,6 +37,25 @@ LOGGER = logging.getLogger(__name__)
 CLASS_TO_IDX = {"Sagittal_Left": 0, "Transverse_Left": 1, "Bladder": 2,
                 "Transverse_Right": 3, "Sagittal_Right": 4, "Other": 5}
 IDX_TO_CLASS = {v: u for u, v in CLASS_TO_IDX.items()}
+
+# SickKids training set patient IDs
+SK_TRAIN_IDS = [
+    "1001","1002","1004","1005","1008","1009","1012","1019","1020","1032",
+    "1038","1039","1041","1047","1050","1055","1059","1066","1069","1070",
+    "1075","1076","1077","1078","1081","1089","1092","1093","1100","1104",
+    "1105","1107","1110","1113","1115",
+]
+SK_VAL_IDS = [
+    "1003","1010","1011","1021","1022","1035","1044","1045","1048","1056",
+    "1065","1087","1088","1098","1099","1103","1114",
+]
+SK_TEST_IDS = [
+    "1001","1002","1004","1005","1008","1009","1012","1019","1020","1032",
+    "1038","1039","1041","1047","1050","1055","1059","1066","1069","1070",
+    "1075","1076","1077","1078","1081","1089","1092","1093","1100","1104",
+    "1105","1107","1110","1113","1115"
+]
+
 
 
 ################################################################################
@@ -74,6 +99,184 @@ def plot_hist_of_view_labels(df_metadata):
     plt.xticks(rotation=30)
 
     return ax
+
+
+def plot_pixels_along_axis(imgs, ax1=None, ax2=None):
+    """
+    Plot average pixel intensities across x-axis and y-axis, separately.
+
+    Parameters
+    ----------
+    imgs : np.array
+        Array of grayscale images (B, H, W)
+    ax1 : plt.Axes
+        Matplotlib axes to plot across x-axis onto
+    ax2 : plt.Axes
+        Matplotlib axes to plot across x-axis onto
+    """
+    # Create axes, if not provided
+    if ax1 is None or ax2 is None:
+        _, (ax1, ax2) = plt.subplots(nrows=1, ncols=2)
+
+    # Get height and width
+    _, H, W = imgs.shape
+
+    # Plot horizontal intensity distribution
+    ax1.bar(
+        x=list(range(256)), height=imgs.mean(axis=(0, 1)),
+        align="edge",
+        width=1,
+        color="#a8ddb5",
+    )
+    ax1.set_ylim(0, 255)
+    ax1.set_xlim(0, W)
+    ax1.set_ylabel("Pixel Intensity (0-255)")
+    ax1.set_xlabel("")
+    ax1.set_title("along x-axis")
+
+    # Plot vertical intensity distribution
+    ax2.barh(
+        y=list(range(256)), width=imgs.mean(axis=(0, 2)),
+        align="edge",
+        height=1,
+        color="#43a2ca",
+    )
+    ax2.set_xlim(0, 255)
+    ax2.set_ylim(0, H)
+    ax2.invert_yaxis()
+    ax2.set_xlabel("Pixel Intensity (0-255)")
+    ax2.set_ylabel("")
+    ax2.set_title("along y-axis")
+
+
+def plot_pixels_histogram_by_label(df_metadata, fname_prefix):
+    """
+    Plot pixel-wise, width-wise (horizontal) and length-wise (vertical) pixel
+    distributions, and save to EDA directory
+
+    Parameters
+    ----------
+    df_metadata : pandas.DataFrame
+        Each row contains metadata for an ultrasound image.
+    fname_prefix : str
+        Filename prefix
+
+    Returns
+    -------
+    dict
+        Contains mean and standard deviation across all pixels
+    """
+    # Filename prefix
+    fname_prefix = fname_prefix + "-" if fname_prefix else ""
+    LOGGER.info(f"Now plotting pixel histogram for `{fname_prefix}`...")
+
+    # Filter for data with existing images
+    exists_mask = df_metadata["filename"].map(os.path.exists)
+    df_metadata = df_metadata[exists_mask]
+
+    # Get image paths
+    img_paths = df_metadata["filename"].tolist()
+
+    # Define resize operation
+    resize_op = T.Resize(constants.IMG_SIZE)
+    normalize_op = T.Normalize([128], [75])
+
+    # Load all images
+    imgs = []
+    for img_path in img_paths:
+        img = read_image(img_path, ImageReadMode.GRAY)
+        # Resize image
+        img = resize_op(img)
+        # Perform histogram equalization
+        img = T.functional.equalize(img).to(float)
+        # TODO: Consider normalizing by SickKids Train after
+        img = normalize_op(img)
+
+        # Normalize between 0 and 1, then multiply by 255
+        img = img - img.min()
+        img /= img.max()
+        img *= 255
+
+        # Remove channel dimension
+        img = img.squeeze(dim=0)
+        imgs.append(img)
+    imgs = torch.stack(imgs)
+
+    # Convert images to numpy
+    imgs = imgs.numpy()
+
+    # Store stats
+    img_stats = {}
+    # Compute pixel-level stats
+    img_stats["mean"] = imgs.mean()
+    img_stats["std"] = imgs.std()
+
+    # Create figure
+    fig = plt.figure(constrained_layout=True)
+    fig.suptitle("Pixel Intensities", size="x-large")
+
+    # Get unique labels
+    labels = sorted(df_metadata["label"].unique())
+
+    # Plot the pixel intensities (row/column) for each label
+    subfigs = fig.subfigures(nrows=len(labels))
+    for idx, subfig in enumerate(subfigs):
+        # Get images corresponding to label
+        label = labels[idx]
+        mask = (df_metadata["label"] == label)
+        curr_imgs = imgs[mask]
+
+        # Create row title
+        subfig.suptitle(f"Label: `{label}` | N = {sum(mask)}")
+
+        # Plot pixel intensities across row and across column
+        ax1, ax2 = subfig.subplots(nrows=1, ncols=2)
+        plot_pixels_along_axis(curr_imgs, ax1, ax2)
+
+    # Ensure save directory exists
+    if not os.path.exists(constants.DIR_FIGURES_EDA):
+        os.makedirs(constants.DIR_FIGURES_EDA)
+    save_path = os.path.join(constants.DIR_FIGURES_EDA, f"{fname_prefix}pixel_intensities.png")
+
+    # Scale figure size based on the number of labels
+    fig.set_size_inches(8, 3*len(labels))
+
+    # Save figure
+    fig.savefig(save_path)
+
+    return img_stats
+
+
+def plot_img_histogram_per_hospital():
+    """
+    Plot image histogram for each hospital
+    """
+    shared_kwargs = {"prepend_img_dir": True, "extract": True}
+
+    # Store all dataset stats
+    dset_stats = {}
+
+    # Load SickKids metadata
+    df_sk_metadata = load_metadata("sickkids", **shared_kwargs)
+
+    # 1. SickKids Train Set
+    df_sk_metadata_train = df_sk_metadata[df_sk_metadata["id"].isin(SK_TRAIN_IDS)]
+    dset_stats["sk_train"] = plot_pixels_histogram_by_label(df_sk_metadata_train, "sickkids_train")
+
+    # 2. SickKids Validation Set
+    df_sk_metadata_val = df_sk_metadata[df_sk_metadata["id"].isin(SK_VAL_IDS)]
+    dset_stats["sk_val"] = plot_pixels_histogram_by_label(df_sk_metadata_val, "sickkids_val")
+
+    # 3. SickKids Test Set
+    df_sk_metadata_test = df_sk_metadata[df_sk_metadata["id"].isin(SK_TEST_IDS)]
+    dset_stats["sk_test"] = plot_pixels_histogram_by_label(df_sk_metadata_test, "sickkids_test")
+
+    # 4. Other Test Sets
+    for dset in ("stanford", "stanford_non_seq", "sickkids_silent_trial", "uiowa", "chop"):
+        df_curr_metadata = load_metadata(dset, **shared_kwargs)
+        dset_stats[dset] = plot_pixels_histogram_by_label(df_curr_metadata, dset)
+
+    print(dset_stats)
 
 
 def patient_imgs_to_gif(df_metadata, patient_idx=0, img_dir=None,
@@ -455,10 +658,21 @@ if __name__ == '__main__':
     plot_ssl_augmentations()
 
     ############################################################################
+    #                        Plot Pixel Histograms                             #
+    ############################################################################
+    # Plot image histogram
+    plot_img_histogram_per_hospital()
+
+    ############################################################################
     #                      Plot Distribution of Views                          #
     ############################################################################
-    df_metadata = load_sickkids_metadata(extract=True, include_unlabeled=True,
-                                img_dir=constants.DIR_IMAGES)
+    df_metadata = load_sickkids_metadata(
+        extract=True,
+        include_unlabeled=True,
+        include_test_set=True,
+    )
+
+    # Plot distribution of view labels
     plot_hist_of_view_labels(df_metadata)
     plt.tight_layout()
     plt.show()
