@@ -17,6 +17,7 @@ from src.data import constants
 from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
+# TODO: Consider adding Grokfast
 class EfficientNetLSTM(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model for sequence-based classification.

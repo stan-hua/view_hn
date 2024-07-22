@@ -15,6 +15,7 @@ from torch.nn import functional as F
 
 # TODO: Update (training/validation/test)_step for PL integration
 # TODO: Update on_(train/val/test)_epoch_end for PL integration
+# TODO: Consider adding Grokfast
 class EnsembleLSTMLinear(L.LightningModule):
     """
     EnsembleLSTMLinear object, wrapping over 2+ convolutional backbones.
