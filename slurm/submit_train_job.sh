@@ -14,12 +14,12 @@
 micromamba activate view
 
 # Train model
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_descent-augment.ini"
 # srun python -m src.scripts.model_training -c "exp_param_sweep/exp_descent-augment_smaller_crops.ini"
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_smaller_crops-include_all.ini"
-
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_small-no_seed.ini"
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-no_weight_decay.ini"
+srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-standardize.ini"
 
 # srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class_upscale_loss.ini"
 # srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class_upscale_loss__orig_implement.ini"
 
-srun python -m src.scripts.model_training -c "exp_all_view/exp_all_view-augment.ini"
+# srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-augment.ini"

@@ -14,4 +14,9 @@
 micromamba activate view
 
 # Evaluate model
-srun python -m src.scripts.model_eval --exp_name exp_descent-augment --dset "train" "val" "test" --log_to_comet
+srun python -m src.scripts.model_eval \
+    --exp_name exp_param_sweep-augment_smaller_crops-include_all \
+    --dset "val" "test" "stanford" \
+           "uiowa" "chop" \
+           "stanford_non_seq" "sickkids_silent_trial" \
+    --log_to_comet
