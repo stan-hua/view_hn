@@ -246,10 +246,10 @@ class UltrasoundDataModule(L.LightningDataModule):
         augmentations = []
         if augment_training:
             augmentations.extend([
+                T.RandomResizedCrop(self.img_size, scale=(kwargs.get("crop_scale", 0.5), 1)),
                 T.RandomAdjustSharpness(1.25, p=0.25),
                 T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
                 T.RandomRotation(15),
-                T.RandomResizedCrop(self.img_size, scale=(kwargs.get("crop_scale", 0.5), 1)),
             ])
         self.transforms = T.Compose(augmentations)
 

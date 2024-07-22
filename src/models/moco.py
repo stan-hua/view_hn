@@ -39,6 +39,7 @@ class MoCo(L.LightningModule):
                  same_label=False,
                  custom_ssl_loss=None,
                  multi_objective=False,
+                 effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
         Initialize MoCo object.
@@ -74,6 +75,8 @@ class MoCo(L.LightningModule):
         multi_objective : bool, optional
             If True, optimizes for both supervised loss and SSL loss. Defaults
             to False.
+        effnet_name : str, optional
+            Name of EfficientNet backbone to use
         """
         super().__init__()
 
@@ -81,7 +84,7 @@ class MoCo(L.LightningModule):
         self.same_label = same_label
 
         # Instantiate EfficientNet
-        self.model_name = "efficientnet-b0"
+        self.model_name = effnet_name
         self.conv_backbone = EfficientNet.from_name(
             self.model_name, image_size=img_size, include_top=False)
         self.feature_dim = 1280      # expected feature size from EfficientNetB0

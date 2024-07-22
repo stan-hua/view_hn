@@ -21,16 +21,11 @@ from efficientnet_pytorch import EfficientNet
 
 # Custom libraries
 from src.data import constants
-from src.models.cpc import CPC
-from src.models.efficientnet_lstm_pl import EfficientNetLSTM
-from src.models.efficientnet_lstm_multi import EfficientNetLSTMMulti
-from src.models.efficientnet_pl import EfficientNetPL
-from src.models.ensemble_linear_eval import EnsembleLinear
-from src.models.ensemble_lstm_linear_eval import EnsembleLSTMLinear
-from src.models.linear_eval import LinearEval
-from src.models.lstm_linear_eval import LSTMLinearEval
-from src.models.moco import MoCo
-from src.models.tclr import TCLR
+from src.models import (
+    EfficientNetLSTM, EfficientNetLSTMMulti, EfficientNetPL,
+    LinearEval, LSTMLinearEval, EnsembleLinear, EnsembleLSTMLinear,
+    BYOL, CPC, MoCo, TCLR,
+)
 from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
@@ -45,6 +40,7 @@ logging.basicConfig(level=logging.INFO)
 SSL_NAME_TO_MODEL_CLS = {
     "moco": MoCo,
     "tclr": TCLR,
+    "byol": BYOL,
 
     # Evaluation models
     "linear": LinearEval,

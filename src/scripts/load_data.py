@@ -32,6 +32,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Mapping of SSL model name to corresponding data module
 SSL_NAME_TO_DATA_MODULE = {
+    "byol": MoCoDataModule,         # NOTE: BYOL can use MoCo's data module
     "moco": MoCoDataModule,
     "tclr": TCLRDataModule,
 }
