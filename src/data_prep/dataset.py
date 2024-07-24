@@ -8,13 +8,14 @@ import glob
 import logging
 import os
 from abc import abstractmethod
+from collections import defaultdict
 
 # Non-standard libraries
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
+import lightning as L
 import torch
-import torchvision.transforms as T
+import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 
@@ -39,6 +40,10 @@ DEFAULT_DATALOADER_PARAMS = {
     "num_workers": 4,
     "pin_memory": True,
 }
+
+# Pre-Computed Mean & Std for SickKids Training Set
+SK_TRAIN_MEAN = 123
+SK_TRAIN_STD = 74
 
 
 ################################################################################
@@ -89,7 +94,8 @@ def load_dataset_from_dataframe(df, img_dir=None, full_seq=True):
 ################################################################################
 #                             Data Module Classes                              #
 ################################################################################
-class UltrasoundDataModule(pl.LightningDataModule):
+# TODO: Allow filtering training set for proportion of images with masks
+class UltrasoundDataModule(L.LightningDataModule):
     """
     Top-level object used to access all data preparation and loading
     functionalities.
@@ -140,15 +146,20 @@ class UltrasoundDataModule(pl.LightningDataModule):
                 train_val_split : float
                     Percentage of training set (test set removed) to leave for
                     validation
-                cross_val_folds : int, 
+                cross_val_folds : int
                     Number of folds to use for cross-validation
+                force_train_ids : list
+                    List of patient IDs to place into training set
+                crop_scale : float
+                    If augmenting training samples, lower bound on proportion of
+                    area cropped relative to the full image.
         """
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
 
         # General arguments, used to instantiate UltrasoundDataset
         self.df = df
-        self.img_size = kwargs.get("img_size", 258)
+        self.img_size = kwargs.get("img_size", constants.IMG_SIZE)
         self.us_dataset_kwargs = {
             "img_dir": img_dir,
             "full_seq": full_seq,
@@ -157,6 +168,7 @@ class UltrasoundDataModule(pl.LightningDataModule):
             "label_part": kwargs.get("label_part"),
             "split_label": kwargs.get("multi_output", False),
             "full_path": full_path,
+            **kwargs,
         }
 
         # Get image paths, patient IDs, and labels (and visit)
@@ -166,11 +178,12 @@ class UltrasoundDataModule(pl.LightningDataModule):
                     lambda x: os.path.join(img_dir, x))
 
             # Filter for existing images
-            exists_mask = df.filename.map(os.path.exists)
+            exists_mask = df["filename"].map(os.path.exists)
             if not all(exists_mask):
                 num_missing = len(~exists_mask[~exists_mask])
+                missing_paths = "\n\t".join(df[~exists_mask]["filename"].tolist())
                 LOGGER.warning(f"{num_missing} image files in table don't exist "
-                               "at path! Skipping...")
+                               f"at path! Skipping...\n\t{missing_paths}")
                 df = df[exists_mask]
 
             # Get specific metadata for splitting
@@ -206,6 +219,9 @@ class UltrasoundDataModule(pl.LightningDataModule):
                               "test": None}
         self.dset_to_labels = {"train": self.labels, "val": None, "test": None}
 
+        # Get list of patient IDs specifically to put in training set
+        self.force_train_ids = kwargs.get("force_train_ids")
+
         # (1) To split dataset into training and test sets
         if "train_test_split" in kwargs:
             self.train_test_split = kwargs.get("train_test_split")
@@ -230,10 +246,10 @@ class UltrasoundDataModule(pl.LightningDataModule):
         augmentations = []
         if augment_training:
             augmentations.extend([
+                T.RandomResizedCrop(self.img_size, scale=(kwargs.get("crop_scale", 0.5), 1)),
                 T.RandomAdjustSharpness(1.25, p=0.25),
                 T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
                 T.RandomRotation(15),
-                T.RandomResizedCrop(self.img_size, scale=(0.5, 1)),
             ])
         self.transforms = T.Compose(augmentations)
 
@@ -244,15 +260,19 @@ class UltrasoundDataModule(pl.LightningDataModule):
         """
         # (1) Split into training and test sets
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
-            train_idx, test_idx = utils.split_by_ids(self.patient_ids, 
-                                                     self.train_test_split)
+            train_idx, test_idx = utils.split_by_ids(
+                self.patient_ids, self.train_test_split,
+                force_train_ids=self.force_train_ids,
+            )
             self._assign_dset_idx("train", "test", train_idx, test_idx)
-        
+
         # (2) Further split training set into train-val or cross-val sets
         # (2.1) Train-Val Split
         if hasattr(self, "train_val_split"):
-            train_idx, val_idx = utils.split_by_ids(self.dset_to_ids["train"], 
-                                                    self.train_val_split)
+            train_idx, val_idx = utils.split_by_ids(
+                self.dset_to_ids["train"], self.train_val_split,
+                force_train_ids=self.force_train_ids,
+            )
             self._assign_dset_idx("train", "val", train_idx, val_idx)
         # (2.2) K-Fold Cross Validation
         elif hasattr(self, "cross_val_folds"):
@@ -463,6 +483,7 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         seq_number = self.seq_numbers[index]
         hospital = self.hospitals[index]
 
+        # Prepare metadata
         metadata = {
             "filename": filename,
             "id": patient_id,
@@ -490,11 +511,20 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         """
         assert os.path.exists(img_path), "No image at path specified!"
 
+        # Load image
         X = read_image(img_path, self.mode)
+
+        # TODO:
+        # 1. Resize
+        # 2. Histogram equalization
+        # 3. Standardize to training set distribution   # TODO: Get statistics
+
+        # Resize
         X = self.transforms(X)
 
-        # Normalize between [0, 1]
-        X = X / 255.
+        # CASE 1: If still not between 0 and 1, assume pixels and divide by 255
+        if (X > 1).any():
+            X = X / 255.
 
         return X
 
@@ -529,7 +559,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         mode : int
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
-        transforms : torchvision.transforms.Compose or Transforms, optional
+        transforms : torchvision.transforms.v2.Compose or Transforms, optional
             If provided, perform transform on images loaded, by default None.
         full_path : bool, optional
             If True, "filename" metadata contains full path to the image/s.
@@ -637,7 +667,7 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         # 4. Load images
         imgs = []
         for path in paths:
-            imgs.append(self.load_image(path)) 
+            imgs.append(self.load_image(path))
         X = torch.stack(imgs)
 
         # 4.1 If only 1 image for a sequence, pad first dimension
@@ -678,8 +708,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     """
     def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
                  label_part=None, split_label=False,
-                 transforms=None,
-                 full_path=False,
+                 load_seg_mask=False, include_liver_seg=False,
+                 standardize_images=False, transforms=None, full_path=False,
                  **ignore_kwargs,
                 ):
         """
@@ -714,7 +744,15 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         split_label : bool, optional
             If True, additionally provide both side/plane separately in metadata
             dict, by default False.
-        transforms : torchvision.transforms.Compose or Transforms, optional
+        load_seg_mask : bool, optional
+            If True, load (available) segmentation masks for each image into
+            one mask and store in the metadata, by default False
+        include_liver_seg : bool, optional
+            If True, include liver segmentation, if available. Otherwise, only
+            use kidney/bladder segmentations, by default False.
+        standardize_images : bool, optional
+            If True, standardize images by the training set pre-computed stats.
+        transforms : torchvision.transforms.v2.Compose or Transforms, optional
             If provided, perform transform on images loaded, by default None.
         full_path : bool, optional
             If True, "filename" metadata contains full path to the image/s.
@@ -724,10 +762,15 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         """
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
+        self.img_size = img_size
+
+        # Set to load available masks
+        self.load_seg_mask = load_seg_mask
+        self.include_liver_seg = include_liver_seg
 
         # Get paths to images. Add directory to path, if not already in.
         if img_dir:
-            has_path = df.filename.map(lambda x: img_dir in x)
+            has_path = df["filename"].map(lambda x: img_dir in x)
             df.loc[~has_path, "filename"] = df.loc[~has_path, "filename"].map(
                 lambda x: os.path.join(img_dir, x))
         self.paths = df["filename"].to_numpy()
@@ -769,9 +812,11 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         if img_size:
             transforms.insert(0, T.Resize(img_size))
 
-        # TODO: Try standardizing image
-        # transforms.append(T.Normalize(mean=[0.5, 0.5, 0.5],
-        #                               std=[0.5, 0.5, 0.5]))
+        # If specified, standardize images by pre-computed channel means/stds
+        if standardize_images:
+            transforms.append(T.ToDtype(torch.float32, scale=True))
+            transforms.append(T.Normalize(mean=[SK_TRAIN_MEAN] * 3,
+                                          std=[SK_TRAIN_STD] * 3))
 
         self.transforms = T.Compose(transforms)
 
@@ -802,6 +847,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # Encode label to integer (-1, if not found)
         class_to_idx = \
             constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
+        # NOTE: This assumes that label part was extracted prior to this
         metadata["label"] = class_to_idx.get(self.labels[index], -1)
         # If specified, split label into side/plane, and store separately
         if self.split_label and not self.label_part:
@@ -809,9 +855,93 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
                 metadata[label_part] = utils.extract_from_label(
                     self.labels[index], label_part)
 
+        # Record if has segmentation mask or not
+        metadata["has_seg_mask"] = False
+
+        # Early return, if not loading segmentation masks
+        if not self.load_seg_mask:
+            return X, metadata
+
+        # Load and store segmentation masks
+        metadata.update(self.get_segmentation_mask(index))
         return X, metadata
 
 
+    def get_segmentation_mask(self, index):
+        """
+        Get segmentation masks for image at index.
+
+        Parameters
+        ----------
+        index : int
+            Integer index to paths.
+
+        Returns
+        -------
+        dict
+            Contains flag if segmentation mask exists and segmentation mask
+        """
+        metadata_overwrite = {}
+        metadata_overwrite["seg_mask"] = None
+
+        # CASE 1: Bladder image
+        seg_fname_suffixes = []
+        if self.labels[index] in ("bladder", "none"):
+            seg_fname_suffixes.append("_bseg")
+        # CASE 2: Kidney image
+        else:
+            seg_fname_suffixes.append("_kseg")
+
+        # Add flag to include liver
+        if self.include_liver_seg:
+            seg_fname_suffixes.append("_lseg")
+
+        # Load kidney/bladder/liver segmentations
+        # NOTE: If 2+ exist, they're combined into 1 mask
+        has_mask = False
+        img_path = self.paths[index]
+        for suffix in seg_fname_suffixes:
+            # Create potential name of mask image (located in the same directory)
+            fname = os.path.basename(img_path)
+            split_fname = fname.split(".")
+            mask_fname = ".".join(split_fname[:-1]) + suffix + "." + split_fname[-1]
+            mask_path = os.path.join(os.path.dirname(img_path), mask_fname)
+
+            # Skip, if mask doesn't exist
+            if not os.path.exists(mask_path):
+                continue
+
+            # Load segmentation mask
+            has_mask = True
+            curr_mask = read_image(mask_path, IMAGE_MODES[3])
+            # Extract mask by getting red pixels (236, 28, 36)
+            curr_mask = (
+                torch.where(torch.isin(curr_mask[0], torch.arange(200, 250)), 1, 0) *
+                torch.where(torch.isin(curr_mask[1], torch.arange(15, 35)), 1, 0) *
+                torch.where(torch.isin(curr_mask[2], torch.arange(26, 46)), 1, 0)
+            )
+            curr_mask = curr_mask.bool()
+
+            # CASE 1: No previous segmentation mask
+            if metadata_overwrite["seg_mask"] is None:
+                metadata_overwrite["seg_mask"] = curr_mask
+            # CASE 2: 2+ masks found for image
+            # NOTE: Used if liver segmentation is added
+            else:
+                metadata_overwrite["seg_mask"] = metadata_overwrite["seg_mask"] | curr_mask
+
+        # If no mask loaded, make placeholder mask
+        if not has_mask:
+            img_size = self.img_size or constants.IMG_SIZE
+            metadata_overwrite["seg_mask"] = torch.full(img_size, True,
+                                                        dtype=torch.bool)
+
+        # Record if has mask or not
+        metadata_overwrite["has_seg_mask"] = has_mask
+        return metadata_overwrite
+
+
+    # TODO: Implement getting masks
     def get_sequence(self, index):
         """
         Used to override __getitem__ when loading ultrasound sequences as each
@@ -887,6 +1017,30 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
                     [class_to_idx.get(label, -1) for label in extracted_labels])
                 metadata[label_part] = encoded_labels
 
+        # Early return, if not loading segmentation masks
+        if not self.load_seg_mask:
+            return X, metadata
+
+        # Get segmentation mask for each image and concatenate them
+        img_indices = np.nonzero(mask)
+        accum_seg_metadata = defaultdict(list)
+        for img_index in img_indices:
+            curr_seg_metadata = self.get_segmentation_mask(img_index)
+            for key, val in curr_seg_metadata.items():
+                accum_seg_metadata[key].append(val)
+        accum_seg_metadata = dict(accum_seg_metadata)
+
+        # Get image size
+        img_size = None
+        for mask in accum_seg_metadata["seg_mask"]:
+            if mask is not None:
+                img_size = mask.shape
+                break
+
+        # TODO: Consider adding 1-only mask for missing masks
+        raise NotImplementedError("Getting segmentation masks is not yet implemented for videos!")
+
+        metadata.update(accum_seg_metadata)
         return X, metadata
 
 

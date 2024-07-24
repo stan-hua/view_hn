@@ -23,7 +23,7 @@ from tqdm import tqdm
 # Custom libraries
 from src.data import constants
 from src.data_viz import utils as viz_utils
-from src.drivers import load_data, load_model, model_eval
+from src.scripts import load_data, load_model, model_eval
 
 
 # Set theme

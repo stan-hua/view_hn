@@ -12,7 +12,7 @@ import os
 # Non-standard libraries
 import numpy as np
 import pandas as pd
-import tensorflow as tf
+# import tensorflow as tf
 import torch
 from tqdm import tqdm
 
@@ -20,7 +20,7 @@ from tqdm import tqdm
 from src.data import constants
 from src.data_prep.dataset import UltrasoundDataModule
 from src.data_prep.segment_dataset import SegmentedUSModule
-from src.drivers import load_data, load_model
+from src.scripts import load_data, load_model
 
 
 ################################################################################
@@ -110,9 +110,9 @@ class ImageEmbedder:
         # If more than 1 image, attempt to flatten extra 3rd dimension
         if features.shape[0] > 1:
             features = features.squeeze()
-
         # Convert to numpy
-        features = features.cpu().numpy()
+        if not isinstance(features, np.ndarray):
+            features = features.cpu().numpy()
 
         return features
 
@@ -140,74 +140,75 @@ class ImageEmbedder:
             Contains a column for the path to the image file. Other columns are
             embedding columns
         """
-        def process_path(file_path):
-            """
-            Loads image from file path
+        raise NotImplementedError
+    #     def process_path(file_path):
+    #         """
+    #         Loads image from file path
 
-            Parameters
-            ----------
-            file_path : str
-                Path to image
+    #         Parameters
+    #         ----------
+    #         file_path : str
+    #             Path to image
 
-            Returns
-            -------
-            tf.Tensor
-                Tensor containing image
-            """
-            # Load the raw data from the file as a string
-            img = tf.io.read_file(file_path)
-            img = tf.io.decode_jpeg(img, channels=3)
-            return img
+    #         Returns
+    #         -------
+    #         tf.Tensor
+    #             Tensor containing image
+    #         """
+    #         # Load the raw data from the file as a string
+    #         img = tf.io.read_file(file_path)
+    #         img = tf.io.decode_jpeg(img, channels=3)
+    #         return img
 
-        # Input sanitization
-        assert img_dir or img_dataloader is not None, \
-            "Must specify img_dir/img_dataloader!"
-        # Verify model provided
-        assert not isinstance(self.model, torch.nn.Module), \
-            "Provided model is not a Tensorflow model!"
+    #     # Input sanitization
+    #     assert img_dir or img_dataloader is not None, \
+    #         "Must specify img_dir/img_dataloader!"
+    #     # Verify model provided
+    #     assert not isinstance(self.model, torch.nn.Module), \
+    #         "Provided model is not a Tensorflow model!"
 
-        if img_dir:
-            assert os.path.isdir(img_dir), "Path provided does not lead to a "\
-                                           "directory!"
-            # Get file paths
-            files_ds = tf.data.Dataset.list_files(
-                os.path.join(img_dir, "*"), shuffle=False)
-            file_paths = list(files_ds.as_numpy_iterator())
+    #     if img_dir:
+    #         assert os.path.isdir(img_dir), "Path provided does not lead to a "\
+    #                                        "directory!"
+    #         # Get file paths
+    #         files_ds = tf.data.Dataset.list_files(
+    #             os.path.join(img_dir, "*"), shuffle=False)
+    #         file_paths = list(files_ds.as_numpy_iterator())
 
-            # Get images from file paths
-            img_ds = files_ds.map(process_path,
-                                  num_parallel_calls=tf.data.AUTOTUNE)
+    #         # Get images from file paths
+    #         img_ds = files_ds.map(process_path,
+    #                               num_parallel_calls=tf.data.AUTOTUNE)
 
-            # Make image generator efficient via prefetching
-            img_ds = img_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
+    #         # Make image generator efficient via prefetching
+    #         img_ds = img_ds.prefetch(buffer_size=tf.data.AUTOTUNE)
 
-            # Extract embeddings in batches of 32
-            all_embeds = self.model.predict(img_ds)
-        else:   # DataLoader
-            all_embeds = []
-            file_paths = []
+    #         # Extract embeddings in batches of 32
+    #         all_embeds = self.model.predict(img_ds)
+    #     else:   # DataLoader
+    #         all_embeds = []
+    #         file_paths = []
 
-            # Extract embeddings in batches
-            for img, metadata in tqdm(img_dataloader):
-                x = img.detach().cpu().numpy()
-                if len(x.shape) == 5:
-                    x = x.squeeze(axis=0)
-                # Flip around channel dimension
-                if x.shape[1] == 3:
-                    x = np.moveaxis(x, 1, 3)
-                embeds = self.model.predict(x)
+    #         # Extract embeddings in batches
+    #         for img, metadata in tqdm(img_dataloader):
+    #             x = img.detach().cpu().numpy()
+    #             if len(x.shape) == 5:
+    #                 x = x.squeeze(axis=0)
+    #             # Flip around channel dimension
+    #             if x.shape[1] == 3:
+    #                 x = np.moveaxis(x, 1, 3)
+    #             embeds = self.model.predict(x)
 
-                all_embeds.append(embeds)
-                file_paths.extend(metadata["filename"])
+    #             all_embeds.append(embeds)
+    #             file_paths.extend(metadata["filename"])
 
-            # Concatenate batched embeddings
-            all_embeds = np.concatenate(all_embeds)
+    #         # Concatenate batched embeddings
+    #         all_embeds = np.concatenate(all_embeds)
 
-        # Save embeddings
-        df_features = pd.DataFrame(np.array(all_embeds))
-        assert not df_features.isna().all(axis=None)
-        df_features["filename"] = np.array(file_paths).flatten()
-        df_features.to_hdf(save_path, "embeds")
+    #     # Save embeddings
+    #     df_features = pd.DataFrame(np.array(all_embeds))
+    #     assert not df_features.isna().all(axis=None)
+    #     df_features["filename"] = np.array(file_paths).flatten()
+    #     df_features.to_hdf(save_path, "embeds")
 
 
     def embed_torch_batch(self, save_path,
@@ -530,6 +531,11 @@ def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
     str
         Full path to save embeddings
     """
+    # Ensure that embedding directory exists
+    if not os.path.exists(constants.DIR_EMBEDS):
+        LOGGER.info("Embedding directory not found! Creating...")
+        os.makedirs(constants.DIR_EMBEDS)
+
     embed_suffix = EMBED_SUFFIX_RAW if raw else EMBED_SUFFIX
     segmented_suffix = f"_segmented{'_reverse' if reverse_mask else ''}"
     save_path = f"{constants.DIR_EMBEDS}/{name}"\

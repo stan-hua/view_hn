@@ -15,12 +15,11 @@ import os
 import shutil
 
 # Non-standard libraries
-from pytorch_lightning.utilities.exceptions import MisconfigurationException
 from jinja2 import Environment
 
 # Custom libraries
 from src.data import constants
-from src.drivers import load_data, load_model, model_eval, model_training
+from src.scripts import load_data, load_model, model_eval, model_training
 
 
 ################################################################################
@@ -31,13 +30,13 @@ LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
 # Label parts to evaluate
-LABEL_PARTS = ["side", "plane"]  # side, plane, None
+LABEL_PARTS = ["plane"]  # side, plane, None
 
 # Model types to evaluate
-MODEL_TYPES = ["linear_lstm"]   # linear, linear_lstm
+MODEL_TYPES = ["linear"]   # linear, linear_lstm
 
 # Options to train eval. models with/without fine-tuning backbones
-FREEZE_WEIGHTS = [False]    # True, False
+FREEZE_WEIGHTS = [True, False]    # True, False
 
 # Flag to perform Linear Probing - Fine-tuning
 LP_FT = False
@@ -54,7 +53,6 @@ DEFAULT_ARGS = [
     "--num_workers", "4",
     "--pin_memory",
     "--precision", "16",
-    "--adam",
     "--lr", "0.001",
     "--stop_epoch", "25",
 ]
@@ -106,60 +104,6 @@ def init(parser):
                         help=arg_help["augment_training"])
 
 
-def train_model_with_kwargs(exp_name, **extra_args):
-    """
-    Executes `model_training.main` with default arguments and additional
-    specified arguments
-
-    Parameters
-    ----------
-    exp_name : str
-        Experiment name
-    **extra_args: dict, optional
-        Keyword arguments for `model_training`
-    """
-    # Initialize parser
-    parser = argparse.ArgumentParser()
-    model_training.init(parser)
-
-    # Copy default arguments
-    args_list = DEFAULT_ARGS.copy()
-
-    # Add experiment name
-    args_list.extend(["--exp_name", exp_name])
-
-    # Add extra keyword arguments
-    for name, value in extra_args.items():
-        if value is None or (isinstance(value, bool) and not value):
-            continue
-
-        args_list.append(f"--{name}")
-        # If boolean, no need to add value
-        if isinstance(value, bool):
-            continue
-        # If list
-        if isinstance(value, list):
-            args_list.extend([str(v) for v in value])
-        # If any other type
-        else:
-            args_list.append(str(value))
-
-    # Parse arguments
-    args = parser.parse_args(args_list)
-
-    # Start training
-    try:
-        model_training.main(args)
-    except Exception as error_msg:
-        # On exception, delete folder
-        exp_dir = load_model.get_exp_dir(exp_name, on_error="ignore")
-        if exp_dir:
-            shutil.rmtree(exp_dir)
-
-        # Re-raise error
-        raise error_msg
-
-
 def train_eval_model(exp_name, model_type="linear_lstm",
                      label_part="side", freeze_weights=False,
                      augment_training=False,
@@ -201,22 +145,24 @@ def train_eval_model(exp_name, model_type="linear_lstm",
         LOGGER.info(f"`{exp_eval_name}` already exists! Skipping...")
         return
 
-    # Use full sequence if LSTM
-    full_seq = "lstm" in model_type
+    # Overwrite hyperparameters
+    eval_hparams = hparams.copy()
+    eval_hparams["exp_name"] = exp_eval_name
+    eval_hparams["label_part"] = label_part
+    eval_hparams["freeze_weights"] = freeze_weights
+    eval_hparams["augment_training"] = augment_training
 
-    # Attempt to train model type with specified label part
+    # Attempt training
     try:
-        train_model_with_kwargs(
-            exp_name=exp_eval_name,
-            label_part=label_part,
-            freeze_weights=freeze_weights,
-            full_seq=full_seq,
-            augment_training=augment_training,
-            **hparams,
-        )
-    except MisconfigurationException as error_msg:
-        LOGGER.info(error_msg)
-        pass
+        model_training.main(eval_hparams)
+    except Exception as error_msg:
+        # On exception, delete folder
+        exp_dir = load_model.get_exp_dir(exp_eval_name, on_error="ignore")
+        if exp_dir:
+            shutil.rmtree(exp_dir)
+
+        # Re-raise error
+        raise error_msg
     LOGGER.info(f"`{exp_eval_name}` successfully created!")
 
 

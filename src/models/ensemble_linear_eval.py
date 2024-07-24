@@ -6,7 +6,7 @@ Description: Used to provide a linear classification evaluation over
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet
@@ -14,7 +14,10 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 
-class EnsembleLinear(pl.LightningModule):
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
+# TODO: Consider adding Grokfast
+class EnsembleLinear(L.LightningModule):
     """
     EnsembleLinear object, wrapping over 2+ convolutional backbones.
     """
@@ -24,7 +27,7 @@ class EnsembleLinear(pl.LightningModule):
                  conv_backbone_output_dim=1280,
                  num_classes=5,
                  img_size=(256, 256),
-                 adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  *args, **kwargs):
         """
         Initialize EnsembleLinear object.
@@ -43,9 +46,8 @@ class EnsembleLinear(pl.LightningModule):
             Number of classes to predict, by default 5
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -55,6 +57,7 @@ class EnsembleLinear(pl.LightningModule):
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
         """
+        raise RuntimeError("Do TODOs before using!")
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
@@ -86,7 +89,8 @@ class EnsembleLinear(pl.LightningModule):
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
         for dset in dsets:
-            exec(f"self.{dset}_acc = torchmetrics.Accuracy(task='multiclass')")
+            exec(f"self.{dset}_acc = torchmetrics.Accuracy("
+                 f"num_classes={self.hparams.num_classes}, task='multiclass')")
 
             # Metrics for binary classification
             if self.hparams.num_classes == 2:
@@ -98,18 +102,18 @@ class EnsembleLinear(pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam or SGD).
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
         torch.optim.Optimizer
             Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
@@ -300,7 +304,7 @@ class EnsembleLinear(pl.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for training epoch.
 
@@ -328,7 +332,7 @@ class EnsembleLinear(pl.LightningModule):
             self.train_auprc.reset()
 
 
-    def validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self, validation_step_outputs):
         """
         Compute and log evaluation metrics for validation epoch.
 
@@ -354,7 +358,7 @@ class EnsembleLinear(pl.LightningModule):
             self.val_auprc.reset()
 
 
-    def test_epoch_end(self, test_step_outputs):
+    def on_test_epoch_end(self, test_step_outputs):
         """
         Compute and log evaluation metrics for test epoch.
 

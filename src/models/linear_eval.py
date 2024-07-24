@@ -6,14 +6,18 @@ Description: Used to provide a linear classification evaluation over pretrained
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
+# Custom libraries
+from src.data import constants
 
-class LinearEval(pl.LightningModule):
+
+# TODO: Consider adding Grokfast
+class LinearEval(L.LightningModule):
     """
     LinearEval classifier object, wrapping over convolutional backbone.
     """
@@ -21,7 +25,7 @@ class LinearEval(pl.LightningModule):
                  freeze_weights=True,
                  conv_backbone_output_dim=1280, num_classes=5,
                  img_size=(256, 256),
-                 adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  *args, **kwargs):
         """
         Initialize LinearEval object.
@@ -39,9 +43,8 @@ class LinearEval(pl.LightningModule):
             Number of classes to predict, by default 5
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -74,7 +77,8 @@ class LinearEval(pl.LightningModule):
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
         for dset in dsets:
-            exec(f"self.{dset}_acc = torchmetrics.Accuracy(task='multiclass')")
+            exec(f"self.{dset}_acc = torchmetrics.Accuracy("
+                 f"num_classes={self.hparams.num_classes}, task='multiclass')")
 
             # Metrics for binary classification
             if self.hparams.num_classes == 2:
@@ -83,21 +87,24 @@ class LinearEval(pl.LightningModule):
                 exec(f"""self.{dset}_auprc = torchmetrics.AveragePrecision(
                     task='multiclass')""")
 
+        # Store outputs
+        self.dset_to_outputs = {"train": [], "val": [], "test": []}
+
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam or SGD).
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
         torch.optim.Optimizer
             Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
@@ -166,6 +173,12 @@ class LinearEval(pl.LightningModule):
             self.train_auroc.update(out[:, 1], y_true)
             self.train_auprc.update(out[:, 1], y_true)
 
+        # Prepare result
+        ret = {
+            "loss": loss.detach().cpu(),
+        }
+        self.dset_to_outputs["train"].append(ret)
+
         return loss
 
 
@@ -204,7 +217,15 @@ class LinearEval(pl.LightningModule):
             self.val_auroc.update(out[:, 1], y_true)
             self.val_auprc.update(out[:, 1], y_true)
 
-        return loss
+        # Prepare result
+        ret = {
+            "loss": loss.detach().cpu(),
+            "y_pred": y_pred.detach().cpu(),
+            "y_true": y_true.detach().cpu(),
+        }
+        self.dset_to_outputs["val"].append(ret)
+
+        return ret
 
 
     def test_step(self, test_batch, batch_idx):
@@ -242,21 +263,25 @@ class LinearEval(pl.LightningModule):
             self.test_auroc.update(out[:, 1], y_true)
             self.test_auprc.update(out[:, 1], y_true)
 
-        return loss
+        # Prepare result
+        ret = {
+            "loss": loss.detach().cpu(),
+            "y_pred": y_pred.detach().cpu(),
+            "y_true": y_true.detach().cpu(),
+        }
+        self.dset_to_outputs["test"].append(ret)
+
+        return ret
 
 
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self):
         """
         Compute and log evaluation metrics for training epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every training step in the epoch
         """
+        outputs = self.dset_to_outputs["train"]
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         acc = self.train_acc.compute()
 
@@ -275,17 +300,16 @@ class LinearEval(pl.LightningModule):
             self.train_auroc.reset()
             self.train_auprc.reset()
 
+        # Clean stored output
+        self.dset_to_outputs["train"].clear()
 
-    def validation_epoch_end(self, validation_step_outputs):
+
+    def on_validation_epoch_end(self):
         """
         Compute and log evaluation metrics for validation epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every validation step in the epoch
         """
-        loss = torch.tensor(validation_step_outputs).mean()
+        outputs = self.dset_to_outputs["val"]
+        loss = torch.tensor([o["loss"] for o in outputs]).mean()
         acc = self.val_acc.compute()
 
         self.log('val_loss', loss)
@@ -301,19 +325,29 @@ class LinearEval(pl.LightningModule):
             self.val_auroc.reset()
             self.val_auprc.reset()
 
+        # Create confusion matrix
+        if self.hparams.get("use_comet_logger"):
+            self.logger.experiment.log_confusion_matrix(
+                y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
+                y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
+                labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
+                title="Validation Confusion Matrix",
+                file_name="val_confusion-matrix.json",
+                overwrite=False,
+            )
 
-    def test_epoch_end(self, test_step_outputs):
+        # Clean stored output
+        self.dset_to_outputs["val"].clear()
+
+
+    def on_test_epoch_end(self):
         """
         Compute and log evaluation metrics for test epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every test step in the epoch
         """
+        outputs = self.dset_to_outputs["test"]
         dset = f'test'
 
-        loss = torch.tensor(test_step_outputs).mean()
+        loss = torch.tensor([o["loss"] for o in outputs]).mean()
         acc = eval(f'self.{dset}_acc.compute()')
 
         self.log(f'{dset}_loss', loss)
@@ -328,6 +362,20 @@ class LinearEval(pl.LightningModule):
             self.log(f'{dset}_auprc', auprc, prog_bar=True)
             exec(f'self.{dset}_auroc.reset()')
             exec(f'self.{dset}_auprc.reset()')
+
+        # Create confusion matrix
+        if self.hparams.get("use_comet_logger"):
+            self.logger.experiment.log_confusion_matrix(
+                y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
+                y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
+                labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
+                title="Test Confusion Matrix",
+                file_name="test_confusion-matrix.json",
+                overwrite=False,
+            )
+
+        # Clean stored output
+        self.dset_to_outputs["test"].clear()
 
 
     ############################################################################

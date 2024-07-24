@@ -1,5 +1,5 @@
 """
-custom_logger.py
+logging.py
 
 Description: Wrapper over PyTorch Lightning's CSVLogger to output a simpler CSV
              file (history.csv) after training.
@@ -10,10 +10,21 @@ import os
 
 # Non-standard libraries
 import pandas as pd
-from pytorch_lightning.loggers import CSVLogger
-from pytorch_lightning.utilities.distributed import rank_zero_only
+from comet_ml import ExistingExperiment
+from lightning.pytorch.loggers import CSVLogger
+from lightning.pytorch.utilities import rank_zero_only
 
 
+################################################################################
+#                                  Constants                                   #
+################################################################################
+# Comet ML Experiment Cache
+COMET_EXP_CACHE = {}
+
+
+################################################################################
+#                              Custom CSV Logger                               #
+################################################################################
 class FriendlyCSVLogger(CSVLogger):
     @rank_zero_only
     def finalize(self, status=None) -> None:
@@ -56,3 +67,34 @@ class FriendlyCSVLogger(CSVLogger):
             df[col] = (df[col] * 100).round(decimals=2)
 
         df.to_csv(os.path.join(self.log_dir, "history.csv"), index=False)
+
+
+################################################################################
+#                               Helper Functions                               #
+################################################################################
+def load_comet_logger(exp_key):
+    """
+    Load Comet ML logger for existing experiment.
+
+    Parameters
+    ----------
+    exp_key : str
+        Experiment key for existing experiment
+
+    Returns
+    -------
+    comet_ml.ExistingExperiment
+        Can be used for logging
+    """
+    # Check if in cache
+    if exp_key in COMET_EXP_CACHE:
+        return COMET_EXP_CACHE[exp_key]
+
+    # Otherwise, load for the first time
+    assert "COMET_API_KEY" in os.environ, "Please set `COMET_API_KEY` before running this script!"
+    logger = ExistingExperiment(
+        previous_experiment=exp_key,
+    )
+    # Store in cache
+    COMET_EXP_CACHE[exp_key] = logger
+    return logger

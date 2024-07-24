@@ -32,6 +32,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Mapping of SSL model name to corresponding data module
 SSL_NAME_TO_DATA_MODULE = {
+    "byol": MoCoDataModule,         # NOTE: BYOL can use MoCo's data module
     "moco": MoCoDataModule,
     "tclr": TCLRDataModule,
 }
@@ -84,7 +85,7 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
 
     Returns
     -------
-    pytorch_lightning.LightningDataModule
+    lightning.pytorch.LightningDataModule
     """
     all_hparams = {
         "full_path": full_path,
@@ -106,14 +107,22 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
         else constants.HOSPITAL_TO_IMG_DIR.get(all_hparams["hospital"])
 
     # 1. Load metadata
+    # 1.1 Prepare keyword arguments
+    load_meta_kwargs = {
+        "label_part": all_hparams.get("label_part"),
+        "relative_side": all_hparams.get("relative_side", False),
+        "include_unlabeled": all_hparams.get("include_unlabeled", False),
+        "keep_orig_label": all_hparams.get("keep_orig_label", False),
+    }
+    # NOTE: Option to load in SickKids test data
+    if all_hparams["hospital"] == "sickkids" and "include_sickkids_test_set" in all_hparams:
+        load_meta_kwargs["include_test_set"] = all_hparams["include_sickkids_test_set"]
+    # 1.2 Load metadata
     df_metadata = utils.load_metadata(
         hospital=all_hparams["hospital"],
         extract=True,
         img_dir=img_dir,
-        label_part=all_hparams.get("label_part"),
-        relative_side=all_hparams.get("relative_side", False),
-        include_unlabeled=all_hparams.get("include_unlabeled", False),
-        keep_orig_label=all_hparams.get("keep_orig_label", False),
+        **load_meta_kwargs
     )
 
     # 2. Instantiate data module
@@ -136,6 +145,12 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
                          img_dir=img_dir, **all_hparams)
     dm.setup()
 
+    # Modify hyperparameters to store training/val/test set IDs
+    for dset in ("train", "val", "test"):
+        dset_ids = dm.dset_to_ids[dset]
+        dset_ids = [] if dset_ids is None else dset_ids
+        hparams[f"{dset}_ids"] = tuple(sorted(set(dset_ids)))
+
     return dm
 
 
@@ -152,7 +167,7 @@ def get_dset_data_module(dset, **kwargs):
         
     Returns
     -------
-    pytorch_lightning.DataModule
+    lightning.pytorch.DataModule
         Each batch returns images and a dict containing metadata
     """
     # Prepare arguments for data module
@@ -230,7 +245,7 @@ def get_dset_dataloader_filtered(dset, filters=None, **overwrite_hparams):
             # Raise errors, if column not present
             if col not in df_metadata:
                 raise RuntimeError(f"Column {col} not in table provided!")
-            
+
             # CASE 1: Value is a list/tuple
             if isinstance(val, (list, tuple, set)):
                 mask = df_metadata[col].isin(val)
@@ -291,7 +306,7 @@ def get_dset_metadata(dm, hparams=None,
 
     Parameters
     ----------
-    dm : pl.LightningDataModule
+    dm : L.LightningDataModule
         DataModule used in model training run, used to load exact dset split
     hparams : dict, optional
         Experiment hyperparameters. If not provided, resort to defaults.
@@ -327,13 +342,18 @@ def get_dset_metadata(dm, hparams=None,
         "label": dm.dset_to_labels[dset],
     })
 
-    # Extract data via join
-    df_dset = utils.extract_data_from_filename_and_join(
-        df_dset,
-        hospital=hospital,
-        label_part=hparams.get("label_part"),
-        keep_orig_label=hparams.get("keep_orig_label", False),
-    )
+    # Prepare keyword arguments
+    kwargs = {
+        "hospital": hospital,
+        "label_part": hparams.get("label_part"),
+        "keep_orig_label": hparams.get("keep_orig_label", False),
+    }
+    # NOTE: Add hyperparameter for SickKids test set
+    if hospital == "sickkids" and "include_sickkids_test_set" in hparams:
+        kwargs["include_test_set"] = hparams["include_sickkids_test_set"]
+
+    # Extract metadata through join
+    df_dset = utils.extract_data_from_filename_and_join(df_dset, **kwargs)
 
     return df_dset
 

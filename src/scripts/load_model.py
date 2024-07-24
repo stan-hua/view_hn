@@ -17,21 +17,16 @@ from pathlib import Path
 import torch
 import yaml
 from efficientnet_pytorch import EfficientNet
-from tensorflow.keras.applications.efficientnet import EfficientNetB0
+# from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
 from src.data import constants
-from src.models.cpc import CPC
-from src.models.efficientnet_lstm_pl import EfficientNetLSTM
-from src.models.efficientnet_lstm_multi import EfficientNetLSTMMulti
-from src.models.efficientnet_pl import EfficientNetPL
-from src.models.ensemble_linear_eval import EnsembleLinear
-from src.models.ensemble_lstm_linear_eval import EnsembleLSTMLinear
-from src.models.linear_eval import LinearEval
-from src.models.lstm_linear_eval import LSTMLinearEval
-from src.models.moco import MoCo
-from src.models.tclr import TCLR
-from src.utilities import efficientnet_pytorch_utils as effnet_utils
+from src.models import (
+    EfficientNetLSTM, EfficientNetLSTMMulti, EfficientNetPL,
+    LinearEval, LSTMLinearEval, EnsembleLinear, EnsembleLSTMLinear,
+    BYOL, CPC, MoCo, TCLR,
+)
+from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
 ################################################################################
@@ -45,6 +40,7 @@ logging.basicConfig(level=logging.INFO)
 SSL_NAME_TO_MODEL_CLS = {
     "moco": MoCo,
     "tclr": TCLR,
+    "byol": BYOL,
 
     # Evaluation models
     "linear": LinearEval,
@@ -111,6 +107,12 @@ def load_model(hparams):
         else:
             raise NotImplementedError
 
+    # If specified, compile model
+    if hparams.get("torch_compile"):
+        LOGGER.debug("Compiling model...")
+        model = torch.compile(model)
+        LOGGER.debug("Compiling model...DONE")
+
     return model
 
 
@@ -167,6 +169,12 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
         model = model_cls.load_from_checkpoint(
             checkpoint_path=ckpt_path,
             **model_cls_kwargs)
+
+    # If specified, compile model
+    if hparams.get("torch_compile"):
+        LOGGER.debug("Compiling model...")
+        model = torch.compile(model)
+        LOGGER.debug("Compiling model...DONE")
 
     return model
 
@@ -786,10 +794,11 @@ def load_pretrained_from_model_name(model_name):
     weights = constants.MODEL_NAME_TO_WEIGHTS.get(model_name)
 
     if model_name == "cytoimagenet":
-        model = EfficientNetB0(weights=weights,
-                               include_top=False,
-                               input_shape=(None, None, 3),
-                               pooling="avg")
+        raise NotImplementedError()
+        # model = EfficientNetB0(weights=weights,
+        #                        include_top=False,
+        #                        input_shape=(None, None, 3),
+        #                        pooling="avg")
     elif model_name == "imagenet":
         model = EfficientNetPL()
         model.load_imagenet_weights()

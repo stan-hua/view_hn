@@ -8,20 +8,22 @@ Description: Implementation of Contrastive Predictive Coding (CPC) via CNN-LSTM
 
 # Non-standard libraries
 import numpy as np
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
 from torch.nn import functional as F
 
 
-class CPC(EfficientNet, pl.LightningModule):
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
+class CPC(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model, implementation of Contrastive Predictive Coding
     (CPC).
     """
     def __init__(self, num_classes=5, img_size=(256, 256),
-                 adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=256, bidirectional=True,
                  timesteps=5, extract_features=False, *args, **kwargs):
         """
@@ -33,9 +35,8 @@ class CPC(EfficientNet, pl.LightningModule):
             Number of classes to predict, by default 5
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -55,6 +56,8 @@ class CPC(EfficientNet, pl.LightningModule):
         extract_features : bool, optional
             If True, forward pass returns model output after LSTM.
         """
+        raise NotImplementedError("Fix TODOs before using!")
+
         # Instantiate EfficientNet
         self.model_name = "efficientnet-b0"
         self.feature_dim = 1280      # expected feature size from EfficientNetB0
@@ -142,18 +145,18 @@ class CPC(EfficientNet, pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam or SGD).
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
         torch.optim.Optimizer
             Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
@@ -290,7 +293,7 @@ class CPC(EfficientNet, pl.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for training epoch.
 
@@ -303,7 +306,7 @@ class CPC(EfficientNet, pl.LightningModule):
         self.log('train_loss', loss)
 
 
-    def validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self, validation_step_outputs):
         """
         Compute and log evaluation metrics for validation epoch.
 
@@ -316,7 +319,7 @@ class CPC(EfficientNet, pl.LightningModule):
         self.log('val_loss', loss)
 
 
-    def test_epoch_end(self, test_step_outputs):
+    def on_test_epoch_end(self, test_step_outputs):
         """
         Compute and log evaluation metrics for test epoch.
 

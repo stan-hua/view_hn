@@ -46,7 +46,7 @@ KEEP_BEST_WEIGHTS = False
 # Parameters to test
 SEARCH_SPACE = {
         'lr': [1e-3, 1e-4, 1e-5],
-        'adam': [True, False],
+        # 'adam': [True, False],
         'momentum': [0.8, 0.9],
         'weight_decay': [5e-3, 5e-4],
         "grad_clip_norm": [None, 1., 2.],

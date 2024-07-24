@@ -9,19 +9,26 @@ import argparse
 import logging
 import os
 import random
+import shutil
+import sys
 from datetime import datetime
 
 # Non-standard libraries
+import comet_ml             # NOTE: Recommended by Comet ML
 import numpy as np
 import torch
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+from lightning.pytorch import Trainer
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint, StochasticWeightAveraging, EarlyStopping
+)
+from lightning.pytorch.loggers import CometLogger
 
 # Custom libraries
 from src.data import constants
-from src.drivers import load_data, load_model
-from src.utilities.custom_logger import FriendlyCSVLogger
+from src.scripts import load_data, load_model
+from src.utils import config as config_utils
+from src.utils.logging import FriendlyCSVLogger
+from src.utils.influence import plot_most_helpful_harmful_examples
 
 
 ################################################################################
@@ -30,9 +37,17 @@ from src.utilities.custom_logger import FriendlyCSVLogger
 # Configure logging
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
 
 # Default random seed
 SEED = None
+
+# Comet-ML project name
+COMET_PROJECT = "renal-view"
 
 
 ################################################################################
@@ -246,7 +261,7 @@ def set_seed(seed=SEED, include_algos=False):
         performance, by default False.
     """
     # If seed is None, don't set seed
-    if seed is None:
+    if seed is None or seed < 0:
         LOGGER.warning(f"Random seed is not set!")
         return
 
@@ -268,8 +283,8 @@ def set_seed(seed=SEED, include_algos=False):
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
-def run(hparams, dm, results_dir, train=True, test=True, fold=0,
-        checkpoint=True, early_stopping=False, version_name="1"):
+def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
+        checkpoint=True, early_stopping=False, exp_name="1"):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
 
@@ -278,7 +293,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
     hparams : dict
         Contains (data-related, model-related) setup parameters for training and
         testing
-    dm : pl.LightningDataModule
+    dm : L.LightningDataModule
         Data module, which already called .setup()
     results_dir : str
         Path to directory containing trained model and/or test results
@@ -291,51 +306,88 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
         If performing cross-validation, supplies fold index. Index ranges
         between 0 to (num_folds - 1). If train-val-test split, remains 0, by
         default 0.
+    swa : bool, optional
+        If True, perform Stochastic Weight Averaging (SWA), by default True.
     checkpoint : bool, optional
         If True, saves model (last epoch) to checkpoint, by default True
     early_stopping : bool, optional
         If True, performs early stopping on plateau of val loss, by default
         False.
-    version_name : str, optional
-        If provided, specifies current experiment number. Version will be shown
-        in the logging folder, by default "1"
+    exp_name : str, optional
+        Name of experiment, by default "1"
     """
     # Create parent directory if not exists
-    if not os.path.exists(f"{results_dir}/{version_name}"):
-        os.mkdir(f"{results_dir}/{version_name}")
+    if not os.path.exists(f"{results_dir}/{exp_name}"):
+        os.makedirs(f"{results_dir}/{exp_name}")
 
     # Directory for current experiment
-    experiment_dir = f"{results_dir}/{version_name}/{fold}"
+    experiment_dir = f"{results_dir}/{exp_name}/{fold}"
 
-    # Create model (from scratch) or load pretrained
-    model = load_model.load_model(hparams=hparams)
+    # Check if experiment run exists (i.e., resuming training / evaluation)
+    run_exists = os.path.exists(experiment_dir)
+    if run_exists and os.listdir(experiment_dir):
+        LOGGER.info("Found pre-existing experiment directory! Resuming training/evaluation...")
 
     # Loggers
-    csv_logger = FriendlyCSVLogger(results_dir, name=version_name,
-                                   version=str(fold))
-    tensorboard_logger = TensorBoardLogger(results_dir, name=version_name,
-                                           version=str(fold))
-    # TODO: Consider logging experiments on Weights & Biases
-    # wandb_logger = WandbLogger(save_dir=results_dir, name=version_name,
-    #                            version=str(fold), project="view_hn")
+    loggers = []
+    # If specified, use Comet ML for logging
+    if hparams.get("use_comet_logger"):
+        if hparams.get("debug"):
+            LOGGER.info("Comet ML Logger disabled during debugging...")
+            hparams["use_comet_logger"] = False
+        elif not os.environ.get("COMET_API_KEY"):
+            LOGGER.error(
+                "Please set `COMET_API_KEY` environment variable before running! "
+                "Or set `use_comet_logger` to false in config file..."
+            )
+        else:
+            exp_key = None
+            # If run exists, get stored experiment key to resume logging
+            if run_exists:
+                old_hparams = load_model.get_hyperparameters(
+                    exp_name=hparams["exp_name"], on_error="raise")
+                exp_key = old_hparams.get("comet_exp_key")
+
+            # Set up LOGGER
+            comet_logger = CometLogger(
+                api_key=os.environ["COMET_API_KEY"],
+                project_name=COMET_PROJECT,
+                experiment_name=hparams["exp_name"],
+                experiment_key=exp_key
+            )
+
+            # Store experiment key
+            hparams["comet_exp_key"] = comet_logger.experiment.get_key()
+
+            # Add tags
+            tags = hparams.get("tags")
+            if tags:
+                comet_logger.experiment.add_tags(tags)
+            loggers.append(comet_logger)
+    # Add custom CSV logger
+    loggers.append(FriendlyCSVLogger(results_dir, name=exp_name, version=str(fold)))
 
     # Flag for presence of validation set
     includes_val = (hparams["train_val_split"] < 1.0) or \
         (hparams["cross_val_folds"] > 1)
 
-    # Callbacks (model checkpoint)
+    # Callbacks
     callbacks = []
+    # 1. Model checkpointing
     if checkpoint:
         callbacks.append(
             ModelCheckpoint(dirpath=experiment_dir, save_last=True,
                             monitor="val_loss" if includes_val else None))
+    # 2. Stochastic Weight Averaging
+    if swa:
+        callbacks.append(StochasticWeightAveraging(swa_lrs=1e-2))
+    # 3. Early stopping
     if early_stopping:
-        # TODO: Implement this
-        raise NotImplementedError
+        callbacks.append(EarlyStopping(monitor="val_loss", mode="min"))
 
     # Initialize Trainer
     trainer = Trainer(default_root_dir=experiment_dir,
-                      gpus=1,
+                      devices="auto", accelerator="auto",
                       num_sanity_val_steps=0,
                       log_every_n_steps=20,
                       accumulate_grad_batches=hparams["accum_batches"],
@@ -343,9 +395,8 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
                       gradient_clip_val=hparams["grad_clip_norm"],
                       max_epochs=hparams["stop_epoch"],
                       enable_checkpointing=checkpoint,
-                      # stochastic_weight_avg=True,
                       callbacks=callbacks,
-                      logger=[csv_logger, tensorboard_logger],
+                      logger=loggers,
                       fast_dev_run=hparams["debug"],
                       )
 
@@ -356,46 +407,91 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0,
         num_patients_val = len(np.unique(dm.dset_to_ids["val"]))
         LOGGER.info(f"[Validation] Num Patients: {num_patients_val}")
 
-    # (1) Perform training
+    # Create model (from scratch) or load pretrained
+    model = load_model.load_model(hparams=hparams)
+
+    # 1. Perform training
     if train:
+        # If resuming training
+        ckpt_path = None
+        if run_exists:
+            ckpt_path = "last"
+
+        # Create dataloaders
         train_loader = dm.train_dataloader()
         val_loader = dm.val_dataloader() if includes_val else None
-        trainer.fit(model, train_dataloaders=train_loader,
-                    val_dataloaders=val_loader)
 
-    # (2) Perform testing
+        # Perform training
+        try:
+            trainer.fit(model, train_dataloaders=train_loader,
+                        val_dataloaders=val_loader,
+                        ckpt_path=ckpt_path)
+        except KeyboardInterrupt:
+            # Delete experiment directory
+            if os.path.exists(experiment_dir):
+                LOGGER.error("Caught keyboard interrupt! Deleting experiment directory")
+                shutil.rmtree(experiment_dir)
+            exit(1)
+
+    # 2. Perform testing
     if test:
-        trainer.test(model=model, test_dataloaders=dm.test_dataloader())
+        trainer.test(model=model, dataloaders=dm.test_dataloader())
+
+    # 3. Use influence functions to find harmful training images
+    # TODO: Consider dumping to a file, if comet not available
+    if hparams.get("use_influence_function") and hparams.get("use_comet_logger"):
+        LOGGER.info("Now using influence functions to compute the most helpful/harmful training examples")
+        # For each label, get the most helpful/harmful training examples across
+        # all misclassified examples
+        fig = plot_most_helpful_harmful_examples(
+            model, hparams,
+            train_loader=dm.train_dataloader(),
+            test_loader=dm.val_dataloader(),
+        )
+
+        # Log figures
+        comet_logger.experiment.log_figure(
+            figure_name=f"Influential Training Examples for Worst Misclassified Validation Set Images",
+            figure=fig,
+            overwrite=True,
+        )
 
 
-def main(args):
+def main(conf):
     """
     Main method to run experiments
 
     Parameters
     ----------
-    args : argparse.Namespace
-        Contains arguments needed to run experiments
+    conf : configobj.ConfigObj
+        Contains configurations needed to run experiments
     """
-    # 0. Set random seed
-    set_seed(args.seed)
+    # Process configuration parameters
+    # Flatten nesting in configuration file
+    hparams = config_utils.flatten_nested_dict(conf)
+    # Add constants
+    if "img_size" not in hparams:
+        hparams["img_size"] = constants.IMG_SIZE
+    if "num_classes" not in hparams:
+        hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"])
 
-    # 0. Set up hyperparameters
-    hparams = {
-        "img_size": constants.IMG_SIZE,
-        "num_classes": \
-            len(constants.LABEL_PART_TO_CLASSES[args.label_part]["classes"])}
-    hparams.update(vars(args))
+    # 0. Set random seed
+    set_seed(hparams.get("seed"))
 
     # 0. Arguments for experiment
     experiment_hparams = {
         "train": hparams["train"],
         "test": hparams["test"],
         "checkpoint": hparams["checkpoint"],
-        "version_name": hparams["exp_name"],
+        "exp_name": hparams["exp_name"],
     }
 
-    hparams["accum_batches"] = args.batch_size if args.full_seq else None
+    # May run out of memory on full videos, so accumulate gradients instead
+    hparams["accum_batches"] = hparams["batch_size"] if hparams["full_seq"] else 1
+
+    # If specified to use GradCAM loss, ensure segmentation masks are loaded
+    if hparams.get("use_gradcam_loss"):
+        hparams["load_seg_mask"] = True
 
     # 1. Set up data module
     dm = load_data.setup_data_module(hparams)
@@ -403,7 +499,7 @@ def main(args):
     # 2.1 Run experiment
     if hparams["cross_val_folds"] == 1:
         run(hparams, dm, constants.DIR_RESULTS, **experiment_hparams)
-    # 2.2 Run experiment  w/ kfold cross-validation)
+    # 2.2 Run experiment w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)
@@ -414,10 +510,21 @@ def main(args):
 if __name__ == "__main__":
     # 0. Initialize ArgumentParser
     PARSER = argparse.ArgumentParser()
-    init(PARSER)
+    PARSER.add_argument(
+        "-c", "--config",
+        type=str,
+        help=f"Name of configuration file under `{constants.DIR_CONFIG}`"
+    )
 
     # 1. Get arguments
     ARGS = PARSER.parse_args()
 
-    # 2. Run main
-    main(ARGS)
+    # 2. Load configurations
+    CONF = config_utils.load_config(__file__, ARGS.config)
+    LOGGER.debug("""
+################################################################################
+#                       Starting `model_training` Script                       #
+################################################################################""")
+
+    # 3. Run main
+    main(CONF)

@@ -9,7 +9,7 @@ Description: Implementation of TCLR (Temporal Contrastive Learning) with an
 # Non-standard libraries
 import numpy as np
 import lightly
-import pytorch_lightning as pl
+import lightning as L
 import torch
 from efficientnet_pytorch import EfficientNet
 from lightly.models.modules.heads import SimCLRProjectionHead
@@ -18,7 +18,9 @@ from lightly.models.modules.heads import SimCLRProjectionHead
 ################################################################################
 #                               TCLR Model Class                               #
 ################################################################################
-class TCLR(pl.LightningModule):
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
+class TCLR(L.LightningModule):
     """
     TCLR class for self-supervised pretraining
     """
@@ -26,7 +28,7 @@ class TCLR(pl.LightningModule):
     def __init__(self,
                  subclip_size=3, img_size=(256, 256),
                  n_lstm_layers=1, hidden_dim=512, bidirectional=False,
-                 adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  temperature=0.1, extract_features=False, *args, **kwargs):
         """
         Initialize TCLR object
@@ -44,9 +46,8 @@ class TCLR(pl.LightningModule):
             Dimension/size of hidden layers, by default 512
         bidirectional : bool, optional
             If True, trains a bidirectional LSTM, by default False
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -60,6 +61,7 @@ class TCLR(pl.LightningModule):
         extract_features : bool, optional
             If True, forward pass returns model output before penultimate layer.
         """
+        raise NotImplementedError("Fix TODOs before using!")
         super().__init__()
 
         self.model_name = "efficientnet-b0"
@@ -96,24 +98,22 @@ class TCLR(pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam/SGD) and learning rate scheduler.
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
-        tuple of (torch.optim.Optimizer, torch.optim.LRScheduler)
-            Contains an initialized optimizer and learning rate scheduler. Each
-            are wrapped in a list.
+        torch.optim.Optimizer
+            Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
-
         return optimizer
 
 
@@ -461,7 +461,7 @@ class TCLR(pl.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for training epoch.
 
@@ -477,7 +477,7 @@ class TCLR(pl.LightningModule):
         self.custom_histogram_weights()
 
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for validation epoch.
 

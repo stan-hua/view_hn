@@ -4,3 +4,8 @@ src/data
 .pytest_cache
 src/models/siamnet.py
 .vscode/settings.json
+*.out
+renal-view
+.vscode
+config/model_training/*
+.cometml-runs

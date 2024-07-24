@@ -12,9 +12,9 @@ import os
 # Non-standard libraries
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
+import lightning as L
 import torch
-import torchvision.transforms as T
+import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 # from maskedtensor import masked_tensor
@@ -36,7 +36,7 @@ IMAGE_MODES = {1: ImageReadMode.GRAY, 3: ImageReadMode.RGB}
 ################################################################################
 #                                   Classes                                    #
 ################################################################################
-class SegmentedUSModule(pl.LightningDataModule):
+class SegmentedUSModule(L.LightningDataModule):
     """
     Top-level object used to access all data preparation and loading
     functionalities.
@@ -89,7 +89,7 @@ class SegmentedUSModule(pl.LightningDataModule):
         self.dataset = None
         self.full_seq = full_seq
         self.mode = mode
-        self.img_size = kwargs.get("img_size", 258)
+        self.img_size = kwargs.get("img_size", constants.IMG_SIZE)
 
         ########################################################################
         #                        DataLoader Parameters                         #

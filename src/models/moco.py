@@ -10,7 +10,7 @@ import copy
 
 # Non-standard libraries
 import lightly
-import pytorch_lightning as pl
+import lightning as L
 import torch
 from efficientnet_pytorch import EfficientNet
 from lightly.models.modules.heads import MoCoProjectionHead
@@ -20,7 +20,7 @@ from lightly.models.utils import (batch_shuffle, batch_unshuffle,
 # Custom libraries
 from src.loss.soft_ntx_ent_loss import SoftNTXentLoss
 from src.loss.same_label_con_loss import SameLabelConLoss
-from src.utilities import efficientnet_pytorch_utils as effnet_utils
+from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
 ################################################################################
@@ -28,17 +28,18 @@ from src.utilities import efficientnet_pytorch_utils as effnet_utils
 ################################################################################
 # TODO: Consider same-patient memory banks to avoid conflict between
 # `memory_bank_size` and `same_label` (in SSL data module)
-class MoCo(pl.LightningModule):
+class MoCo(L.LightningModule):
     """
     MoCo for self-supervised learning.
     """
-    def __init__(self, img_size=(256, 256), adam=True, lr=0.0005,
+    def __init__(self, img_size=(256, 256), optimizer="adamw", lr=0.0005,
                  momentum=0.9, weight_decay=0.0005,
                  memory_bank_size=4096, temperature=0.1,
                  exclude_momentum_encoder=False,
                  same_label=False,
                  custom_ssl_loss=None,
                  multi_objective=False,
+                 effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
         Initialize MoCo object.
@@ -47,9 +48,8 @@ class MoCo(pl.LightningModule):
         ----------
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -75,6 +75,8 @@ class MoCo(pl.LightningModule):
         multi_objective : bool, optional
             If True, optimizes for both supervised loss and SSL loss. Defaults
             to False.
+        effnet_name : str, optional
+            Name of EfficientNet backbone to use
         """
         super().__init__()
 
@@ -82,7 +84,7 @@ class MoCo(pl.LightningModule):
         self.same_label = same_label
 
         # Instantiate EfficientNet
-        self.model_name = "efficientnet-b0"
+        self.model_name = effnet_name
         self.conv_backbone = EfficientNet.from_name(
             self.model_name, image_size=img_size, include_top=False)
         self.feature_dim = 1280      # expected feature size from EfficientNetB0
@@ -128,6 +130,9 @@ class MoCo(pl.LightningModule):
             num_classes = kwargs.get("num_classes", 5)
             self.fc_1 = torch.nn.Linear(self.feature_dim, num_classes)
 
+        # Store outputs
+        self.dset_to_outputs = {"train": [], "val": [], "test": []}
+
 
     def load_imagenet_weights(self):
         """
@@ -142,24 +147,22 @@ class MoCo(pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam/SGD) and learning rate scheduler.
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
-        tuple of (torch.optim.Optimizer, torch.optim.LRScheduler)
-            Contains an initialized optimizer and learning rate scheduler. Each
-            are wrapped in a list.
+        torch.optim.Optimizer
+            Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
-
         return optimizer
 
 
@@ -235,6 +238,9 @@ class MoCo(pl.LightningModule):
 
         self.log("train_loss", loss)
 
+        # Prepare result
+        self.dset_to_outputs["train"].append({"loss": loss})
+
         return loss
 
 
@@ -307,21 +313,20 @@ class MoCo(pl.LightningModule):
 
         self.log("val_loss", loss)
 
+        # Prepare result
+        self.dset_to_outputs["val"].append({"loss": loss})
+
         return loss
 
 
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self):
         """
         Compute and log evaluation metrics for training epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every training step in the epoch
         """
+        outputs = self.dset_to_outputs["train"]
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         self.log('epoch_train_loss', loss)
 
@@ -329,15 +334,11 @@ class MoCo(pl.LightningModule):
         self.custom_histogram_weights()
 
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """
         Compute and log evaluation metrics for validation epoch.
-
-        Parameters
-        ----------
-        outputs: dict
-            Dict of outputs of every validation step in the epoch
         """
+        outputs = self.dset_to_outputs["val"]
         loss = torch.stack(outputs).mean()
         self.log('epoch_val_loss', loss)
 

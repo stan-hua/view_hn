@@ -7,7 +7,7 @@ Description: Multi-output CNN-LSTM using an EfficientNet convolutional backbone.
 """
 
 # Non-standard libraries
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
@@ -26,12 +26,16 @@ DEFAULT_LABEL_TO_NUM_CLASSES = {
 ################################################################################
 #                         EfficientNetLSTMMulti Class                          #
 ################################################################################
-class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
+# TODO: Update (training/validation/test)_step for PL integration
+# TODO: Update on_(train/val/test)_epoch_end for PL integration
+# TODO: Add hyperparameter for EfficientNet backbone
+# TODO: Consider adding Grokfast
+class EfficientNetLSTMMulti(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model for sequence-based classification.
     """
     def __init__(self, label_to_num_classes=None, img_size=(256, 256),
-                 adam=True, lr=0.0005, momentum=0.9, weight_decay=0.0005,
+                 optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  n_lstm_layers=1, hidden_dim=512, bidirectional=False,
                  *args, **kwargs):
         """
@@ -45,9 +49,8 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
             DEFAULT_LABEL_TO_NUM_CLASSES
         img_size : tuple, optional
             Expected image's (height, width), by default (256, 256)
-        adam : bool, optional
-            If True, use Adam optimizer. Otherwise, use Stochastic Gradient
-            Descent (SGD), by default True.
+        optimizer : str, optional
+            Choice of optimizer, by default "adamw"
         lr : float, optional
             Optimizer learning rate, by default 0.0001
         momentum : float, optional
@@ -63,6 +66,8 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
         bidirectional : bool, optional
             If True, trains a bidirectional LSTM, by default True
         """
+        raise NotImplementedError("Fix TODOs before using!")
+
         # INPUT: Default multi-output prediction
         if not label_to_num_classes:
             label_to_num_classes = DEFAULT_LABEL_TO_NUM_CLASSES
@@ -140,18 +145,18 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
 
     def configure_optimizers(self):
         """
-        Initialize and return optimizer (Adam or SGD).
+        Initialize and return optimizer (AdamW or SGD).
 
         Returns
         -------
         torch.optim.Optimizer
             Initialized optimizer.
         """
-        if self.hparams.adam:
-            optimizer = torch.optim.Adam(self.parameters(),
-                                         lr=self.hparams.lr,
-                                         weight_decay=self.hparams.weight_decay)
-        else:
+        if self.hparams.optimizer == "adamw":
+            optimizer = torch.optim.AdamW(self.parameters(),
+                                          lr=self.hparams.lr,
+                                          weight_decay=self.hparams.weight_decay)
+        elif self.hparams.optimizer == "sgd":
             optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
@@ -327,7 +332,7 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         """
         Compute and log evaluation metrics for training epoch.
 
@@ -345,7 +350,7 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
             exec(f"self.train_acc_{label}.reset()")
 
 
-    def validation_epoch_end(self, validation_step_outputs):
+    def on_validation_epoch_end(self, validation_step_outputs):
         """
         Compute and log evaluation metrics for validation epoch.
 
@@ -363,7 +368,7 @@ class EfficientNetLSTMMulti(EfficientNet, pl.LightningModule):
             exec(f"self.val_acc_{label}.reset()")
 
 
-    def test_epoch_end(self, test_step_outputs):
+    def on_test_epoch_end(self, test_step_outputs):
         """
         Compute and log evaluation metrics for test epoch.
 

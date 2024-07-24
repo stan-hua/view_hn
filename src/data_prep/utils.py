@@ -91,7 +91,7 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
     return df_metadata
 
 
-# TODO: Add second test path
+# NOTE: Concatenates externally split test set, by default
 def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            label_part=None,
                            keep_orig_label=False,
@@ -100,7 +100,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
                            relative_side=False,
                            include_unlabeled=False,
                            img_dir=constants.DIR_IMAGES,
-                           include_test_set=False,
+                           include_test_set=True,
                            test_path=constants.SK_TEST_METADATA_FILE,
                            ):
     """
@@ -140,7 +140,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
         constants.DIR_IMAGES
     include_test_set : bool, optional
         If True and path to test metadata file specified, include test set
-        labels in loaded metadata, by default False.
+        labels in loaded metadata, by default True.
     test_path : bool, optional
         If <include_test_set>, this path points to the metadata file for the
         internal test data, by default constants.SK_TEST_METADATA.
@@ -173,7 +173,7 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -182,20 +182,21 @@ def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
         assert img_dir is not None, "Please provide `img_dir` as an argument!"
 
         # Get all image paths
-        all_img_paths = glob.glob(os.path.join(img_dir, "*"))
+        all_img_paths = glob.glob(os.path.join(img_dir, "*.*"))
         df_others = pd.DataFrame({"filename": all_img_paths})
-        df_others.filename = df_others.filename.map(os.path.basename)
-        
+        # Only keep filename
+        df_others["filename"] = df_others["filename"].map(os.path.basename)
+
         # Remove found paths to already labeled images
-        labeled_img_paths = set(df_metadata.filename.tolist())
-        df_others = df_others[~df_others.filename.isin(labeled_img_paths)]
+        labeled_img_paths = set(df_metadata["filename"].tolist())
+        df_others = df_others[~df_others["filename"].isin(labeled_img_paths)]
 
         # Exclude Stanford data
-        df_others = df_others[~df_others.filename.str.startswith("SU2")]
+        df_others = df_others[~df_others["filename"].str.startswith("SU2")]
 
         # NOTE: Unlabeled images have label "Other"
         df_others["label"] = "Other"
-        
+
         # Merge labeled and unlabeled data
         df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
 
@@ -281,7 +282,7 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -290,16 +291,16 @@ def load_stanford_metadata(path=constants.SU_METADATA_FILE,
         assert img_dir is not None, "Please provide `img_dir` as an argument!"
 
         # Get all image paths
-        all_img_paths = glob.glob(os.path.join(img_dir, "*"))
+        all_img_paths = glob.glob(os.path.join(img_dir, "*.*"))
         df_others = pd.DataFrame({"filename": all_img_paths})
-        df_others.filename = df_others.filename.map(os.path.basename)
+        df_others["filename"] = df_others["filename"].map(os.path.basename)
         
         # Remove found paths to already labeled images
-        labeled_img_paths = set(df_metadata.filename.tolist())
-        df_others = df_others[~df_others.filename.isin(labeled_img_paths)]
+        labeled_img_paths = set(df_metadata["filename"].tolist())
+        df_others = df_others[~df_others["filename"].isin(labeled_img_paths)]
 
         # Only include Stanford data
-        df_others = df_others[df_others.filename.str.startswith("SU2")]
+        df_others = df_others[df_others["filename"].str.startswith("SU2")]
 
         # NOTE: Unlabeled images have label "Other"
         df_others["label"] = "Other"
@@ -390,7 +391,7 @@ def load_uiowa_metadata(path=constants.UIOWA_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -469,7 +470,7 @@ def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -548,7 +549,7 @@ def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -627,7 +628,7 @@ def load_sickkids_silent_trial_metadata(path=constants.SK_ST_METADATA_FILE,
         df_metadata["orig_label"] = df_metadata["label"]
 
     # Change label to side/plane, if specified
-    if label_part:
+    if label_part in ("plane", "side"):
         df_metadata["label"] = df_metadata["label"].map(
             lambda x: extract_from_label(x, extract=label_part))
 
@@ -1258,7 +1259,9 @@ def restrict_seq_len(df_metadata, n=18):
 ################################################################################
 #                                Data Splitting                                #
 ################################################################################
-def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
+def split_by_ids(patient_ids, train_split=0.8,
+                 force_train_ids=None,
+                 seed=constants.SEED):
     """
     Splits list of patient IDs into training and val/test set.
 
@@ -1273,6 +1276,8 @@ def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
         List of patient IDs (IDs can repeat).
     train_split : float, optional
         Proportion of total data to leave for training, by default 0.8
+    force_train_ids : list, optional
+        List of patient IDs to force into the training set
     seed : int, optional
         If provided, sets random seed to value, by default constants.SEED
 
@@ -1305,13 +1310,22 @@ def split_by_ids(patient_ids, train_split=0.8, seed=constants.SEED):
     # Randomly choose patients to add to training set until full
     train_ids = set()
     n_train_curr = 0
+
+    # If provided, strictly move patients into training set
+    if force_train_ids:
+        for forced_id in force_train_ids:
+            if forced_id in id_to_len:
+                train_ids.add(forced_id)
+                n_train_curr += 1
+                shuffled_unique_ids.remove(forced_id)
+
     for _id in shuffled_unique_ids:
         # Add patient if number of training samples doesn't exceed upper bound
         if n_train_curr + id_to_len[_id] <= n_train_max:
             train_ids.add(_id)
             n_train_curr += id_to_len[_id]
 
-        # Stop when there is roughly enough in the training set 
+        # Stop when there is roughly enough in the training set
         if n_train_curr >= n_train_min:
             break
 
@@ -1421,7 +1435,7 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     Perform preprocessing on image array:
         (1) Center crop 150 x 150 (by default)
         (2) Resize to 256 x 256 (by default)
-        (3) Histogram normalize image
+        (3) Histogram equalize image
 
     Parameters
     ----------
@@ -1458,7 +1472,7 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     # Resize image
     resized_img = cv2.resize(img, resize_dims)
 
-    # Histogram normalize images
+    # Histogram equalize images
     equalized_img = equalize_hist(resized_img)
 
     # Scale back to 255

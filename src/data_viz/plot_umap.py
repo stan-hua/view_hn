@@ -9,6 +9,7 @@ import argparse
 import logging
 import os
 import random
+import sys
 
 # Non-standard libraries
 import cv2
@@ -23,8 +24,9 @@ from sklearn.preprocessing import StandardScaler
 # Custom libraries
 from src.data import constants
 from src.data_prep import utils
-from src.drivers.embed import get_embeds
 from src.data_viz import utils as viz_utils
+from src.scripts.embed import get_embeds
+from src.utils.logging import load_comet_logger
 
 
 ################################################################################
@@ -32,9 +34,18 @@ from src.data_viz import utils as viz_utils
 ################################################################################
 # Configure logging
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,
+)
 
 # Disable logging
-logging.disable()
+# logging.disable()
+
+# Set random seed
+random.seed(constants.SEED)
 
 # Plot theme (light/dark)
 THEME = "dark"
@@ -70,6 +81,7 @@ def plot_umap(embeds, labels, highlight=None, label_order=None,
               s=None, alpha=0.8, line=False, legend=True, palette="tab10",
               title="", save=False, save_dir=constants.DIR_FIGURES,
               filename="umap", filename_suffix="",
+              comet_logger=None,
               **scatterplot_kwargs):
     """
     Plot 2D U-Map of extracted image embeddings, colored by <labels>.
@@ -106,6 +118,8 @@ def plot_umap(embeds, labels, highlight=None, label_order=None,
         Filename to save plot as. Not including extension, by default "umap"
     filename_suffix : str, optional
         If provided, attach as suffix to filename provided, by default ""
+    comet_logger : comet_ml.Experiment, optional
+        If provided, log figure to Comet ML.
     **scatterplot_kwargs : Keyword arguments to pass into `sns.scatterplot`
     """
     # Plot configurations
@@ -189,7 +203,7 @@ def plot_umap(embeds, labels, highlight=None, label_order=None,
 
         # Check if UMAP directory exists
         if not os.path.isdir(f"{save_dir}umap/"):
-            os.mkdir(f"{save_dir}umap/")
+            os.makedirs(f"{save_dir}umap/")
 
         # Check if subdirectory exists
         if not os.path.isdir(os.path.dirname(full_path)):
@@ -198,6 +212,14 @@ def plot_umap(embeds, labels, highlight=None, label_order=None,
         plt.savefig(full_path,
                     bbox_inches='tight',
                     dpi=400)
+
+    # Save figure to Comet
+    if comet_logger is not None:
+        comet_logger.log_figure(
+            figure_name=f"{filename}{filename_suffix}.png",
+            figure=plt.gcf(),
+            overwrite=True,
+        )
 
 
 def plot_umap_all_patients(exp_name, df_data, label_col="patient",
@@ -640,6 +662,7 @@ def main(exp_name,
          n_patient_umap=False,
          cluster_umap=False,
          dset=constants.DEFAULT_EVAL_DSET,
+         comet_exp_key=None,
          ):
     """
     Retrieves embeddings from specified pretrained model. Then plot UMAPs.
@@ -660,9 +683,14 @@ def main(exp_name,
     dset : str or list, optional
         1+ dataset split or test dataset names, whose embeddings to plot, by
         default constants.DEFAULT_EVAL_DSET
+    comet_exp_key : str, optional
+        If provided, log UMAPs to Comet ML.
     """
-    # Set random seed
-    random.seed(constants.SEED)
+    # INPUT: Load Comet ML Logger
+    comet_logger = None
+    if comet_exp_key:
+        LOGGER.info("Logging UMAPs to Comet ML!")
+        comet_logger = load_comet_logger(exp_key=comet_exp_key)
 
     # INPUT: Ensure `dset` is a list
     dsets = [dset] if isinstance(dset, str) else dset
@@ -728,8 +756,10 @@ def main(exp_name,
     df_data = df_data.loc[:, ~df_data.columns.duplicated()]
 
     # 0. Shared UMAP kwargs
-    plot_kwargs = {"filename_suffix": f"({dsets[0]})"
-                                      if len(dsets) == 1 else ""}
+    plot_kwargs = {
+        "filename_suffix": f"({dsets[0]})" if len(dsets) == 1 else "",
+        "comet_logger": comet_logger,
+    }
 
     # 1. Plot UMAP of all patients, colored by hospital
     if hospital_umap and len(set(hospitals)) > 1:
@@ -795,9 +825,6 @@ def main(exp_name,
     # Close all figures
     plt.close("all")
 
-    # Unset random seed
-    random.seed()
-
 
 ################################################################################
 #                                  User Input                                  #
@@ -814,12 +841,15 @@ def init(parser):
     arg_help = {
         "exp_name": "Name of experiment",
         "dset": "Name of evaluation splits or datasets",
+        "comet_exp_key": "If logging to Comet ML, the Experiment key"
     }
 
     parser.add_argument("--exp_name", required=True, nargs="+",
                         help=arg_help["exp_name"])
     parser.add_argument("--dset", required=True, nargs="+",
                         help=arg_help["dset"])
+    parser.add_argument("--comet_exp_key", default=None,
+                        help=arg_help["comet_exp_key"])
 
 
 if __name__ == "__main__":
@@ -833,5 +863,5 @@ if __name__ == "__main__":
     # 2. Run main flow
     for EXP_NAME in ARGS.exp_name:
         for DSET in ARGS.dset:
-            main(exp_name=EXP_NAME, dset=DSET)
-        main(exp_name=EXP_NAME, dset=ARGS.dset)
+            main(exp_name=EXP_NAME, dset=DSET, comet_exp_key=ARGS.comet_exp_key)
+        main(exp_name=EXP_NAME, dset=ARGS.dset, comet_exp_key=ARGS.comet_exp_key)
