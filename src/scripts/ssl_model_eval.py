@@ -20,6 +20,7 @@ from jinja2 import Environment
 # Custom libraries
 from src.data import constants
 from src.scripts import load_data, load_model, model_eval, model_training
+from src.utils import config as config_utils
 
 
 ################################################################################
@@ -87,21 +88,22 @@ def init(parser):
         ArgumentParser object
     """
     arg_help = {
-        "exp_name": "Base name of experiment (for SSL trained)",
-        "dset": "List of dataset split or test dataset name to evaluate",
-        "augment_training": "If flagged, use MoCo augmentations during "
-                            "fine-tuning."
+        "exp_names": "Experiment names of SSL-pretrained models to evaluate",
+        "dsets": "List of dataset split or test dataset name to evaluate",
+        "config": f"Name of configuration file under `{constants.DIR_CONFIG}` "
+                  "to overwrite SSL pre-training parameters.",
     }
-
-    parser.add_argument("--exp_name", help=arg_help["exp_name"],
+    parser.add_argument(
+        "-c", "--config",
+        type=str,
+        help=arg_help["config"]
+    )
+    parser.add_argument("--exp_names", help=arg_help["exp_names"],
                         nargs="+",
                         required=True)
-    parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
+    parser.add_argument("--dsets", default=[constants.DEFAULT_EVAL_DSET],
                         nargs='+',
-                        help=arg_help["dset"])
-    parser.add_argument("--augment_training",
-                        action="store_true", default=False,
-                        help=arg_help["augment_training"])
+                        help=arg_help["dsets"])
 
 
 def train_eval_model(exp_name, model_type="linear_lstm",
@@ -146,15 +148,15 @@ def train_eval_model(exp_name, model_type="linear_lstm",
         return
 
     # Overwrite hyperparameters
-    eval_hparams = hparams.copy()
-    eval_hparams["exp_name"] = exp_eval_name
-    eval_hparams["label_part"] = label_part
-    eval_hparams["freeze_weights"] = freeze_weights
-    eval_hparams["augment_training"] = augment_training
+    hparams = hparams.copy()
+    hparams["exp_name"] = exp_eval_name
+    hparams["label_part"] = label_part
+    hparams["freeze_weights"] = freeze_weights
+    hparams["augment_training"] = augment_training
 
     # Attempt training
     try:
-        model_training.main(eval_hparams)
+        model_training.main(hparams)
     except Exception as error_msg:
         # On exception, delete folder
         exp_dir = load_model.get_exp_dir(exp_eval_name, on_error="ignore")
@@ -179,9 +181,6 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
     **kwargs : dict, optional
         Keyword arguments to pass into `model_training.main()`
     """
-    # 0. Create copy of kwargs to avoid in-place edits
-    kwargs = kwargs.copy()
-
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
     if not os.path.exists(model_dir):
@@ -192,15 +191,19 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
     ckpt_path = find_best_ckpt_path(model_dir)
 
     # 2. Get experiment hyperparameters
-    hparams = load_model.get_hyperparameters(model_dir)
+    hparams = load_model.get_hyperparameters(model_dir).copy()
 
     # 3. Determine SSL model type
     ssl_model = hparams.get("ssl_model", "moco")
     # 3.1 Update model type, if loaded model was an eval model
     if hparams.get("ssl_eval_linear"):
         ssl_model = "linear"
+        hparams["tags"].append("from_ssl_eval")
     elif hparams.get("ssl_eval_linear_lstm"):
         ssl_model = "linear_lstm"
+        hparams["tags"].append("from_ssl_eval")
+    else:
+        hparams["tags"].append("from_ssl_pretrain")
 
     # 4. Train models on side/plane prediction with/without fine-tuning
     for model_type in MODEL_TYPES:
@@ -414,34 +417,33 @@ def find_best_ckpt_path(path_exp_dir):
 ################################################################################
 #                                  Main Flow                                   #
 ################################################################################
-def main(args):
+def main(exp_names, dsets, hparams):
     """
     Perform evaluation of SSL model.
 
     Parameters
     ----------
-    args : argparse.Namespace
-        Parsed arguments
+    exp_names : list
+        List of experiments to evaluate
+    dsets : list
+        List of datasets to evaluate
+    hparams : dict
+        Arguments for training SSL evaluation model
     """
     # For each base SSL experiment name provided,
-    for exp_name in args.exp_name:
+    for exp_name in exp_names:
         # Check that exp_name leads to a valid directory
         if not os.path.exists(os.path.join(
                 constants.DIR_RESULTS, exp_name)):
             raise RuntimeError("`exp_name` (%s) provided does not lead to a "
                                "SSL-trained model directory!", exp_name)
 
-        # Get other keyword arguments for SSL eval model training
-        train_kwargs = {
-            k:v for k,v in vars(args).items() if k not in ["exp_name", "dset"]
-        }
-
         # Train all evaluation models for pretrained SSL model
-        train_eval_models(exp_name, **train_kwargs)
+        train_eval_models(exp_name, **hparams)
 
         # Analyze results of evaluation models
-        analyze_preds(exp_name, dset=args.dset,
-                      augment_training=args.augment_training)
+        analyze_preds(exp_name, dset=dsets,
+                      augment_training=hparams["augment_training"])
 
 
 if __name__ == "__main__":
@@ -452,5 +454,16 @@ if __name__ == "__main__":
     # 1. Get arguments
     ARGS = PARSER.parse_args()
 
-    # 2. Run main
-    main(ARGS)
+    # 2. Load shared training configurations
+    CONF = config_utils.load_config("model_training.py", ARGS.config, copy=False)
+    LOGGER.debug("""
+################################################################################
+#                       Starting `ssl_model_eval` Script                       #
+################################################################################""")
+
+    # 2.1 Process configuration parameters
+    # Flatten nesting in configuration file
+    HPARAMS = config_utils.flatten_nested_dict(CONF)
+
+    # 3. Run main
+    main(ARGS.exp_names, ARGS.dsets, HPARAMS)

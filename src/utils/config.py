@@ -18,7 +18,7 @@ from src.data import constants
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
-def load_config(calling_file, config_fname=None):
+def load_config(calling_file, config_fname=None, copy=True):
     """
     Load configuration file (located in specific config. subdirectory). Load
     config specification file as well to validate configuration file.
@@ -33,6 +33,8 @@ def load_config(calling_file, config_fname=None):
         Path to calling file whose configs to load
     config_fname : str, optional
         Name of configuration file
+    copy : bool, optional
+        If True, copy default (unspecified) parameters to config.
 
     Returns
     -------
@@ -67,7 +69,7 @@ def load_config(calling_file, config_fname=None):
     # Load configuration
     print(f"Loading configuration file at: `{config_path}`")
     conf = ConfigObj(config_path, configspec=config_spec)
-    conf.validate(Validator(), copy=True)
+    conf.validate(Validator(), copy=copy)
     return conf
 
 
