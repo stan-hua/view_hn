@@ -50,6 +50,7 @@ SHOW_LABELS = [
     "Sagittal_Right",
     "Transverse_Left",
     "Transverse_Right",
+    "Bladder",
 ]
 
 
@@ -96,8 +97,7 @@ def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
     # Create GradCAM object
     cam = GradCAM(
         model=model,
-        target_layers=target_layers,
-        use_cuda=False,
+        target_layers=target_layers
     )
 
     # Load predictions
