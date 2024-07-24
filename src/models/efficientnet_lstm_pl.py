@@ -395,12 +395,14 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
         """
         Deal with Stochastic Weight Averaging (SWA) Issue in Lightning<=2.3.2
         """
-        if self.current_epoch == self.trainer.max_epochs - 1:
+        if self.hparams.get("swa") and self.current_epoch == self.trainer.max_epochs - 1:
             # Workaround to always save the last epoch until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/4539)
             self.trainer.check_val_every_n_epoch = 1
 
             # Disable backward pass for SWA until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/17245)
             self.automatic_optimization = False
+        else:
+            self.automatic_optimization = True
 
 
     def on_train_epoch_end(self):
