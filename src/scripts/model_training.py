@@ -486,8 +486,11 @@ def main(conf):
         "exp_name": hparams["exp_name"],
     }
 
-    # May run out of memory on full videos, so accumulate gradients instead
-    hparams["accum_batches"] = hparams["batch_size"] if hparams["full_seq"] else 1
+    # May run out of memory on full videos, so accumulate over single batches instead
+    if hparams["full_seq"]:
+        hparams["accum_batches"] = hparams["batch_size"]
+    else:
+        hparams["accum_batches"] = hparams.get("accum_batches", 1)
 
     # If specified to use GradCAM loss, ensure segmentation masks are loaded
     if hparams.get("use_gradcam_loss"):
