@@ -103,7 +103,7 @@ class MoCoDataModule(UltrasoundDataModule):
         # Pass UltrasoundDataModule arguments
         super().__init__(
             default_dataloader_params, df, img_dir, full_seq, mode,
-            augment_training=augment_training,
+            augment_training=False,
             **kwargs)
         self.val_dataloader_params["batch_size"] = \
             default_dataloader_params["batch_size"]
@@ -114,11 +114,11 @@ class MoCoDataModule(UltrasoundDataModule):
         if self.same_label and self.custom_collate == "same_label" \
                 and not kwargs.get("custom_ssl_loss"):
             self.collate_fn = ssl_collate_fn.SameLabelCollateFunction(
-                self.transforms)
+                self.augmentations)
         else:
         # 2. Pairs same-image pairs (different augmentation)
             self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
-                self.transforms)
+                self.augmentations)
 
 
     def train_dataloader(self):
@@ -147,6 +147,7 @@ class MoCoDataModule(UltrasoundDataModule):
         )
 
         # Transform to LightlyDataset
+        # NOTE: `transforms` only contains basic image pre-processing steps
         train_dataset = LightlyDataset.from_torch_dataset(
             train_dataset,
             transform=self.transforms)
@@ -192,6 +193,7 @@ class MoCoDataModule(UltrasoundDataModule):
         )
 
         # Transform to LightlyDataset
+        # NOTE: `transforms` only contains basic image pre-processing steps
         val_dataset = LightlyDataset.from_torch_dataset(
             val_dataset,
             transform=self.transforms)
@@ -237,6 +239,7 @@ class MoCoDataModule(UltrasoundDataModule):
         )
 
         # Transform to LightlyDataset
+        # NOTE: `transforms` only contains basic image pre-processing steps
         test_dataset = LightlyDataset.from_torch_dataset(
             test_dataset,
             transform=self.transforms)

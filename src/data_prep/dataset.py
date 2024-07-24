@@ -243,15 +243,20 @@ class UltrasoundDataModule(L.LightningDataModule):
         ########################################################################
         #                            Augmentations                             #
         ########################################################################
-        augmentations = []
-        if augment_training:
-            augmentations.extend([
-                T.RandomResizedCrop(self.img_size, scale=(kwargs.get("crop_scale", 0.5), 1)),
-                T.RandomAdjustSharpness(1.25, p=0.25),
-                T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
-                T.RandomRotation(15),
-            ])
-        self.transforms = T.Compose(augmentations)
+        # Standard augmentations used for all training
+        self.augmentations = T.Compose([
+            T.RandomResizedCrop(self.img_size, scale=(kwargs.get("crop_scale", 0.5), 1)),
+            T.RandomAdjustSharpness(1.25, p=0.25),
+            T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
+            T.RandomRotation(15),
+        ])
+
+        # HACK: If SSL dataset, it should use `self.augmentations` directly
+        #       and set `augment_training` to False in super().__init()
+        # NOTE: This is to avoid using augmentations twice:
+        #       i) During data loading
+        #       ii) In SSL collate function
+        self.transforms = self.augmentations if augment_training else None
 
 
     def setup(self, stage="fit"):
@@ -514,12 +519,7 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         # Load image
         X = read_image(img_path, self.mode)
 
-        # TODO:
-        # 1. Resize
-        # 2. Histogram equalization
-        # 3. Standardize to training set distribution   # TODO: Get statistics
-
-        # Resize
+        # Perform image transforms/augmentations
         X = self.transforms(X)
 
         # CASE 1: If still not between 0 and 1, assume pixels and divide by 255
@@ -814,9 +814,9 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # If specified, standardize images by pre-computed channel means/stds
         if standardize_images:
-            transforms.append(T.ToDtype(torch.float32, scale=True))
-            transforms.append(T.Normalize(mean=[SK_TRAIN_MEAN] * 3,
-                                          std=[SK_TRAIN_STD] * 3))
+            transforms.insert(1, T.ToDtype(torch.float32, scale=True))
+            transforms.insert(2, T.Normalize(mean=[SK_TRAIN_MEAN] * 3,
+                                             std=[SK_TRAIN_STD] * 3))
 
         self.transforms = T.Compose(transforms)
 

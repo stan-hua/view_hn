@@ -628,11 +628,13 @@ def plot_ssl_augmentations():
     Plot example images of data augmented during self-supervised model training.
     """
     # Instantiate data module
-    df_metadata = load_sickkids_metadata(extract=True)
+    df_metadata = load_metadata("sickkids", prepend_img_dir=True, extract=True)
     dataloader_params = {"batch_size": 9}
     data_module = MoCoDataModule(
         dataloader_params,
-        df=df_metadata, img_dir=constants.DIR_IMAGES)
+        df=df_metadata, img_dir=constants.DIR_IMAGES,
+        crop_scale=0.2,
+    )
 
     # Sample 1 batch of images
     for (x_q, x_k), _ in data_module.train_dataloader():
