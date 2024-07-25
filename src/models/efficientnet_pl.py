@@ -99,7 +99,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         If specified by internal attribute, freeze all convolutional weights.
         """
         conv_requires_grad = not self.hparams.freeze_weights
-        blacklist = ["temporal_backbone", "fc"]
+        blacklist = ["fc", "_fc"]
         for parameter in self.parameters():
             if parameter.name and any(
                 parameter.name.startswith(name) for name in blacklist):
@@ -323,8 +323,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         acc = self.train_acc.compute()
 
-        self.log('train_loss', loss)
-        self.log('train_acc', acc)
+        self.log('train_loss', loss, prog_bar=True)
+        self.log('train_acc', acc, prog_bar=True)
 
         self.train_acc.reset()
 
@@ -350,8 +350,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         loss = torch.tensor([o["loss"] for o in outputs]).mean()
         acc = self.val_acc.compute()
 
-        self.log('val_loss', loss)
-        self.log('val_acc', acc)
+        self.log('val_loss', loss, prog_bar=True)
+        self.log('val_acc', acc, prog_bar=True)
 
         self.val_acc.reset()
 
