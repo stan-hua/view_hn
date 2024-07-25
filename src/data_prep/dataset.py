@@ -42,8 +42,8 @@ DEFAULT_DATALOADER_PARAMS = {
 }
 
 # Pre-Computed Mean & Std for SickKids Training Set
-SK_TRAIN_MEAN = 123
-SK_TRAIN_STD = 74
+SK_TRAIN_MEAN = 123. / 255.
+SK_TRAIN_STD = 74. / 255.
 
 
 ################################################################################
@@ -153,6 +153,9 @@ class UltrasoundDataModule(L.LightningDataModule):
                 crop_scale : float
                     If augmenting training samples, lower bound on proportion of
                     area cropped relative to the full image.
+                ensure_seg_mask : bool
+                    If True, filter training set (post-split) for those with
+                    segmentation masks (likely for use in GradCAM loss)
         """
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
@@ -244,12 +247,9 @@ class UltrasoundDataModule(L.LightningDataModule):
         #                            Augmentations                             #
         ########################################################################
         # Standard augmentations used for all training
-        self.augmentations = T.Compose([
-            T.RandomResizedCrop(self.img_size, scale=(kwargs.get("crop_scale", 0.5), 1)),
-            T.RandomAdjustSharpness(1.25, p=0.25),
-            T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
-            T.RandomRotation(15),
-        ])
+        self.augmentations = utils.prep_augmentations(
+            img_size=self.img_size,
+            crop_scale=kwargs.get("crop_scale", 0.5))
 
         # HACK: If SSL dataset, it should use `self.augmentations` directly
         #       and set `augment_training` to False in super().__init()
@@ -291,6 +291,16 @@ class UltrasoundDataModule(L.LightningDataModule):
                 self.dset_to_ids["train"], self.cross_val_folds)
             # By default, set to first kfold
             self.set_kfold_index(0)
+
+        # If specified, filter training data for those with segmentation masks
+        if self.us_dataset_kwargs.get("ensure_seg_mask"):
+            # Check if each image in the training set has a seg. mask
+            has_seg_mask = np.array([utils.has_seg_mask(p) for p in self.dset_to_paths["train"]])
+
+            # If not, remove it from training
+            self.dset_to_ids["train"] = self.dset_to_ids["train"][has_seg_mask]
+            self.dset_to_paths["train"] = self.dset_to_paths["train"][has_seg_mask]
+            self.dset_to_labels["train"] =self.dset_to_labels["train"][has_seg_mask]
 
 
     def train_dataloader(self):

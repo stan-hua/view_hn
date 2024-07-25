@@ -403,6 +403,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     # Show number of patients
     num_patients_train = len(np.unique(dm.dset_to_ids["train"]))
     LOGGER.info(f"[Training] Num Patients: {num_patients_train}")
+    LOGGER.info(f"[Training] Num Images: {len(dm.dset_to_ids['train'])}")
     if dm.dset_to_ids["val"] is not None:
         num_patients_val = len(np.unique(dm.dset_to_ids["val"]))
         LOGGER.info(f"[Validation] Num Patients: {num_patients_val}")

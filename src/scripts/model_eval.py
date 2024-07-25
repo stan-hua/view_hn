@@ -129,6 +129,7 @@ def init(parser):
         "exp_name": "Name/s of experiment/s (to evaluate)",
         "dset": "List of dataset split or test dataset name to evaluate",
         "mask_bladder": "If True, mask bladder logit, if it's an US image dataset.",
+        "test_time_aug": "If True, perform test-time augmentations during inference.",
         "log_to_comet": "If True, log results to Comet ML",
     }
     parser.add_argument("--exp_name", required=True,
@@ -139,6 +140,8 @@ def init(parser):
                         help=arg_help["dset"])
     parser.add_argument("--mask_bladder", action="store_true",
                         help=arg_help["mask_bladder"])
+    parser.add_argument("--test_time_aug", action="store_true",
+                        help=arg_help["test_time_aug"])
     parser.add_argument("--log_to_comet", action="store_true",
                         help=arg_help["log_to_comet"])
 
@@ -147,8 +150,10 @@ def init(parser):
 #                             Inference - Related                              #
 ################################################################################
 @torch.no_grad()
-def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
+def predict_on_images(model, filenames,
+                      img_dir=constants.DIR_IMAGES,
                       mask_bladder=False,
+                      test_time_aug=False,
                       **hparams):
     """
     Performs inference on images specified. Returns predictions, probabilities
@@ -165,6 +170,8 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
+    test_time_aug : bool, optional
+        If True, perform test-time augmentation.
     hparams : dict, optional
         Keyword arguments for experiment hyperparameters
 
@@ -193,12 +200,13 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
 
         # Load image as expected by model
         img = read_image(img_path, ImageReadMode.RGB)
-        img = img / 255.
-        img = transform_image(img)
-        img = np.expand_dims(img, axis=0)
+        img = transform_image(
+            img,
+            augment=test_time_aug,
+            n=8 if test_time_aug else 1)
 
         # Convert to tensor and send to device
-        img = torch.FloatTensor(img).to(DEVICE)
+        img = img.to(torch.float32).to(DEVICE)
 
         # Perform inference
         out = model(img)
@@ -207,6 +215,9 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
         # NOTE: Assumes model predicts bladder/none as the 3rd index
         if mask_bladder:
             out = out[:, :2]
+
+        # If test-time augmentation, averaging output across augmented samples
+        out = out.mean(axis=0, keepdim=True)
 
         # Get index of predicted label
         pred = torch.argmax(out, dim=1)
@@ -235,9 +246,12 @@ def predict_on_images(model, filenames, img_dir=constants.DIR_IMAGES,
     return df_preds
 
 
+# TODO: Implement test-time augmentations
 @torch.no_grad()
-def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
+def predict_on_sequences(model, filenames,
+                         img_dir=constants.DIR_IMAGES,
                          mask_bladder=False,
+                         test_time_aug=False,
                          **hparams):
     """
     Performs inference on a full ultrasound sequence specified. Returns
@@ -265,6 +279,9 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
             - probability of each prediction,
             - raw model output
     """
+    if test_time_aug:
+        raise NotImplementedError
+
     # Get mapping of index to class
     label_part = hparams.get("label_part")
     idx_to_class = constants.LABEL_PART_TO_CLASSES[label_part]["idx_to_class"]
@@ -279,8 +296,7 @@ def predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
 
         # Load image as expected by model
         img = read_image(img_path, ImageReadMode.RGB)
-        img = img / 255.
-        img = transform_image(img)
+        img = transform_image(img).squeeze(0)
         imgs.append(img)
 
     imgs = np.stack(imgs, axis=0)
@@ -356,8 +372,7 @@ def multi_predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
 
         # Load image as expected by model
         img = read_image(img_path, ImageReadMode.RGB)
-        img = img / 255.
-        img = transform_image(img)
+        img = transform_image(img).squeeze(0)
         imgs.append(img)
 
     imgs = np.stack(imgs, axis=0)
@@ -1319,6 +1334,7 @@ def eval_create_plots(df_pred, hparams, inference_dir,
 
 
 def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
+                          test_time_aug=False,
                           log_to_comet=False):
     """
     Given that inference was performed, compute metrics for experiment model
@@ -1334,6 +1350,8 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
         Experiment hyperparameters, by default None
     mask_bladder : bool, optional
         If True, bladder predictions are masked out, by default False
+    test_time_aug : bool, optional
+        If True, perform test-time augmentation.
     log_to_comet : bool, optional
         If True, log metrics and graphs to Comet ML
     """
@@ -1353,7 +1371,7 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
         comet_logger = load_comet_logger(exp_key=hparams.get("comet_exp_key"))
 
     # 2. Load inference
-    df_pred = load_view_predictions(exp_name, dset, mask_bladder)
+    df_pred = load_view_predictions(exp_name, dset, mask_bladder, test_time_aug)
 
     # If multi-output, evaluate each label part, separately
     label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
@@ -1373,14 +1391,13 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
             df_pred["prob"] = df_pred[f"{label_part}_prob"]
             df_pred["out"] = df_pred[f"{label_part}_out"]
 
-        # Add suffix, if predictions mask bladder
-        if mask_bladder:
-            temp_exp_name += "__mask_bladder"
-
         # Experiment-specific inference directory, to store figures
-        inference_dir = os.path.join(constants.DIR_INFERENCE, temp_exp_name)
-        if not os.path.isdir(inference_dir):
-            os.makedirs(inference_dir)
+        inference_dir = create_save_dir_by_flags(
+            exp_name,
+            dset=dset,
+            mask_bladder=mask_bladder,
+            test_time_aug=test_time_aug
+        )
 
         # 4. Calculate metrics
         df_metrics = eval_calculate_all_metrics(df_pred)
@@ -1477,7 +1494,7 @@ def store_example_classifications(exp_name, dset, mask_bladder=False,
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
-def transform_image(img):
+def transform_image(img, augment=False, n=1, hparams=None):
     """
     Transforms image, as done during training.
 
@@ -1490,17 +1507,51 @@ def transform_image(img):
     ----------
     img : np.array
         An image
+    augment : bool, optional
+        If True, perform augmentations during training
+    n : int, optional
+        If augmenting, the number of times to randomly augment the image
 
     Returns
     -------
     np.array
-        Transformed image
+        Transformed image/s with extra first dimension, useful if n > 1.
     """
+    # Get parameters (or defaults)
+    hparams = hparams or {}
+    img_size = hparams.get("img_size", constants.IMG_SIZE)
+    crop_scale = hparams.get("crop_scale", 0.2)
+
+    # Convert to torch
+    if isinstance(img, np.ndarray):
+        img = torch.from_numpy(img)
+
     transforms = []
-    transforms.append(T.Resize(constants.IMG_SIZE))
+    # Add resize transform
+    transforms.append(T.Resize(img_size))
+
+    # If specified, add training augmentations
+    if augment:
+        transforms.append(utils.prep_augmentations(
+            img_size=img_size,
+            crop_scale=crop_scale))
     transforms = T.Compose(transforms)
 
-    return transforms(img)
+    # Get RNG state (for later restoration)
+    random_state = torch.get_rng_state()
+    # Set random seed
+    torch.seed()
+
+    # Augment each image separately
+    img_stack = torch.stack([transforms(img) for _ in range(n)])
+
+    # Normalize between 0 and 1
+    img_stack = img_stack.to(torch.float32) / 255.
+
+    # Restore original RNG state
+    torch.set_rng_state(random_state)
+
+    return img_stack
 
 
 def get_local_groups(values):
@@ -1786,6 +1837,44 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False,
         print(colored_pred_str)
 
 
+def create_save_dir_by_flags(exp_name, dset=constants.DEFAULT_EVAL_DSET,
+                             **extra_flags):
+    """
+    Create directory to save dset predictions, based on experiment name and
+    keyword arguments
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    dset : str, optional
+        Specific split of dataset. One of (train, val, test), by default
+        constants.DEFAULT_EVAL_DSET.
+    **extra_flags : dict, optional
+        Keyword arguments, specifying extra flags used during inference
+
+    Returns
+    -------
+    str
+        Expected directory to save dset predictions
+    """
+    # Add mask bladder, if dset doesn't contain bladders
+    if FORCE_MASK_BLADDER and dset in constants.DSETS_MISSING_BLADDER:
+        extra_flags["mask_bladder"] = True
+
+    # Add true flags to the experiment name
+    for flag, val in extra_flags.items():
+        if val:
+            exp_name += f"__{flag}"
+
+    # Create inference directory, if not exists
+    inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
+    if not os.path.exists(inference_dir):
+        os.makedirs(inference_dir)
+
+    return inference_dir
+
+
 def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
     """
     Create file path to dset predictions, based on experiment name and keyword
@@ -1806,19 +1895,8 @@ def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
     str
         Expected path to dset predictions
     """
-    # Add mask bladder, if dset doesn't contain bladders
-    if FORCE_MASK_BLADDER and dset in constants.DSETS_MISSING_BLADDER:
-        extra_flags["mask_bladder"] = True
-
-    # Add true flags to the experiment name
-    for flag, val in extra_flags.items():
-        if val:
-            exp_name += f"__{flag}"
-
-    # Create inference directory, if not exists
-    inference_dir = os.path.join(constants.DIR_INFERENCE, exp_name)
-    if not os.path.exists(inference_dir):
-        os.makedirs(inference_dir)
+    # Create inference directory path
+    inference_dir = create_save_dir_by_flags(exp_name, dset, **extra_flags)
 
     # Expected path to dset inference
     fname = f"{dset}_set_results.csv"
@@ -1924,7 +2002,8 @@ def calculate_accuracy(df_pred, label_col="label", pred_col="pred"):
     return acc
 
 
-def load_view_predictions(exp_name, dset, mask_bladder=False):
+def load_view_predictions(exp_name, dset, mask_bladder=False,
+                          test_time_aug=False):
     """
     Load predictions by model given by `exp_name` on dataset `dset`.
 
@@ -1936,6 +2015,8 @@ def load_view_predictions(exp_name, dset, mask_bladder=False):
         Name of evaluation split or test dataset
     mask_bladder : bool, optional
         If True, bladder predictions are masked out, by default False
+    test_time_aug : bool, optional
+        If True, perform test-time augmentation.
 
     Returns
     -------
@@ -1952,7 +2033,8 @@ def load_view_predictions(exp_name, dset, mask_bladder=False):
     save_path = create_save_path(
         exp_name,
         dset=dset,
-        mask_bladder=mask_bladder)
+        mask_bladder=mask_bladder,
+        test_time_aug=test_time_aug)
     # Raise error, if predictions not found
     if not os.path.exists(save_path):
         raise RuntimeError(f"Predictions not found on dataset {dset}!\n"
@@ -2095,6 +2177,7 @@ def infer_dset(exp_name,
                dset=constants.DEFAULT_EVAL_DSET,
                seq_number_limit=None,
                mask_bladder=False,
+               test_time_aug=False,
                overwrite_existing=OVERWRITE_EXISTING,
                **overwrite_hparams):
     """
@@ -2113,6 +2196,8 @@ def infer_dset(exp_name,
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
+    test_time_aug : bool, optional
+        If True, perform test-time augmentation.
     overwrite_existing : bool, optional
         If True and prediction file already exists, overwrite existing, by
         default OVERWRITE_EXISTING.
@@ -2127,7 +2212,8 @@ def infer_dset(exp_name,
     # 0. Create path to save predictions
     pred_save_path = create_save_path(exp_name, dset=dset,
                                       seq_number_limit=seq_number_limit,
-                                      mask_bladder=mask_bladder)
+                                      mask_bladder=mask_bladder,
+                                      test_time_aug=test_time_aug)
     # Early return, if prediction already made
     if os.path.isfile(pred_save_path) and not overwrite_existing:
         return
@@ -2207,6 +2293,7 @@ def infer_dset(exp_name,
                 filenames=filenames,
                 img_dir=None,
                 mask_bladder=mask_bladder,
+                test_time_aug=test_time_aug,
                 **hparams)
 
     # Join to metadata. NOTE: This works because of earlier sorting
@@ -2288,6 +2375,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
 def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                        mask_bladder=False,
+                       test_time_aug=False,
                        log_to_comet=False):
     """
     Analyze dset split predictions.
@@ -2302,6 +2390,8 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
+    test_time_aug : bool, optional
+        If True, perform test-time augmentation.
     log_to_comet : bool, optional
         If True, log metrics and UMAPs to Comet ML.
 
@@ -2327,6 +2417,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     dset=dset_,
                     hparams=hparams,
                     mask_bladder=mask_bladder,
+                    test_time_aug=test_time_aug,
                     log_to_comet=log_to_comet,
                 )
             except KeyError:
@@ -2335,6 +2426,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     exp_name=exp_name, dset=dset_,
                     mask_bladder=dset_ in constants.DSETS_MISSING_BLADDER,
                     overwrite_existing=True,
+                    test_time_aug=test_time_aug,
                     **load_data.create_overwrite_hparams(dset_))
                 # 2. Attempt to calculate metrics again
                 calculate_exp_metrics(
@@ -2342,6 +2434,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     dset=dset_,
                     hparams=hparams,
                     mask_bladder=mask_bladder,
+                    test_time_aug=test_time_aug,
                     log_to_comet=log_to_comet,
                 )
 
@@ -2378,6 +2471,7 @@ if __name__ == '__main__':
             # 3. Perform inference
             infer_dset(exp_name=EXP_NAME, dset=DSET,
                        mask_bladder=MASK_BLADDER,
+                       test_time_aug=ARGS.test_time_aug,
                        **OVERWRITE_HPARAMS)
 
             # 4. Extract embeddings
@@ -2387,8 +2481,10 @@ if __name__ == '__main__':
             # 5. Evaluate predictions and embeddings
             analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,
                                mask_bladder=MASK_BLADDER,
+                               test_time_aug=ARGS.test_time_aug,
                                log_to_comet=ARGS.log_to_comet)
 
         # 6. Create UMAPs embeddings on all dsets together
         analyze_dset_preds(exp_name=EXP_NAME, dset=ARGS.dset,
-                           log_to_comet=ARGS.log_to_comet)
+                           log_to_comet=ARGS.log_to_comet,
+                           test_time_aug=ARGS.test_time_aug,)
