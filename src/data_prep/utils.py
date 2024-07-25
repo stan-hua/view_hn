@@ -14,6 +14,7 @@ import os
 import cv2
 import numpy as np
 import pandas as pd
+import torchvision.transforms.v2 as T
 from sklearn.utils import shuffle
 from skimage.exposure import equalize_hist
 
@@ -1110,6 +1111,48 @@ def identify_not_in_label_group(df_metadata, min_block_size=3):
     return mask
 
 
+def has_seg_mask(img_path, include_liver_seg=False):
+    """
+    Checks if a specific image has at least 1 segmentation mask.
+
+    Note
+    ----
+    Assumes segmentation mask is in the same directory, and labeled with the
+    same filename but with a suffix ("_kseg", "_bseg", "_lseg").
+
+
+    Parameters
+    ----------
+    img_path : str
+        Path to image
+    include_liver_seg : bool, optional
+        If True, also consider liver segmentation, by default False
+
+    Returns
+    -------
+    bool
+        True if image has a mask, and False otherwise
+    """
+    # CASE 1: Bladder image
+    seg_fname_suffixes = ["_bseg", "_kseg"]
+    # Add flag to include liver
+    if include_liver_seg:
+        seg_fname_suffixes.append("_lseg")
+
+    # Load kidney/bladder/liver segmentations
+    for suffix in seg_fname_suffixes:
+        # Create potential name of mask image (located in the same directory)
+        fname = os.path.basename(img_path)
+        split_fname = fname.split(".")
+        mask_fname = ".".join(split_fname[:-1]) + suffix + "." + split_fname[-1]
+        mask_path = os.path.join(os.path.dirname(img_path), mask_fname)
+
+        # Early return, if mask exists
+        if os.path.exists(mask_path):
+            return True
+    return False
+
+
 ################################################################################
 #                           Metadata Post-Processing                           #
 ################################################################################
@@ -1479,6 +1522,31 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     processed_img = 255 * equalized_img
 
     return processed_img
+
+
+def prep_augmentations(img_size=(256, 256), crop_scale=0.5):
+    """
+    Prepare training augmentations.
+
+    Parameters
+    ----------
+    img_size : tuple, optional
+        Expected image size post-augmentations
+    crop_scale : float
+        Minimum proportion/size of area to crop
+
+    Returns
+    -------
+    torch.nn.Module
+        Torchvision transforms used in training
+    """
+    augmentations = T.Compose([
+        T.RandomResizedCrop(img_size, scale=(crop_scale, 1)),
+        T.RandomAdjustSharpness(1.25, p=0.25),
+        T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
+        T.RandomRotation(15),
+    ])
+    return augmentations
 
 
 ################################################################################
