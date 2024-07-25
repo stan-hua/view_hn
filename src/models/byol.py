@@ -180,7 +180,7 @@ class BYOL(L.LightningModule):
         (x_q, x_k), _ = train_batch
 
         # Get momentum
-        momentum = cosine_schedule(self.current_epoch, 10, 0.996, 1)
+        momentum = cosine_schedule(self.current_epoch, self.hparams.get("stop_epoch", 600), 0.996, 1)
 
         # Update target network parameters
         update_momentum(self.conv_backbone, self.conv_backbone_momentum,
