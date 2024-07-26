@@ -72,12 +72,7 @@ class EnsembleLSTMLinear(L.LightningModule):
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters(
-            "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
-            "n_lstm_layers", "hidden_dim", "bidirectional",
-            "conv_backbone_output_dim", "freeze_weights",
-             *list([k for k,v in kwargs.items() if \
-                not isinstance(v, torch.nn.Module)]))
+        self.save_hyperparameters()
 
         # NOTE: Ensure at least 1+ conv. backbones provided
         self.num_convs = len(conv_backbones)

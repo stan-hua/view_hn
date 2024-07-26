@@ -42,22 +42,6 @@ FREEZE_WEIGHTS = [True, False]    # True, False
 # Flag to perform Linear Probing - Fine-tuning
 LP_FT = False
 
-# Default args for `model_training.py` when evaluating SSL models
-DEFAULT_ARGS = [
-    "--self_supervised",
-    "--hospital", "sickkids",
-    "--train",
-    "--test",
-    "--train_test_split", "0.75",
-    "--train_val_split", "0.75",
-    "--batch_size", "16",
-    "--num_workers", "4",
-    "--pin_memory",
-    "--precision", "16",
-    "--lr", "0.001",
-    "--stop_epoch", "25",
-]
-
 # Template for experiment name of a SSL evaluation model
 EVAL_EXP_NAME = \
     """{{ exp_name }}__{{ model_type }}__{{ label_part }}
@@ -96,6 +80,7 @@ def init(parser):
     parser.add_argument(
         "-c", "--config",
         type=str,
+        required=True,
         help=arg_help["config"]
     )
     parser.add_argument("--exp_names", help=arg_help["exp_names"],
@@ -106,53 +91,21 @@ def init(parser):
                         help=arg_help["dsets"])
 
 
-def train_eval_model(exp_name, model_type="linear_lstm",
-                     label_part="side", freeze_weights=False,
-                     augment_training=False,
-                     lp_ft=False,
-                     **hparams):
+def train_eval_model(hparams):
     """
     Train single evaluation model.
 
     Parameters
     ----------
-    exp_name : str
-        Name of SSL experiment
-    model_type : str, optional
-        One of ("linear", "linear_lstm"), by default "linear_lstm"
-    label_part : str, optional
-        One of ("side", "plane"), by default "side"
-    freeze_weights : bool, optional
-        If True, freezes convolutional weights during training, by default False
-    augment_training : bool, optional
-        If True, adds augmentation during linear probing / fine-tuning, by
-        default False
-    lp_ft : bool, optional
-        If True, trains eval. model via fine-tuning starting FROM an eval. model
-        that was created via linear probing, by default False.
-    **hparams : dict, optional
-        Keyword arguments to pass into `model_training.main`
+    hparams : dict
+        Contains updated hyperparameters to train SSL-eval model. Arguments
+        will be passed into `model_training.main`
     """
-    exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
-        exp_name=exp_name,
-        model_type=model_type,
-        label_part=label_part,
-        freeze_weights=freeze_weights,
-        lp_ft=lp_ft,
-        augment_training=augment_training,
-    )
-
     # Skip if exists
+    exp_eval_name = hparams["exp_name"]
     if os.path.exists(os.path.join(constants.DIR_RESULTS, exp_eval_name)):
         LOGGER.info(f"`{exp_eval_name}` already exists! Skipping...")
         return
-
-    # Overwrite hyperparameters
-    hparams = hparams.copy()
-    hparams["exp_name"] = exp_eval_name
-    hparams["label_part"] = label_part
-    hparams["freeze_weights"] = freeze_weights
-    hparams["augment_training"] = augment_training
 
     # Attempt training
     try:
@@ -168,7 +121,7 @@ def train_eval_model(exp_name, model_type="linear_lstm",
     LOGGER.info(f"`{exp_eval_name}` successfully created!")
 
 
-def train_eval_models(exp_name, augment_training=False, **kwargs):
+def train_eval_models(exp_name, **overwrite_hparams):
     """
     Train all possible evaluation models
 
@@ -176,10 +129,9 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
     ----------
     exp_name : str
         Base SSL experiment name
-    augment_training : bool, optional
-        If True, use augmentation during fine-tuning, by default False.
-    **kwargs : dict, optional
-        Keyword arguments to pass into `model_training.main()`
+    **overwrite_hparams : dict, optional
+        Hyperparameters to overwrite SSL training hyperparams to pass into
+        `model_training.main()`
     """
     # 0. Get experiment directory, where model was trained
     model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
@@ -207,55 +159,57 @@ def train_eval_models(exp_name, augment_training=False, **kwargs):
 
     # 4. Train models on side/plane prediction with/without fine-tuning
     for model_type in MODEL_TYPES:
-        curr_kwargs = kwargs.copy()
+        curr_hparams = hparams.copy()
+        curr_hparams.update(overwrite_hparams)
+
         # 4.0 Update keyword arguments to pass in, to specify model to load
-        curr_kwargs[f"ssl_eval_{model_type}"] = True
+        curr_hparams[f"ssl_eval_{model_type}"] = True
 
         for label_part in LABEL_PARTS:
             for freeze_weights in FREEZE_WEIGHTS:
-                # Attempt to train model type with specified label part
-                train_eval_model(
-                    exp_name=exp_name,
-                    model_type=model_type,
+                # Create new SSL eval exp. hyperparameters
+                curr_hparams = prep_eval_exp_hparams(
+                    curr_hparams,
                     label_part=label_part,
-                    freeze_weights=freeze_weights,
-                    augment_training=augment_training,
-                    lp_ft=False,
-                    ssl_ckpt_path=ckpt_path,
                     ssl_model=ssl_model,
-                    **curr_kwargs)
+                    ssl_ckpt_path=ckpt_path,
+                    model_type=model_type,
+                    freeze_weights=freeze_weights,
+                    lp_ft=False,
+                )
+
+                # Attempt to train model type with specified label part
+                train_eval_model(curr_hparams)
 
             # Skip, if not doing LP-FT (fine-tuning after linear probing)
             if not LP_FT:
                 continue
 
-            # Get experiment name for linear probing eval. model
-            from_exp_name = TEMPLATE_EVAL_EXP_NAME.render(
-                exp_name=exp_name,
-                model_type=model_type,
+            # Get hparams for the linear-probed (LP) model
+            # NOTE: Fine-tuning over linear probed weights
+            lp_hparams = prep_eval_exp_hparams(
+                curr_hparams,
                 label_part=label_part,
+                ssl_model=ssl_model,
+                ssl_ckpt_path=ckpt_path,
+                model_type=model_type,
                 freeze_weights=True,
                 lp_ft=False,
-                augment_training=augment_training,
             )
 
-            # Preparpe arguments for loading linear-probing model
-            lp_ft_kwargs = curr_kwargs.copy()
-            lp_ft_kwargs["from_ssl_eval"] = True
-            lp_ft_kwargs["ssl_ckpt_path"] = load_model.find_best_ckpt_path(
-                exp_name=from_exp_name,
+            # Prepare arguments for loading linear-probing (LP) model
+            lp_ft_hparams = lp_hparams.copy()
+            lp_ft_hparams["from_ssl_eval"] = True
+            lp_ft_hparams["ssl_ckpt_path"] = load_model.find_best_ckpt_path(
+                exp_name=lp_hparams["exp_name"],
             )
 
-            # Attempt to train fine-tuned model from linear-probed model
-            train_eval_model(
-                exp_name=exp_name,
-                model_type=model_type,
-                label_part=label_part,
-                freeze_weights=False,
-                augment_training=augment_training,
-                lp_ft=True,
-                **lp_ft_kwargs,
-            )
+            # Get hparams for the LP-FT model
+            # NOTE: Using this function to create the eval experiment name
+            lp_ft_hparams = prep_eval_exp_hparams(lp_ft_hparams)
+
+            # Attempt to train fine-tuned model from linear-probed (LP) model
+            train_eval_model(lp_ft_hparams)
 
 
 ################################################################################
@@ -414,6 +368,49 @@ def find_best_ckpt_path(path_exp_dir):
     return ckpt_paths[0]
 
 
+def prep_eval_exp_hparams(hparams, **overwrite_hparams):
+    """
+    Prepare hyperparameters for training SSL linear probe / fine-tuning.
+
+    Parameters
+    ----------
+    hparams : dict
+        Contains all hyperparameters of the experiment
+
+    Returns
+    -------
+    dict
+        Updated dictionary of hyperparameters for SSL eval model
+    """
+    # Create copy of hyperparameters
+    hparams = hparams.copy()
+
+    # Update hparams
+    hparams.update(overwrite_hparams)
+
+    # Remove comet ML key
+    hparams.pop("comet_exp_key", None)
+
+    # Ensure number of classes is as expected
+    label_part = hparams["label_part"]
+    hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[label_part]["classes"])
+
+    # Create new eval exp. name
+    exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
+        exp_name=hparams["exp_name"],
+        model_type=hparams["model_type"],
+        label_part=hparams["label_part"],
+        freeze_weights=hparams["freeze_weights"],
+        lp_ft=hparams["lp_ft"],
+        augment_training=hparams["augment_training"],
+    )
+
+    # Update experiment name
+    hparams["exp_name"] = exp_eval_name
+
+    return hparams
+    
+
 ################################################################################
 #                                  Main Flow                                   #
 ################################################################################
@@ -455,7 +452,7 @@ if __name__ == "__main__":
     ARGS = PARSER.parse_args()
 
     # 2. Load shared training configurations
-    CONF = config_utils.load_config("model_training.py", ARGS.config, copy=False)
+    CONF = config_utils.load_config(__file__, ARGS.config, copy=True)
     LOGGER.debug("""
 ################################################################################
 #                       Starting `ssl_model_eval` Script                       #

@@ -57,11 +57,7 @@ class LinearEval(L.LightningModule):
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters(
-            "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
-            "freeze_weights", "conv_backbone_output_dim",
-            *list([k for k,v in kwargs.items() if \
-                not isinstance(v, torch.nn.Module)]))
+        self.save_hyperparameters()
 
         # Store convolutional backbone, and freeze its weights
         self.conv_backbone = conv_backbone
