@@ -18,6 +18,7 @@ from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
 # TODO: Consider adding Grokfast
+# TODO: Handle last epoch issue with SWA
 class EfficientNetLSTM(EfficientNet, L.LightningModule):
     """
     EfficientNet + LSTM model for sequence-based classification.

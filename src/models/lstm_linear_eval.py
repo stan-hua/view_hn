@@ -17,6 +17,7 @@ from src.data import constants
 
 
 # TODO: Consider adding Grokfast
+# TODO: Handle last epoch issue with SWA
 class LSTMLinearEval(L.LightningModule):
     """
     LSTMLinearEval object, wrapping over convolutional backbone.
@@ -69,12 +70,7 @@ class LSTMLinearEval(L.LightningModule):
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters(
-            "num_classes", "lr", "adam", "weight_decay", "momentum", "img_size",
-            "n_lstm_layers", "hidden_dim", "bidirectional",
-            "conv_backbone_output_dim", "freeze_weights",
-             *list([k for k,v in kwargs.items() if \
-                not isinstance(v, torch.nn.Module)]))
+        self.save_hyperparameters()
 
         # Store convolutional backbone, and freeze its weights
         self.conv_backbone = conv_backbone

@@ -5,8 +5,10 @@ Description: Implementation of segmentation-guided GradCAM loss. This loss
              penalizes gradients that fall outside of given segmentations.
              Code adapted from original repository linked below.
 
-Warning: GradCAMLoss does NOT work with gradient accumulation because of
-         gradient zero-ing needed.
+Warning: GradCAMLoss currently is not compatible with the following:
+    1. Gradient accumulation; gradient zero-ing is needed,
+    2. Freezing weights; the gradient need to be computed across weights,
+    3. Video models; 
 
 Source Repo: https://github.com/MeriDK/segmentation-guided-attention/tree/master
 """
@@ -121,8 +123,7 @@ class ViewGradCAMLoss(torch.nn.Module):
         # Normalize to pixel-level loss (across channels)
         pos_loss = pos_loss / (N * (len(seg_masks[~seg_masks])))
 
-        # TODO: Test then remove
-        # Scale loss by inverse proportion of samples with mask
+        # NEW: Scale loss by inverse proportion of samples with mask
         inverse_prop = len(has_seg_mask) / sum(has_seg_mask)
         pos_loss = inverse_prop * pos_loss
 
@@ -131,6 +132,7 @@ class ViewGradCAMLoss(torch.nn.Module):
         if not self.add_neg_class_gradcam_loss or self.use_all_class_gradcam_loss:
             return pos_loss
 
+        # NEW: Below can be used if classes strictly do not overlap in the image
         # Index negative class specific gradients
         neg_targets = [ClassifierOutputNegativeTarget(category) for category in target_categories]
         # Create GradCAMs for negative (all other) classes

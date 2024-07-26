@@ -37,7 +37,7 @@ LABEL_PARTS = ["plane"]  # side, plane, None
 MODEL_TYPES = ["linear"]   # linear, linear_lstm
 
 # Options to train eval. models with/without fine-tuning backbones
-FREEZE_WEIGHTS = [True, False]    # True, False
+FREEZE_WEIGHTS = [False, True]    # True, False
 
 # Flag to perform Linear Probing - Fine-tuning
 LP_FT = False

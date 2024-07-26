@@ -2421,6 +2421,8 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     log_to_comet=log_to_comet,
                 )
             except KeyError:
+                LOGGER.error(KeyError)
+                LOGGER.error("Unable to find file, performing inference... (again)")
                 # 1. Perform inference
                 infer_dset(
                     exp_name=exp_name, dset=dset_,

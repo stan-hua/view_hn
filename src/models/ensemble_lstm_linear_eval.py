@@ -14,8 +14,10 @@ from torch.nn import functional as F
 
 
 # TODO: Update (training/validation/test)_step for PL integration
-# TODO: Update on_(train/val/test)_epoch_end for PL integration
+# TODO: Update on_(train/val/test)_eoch_end for PL integration
 # TODO: Consider adding Grokfast
+# TODO: Handle last epoch issue with SWA
+
 class EnsembleLSTMLinear(L.LightningModule):
     """
     EnsembleLSTMLinear object, wrapping over 2+ convolutional backbones.

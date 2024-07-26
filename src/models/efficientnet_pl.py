@@ -98,6 +98,10 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         """
         If specified by internal attribute, freeze all convolutional weights.
         """
+        # SPECIAL CASE: If using GradCAM loss, not compatible with below setup
+        if self.hparams.use_gradcam_loss:
+            raise NotImplementedError("GradCAM loss is not compatible with freezing weights!")
+
         conv_requires_grad = not self.hparams.freeze_weights
         blacklist = ["fc", "_fc"]
         for parameter in self.parameters():
@@ -116,12 +120,14 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         torch.optim.Optimizer
             Initialized optimizer.
         """
+        # Instantiate optimizer
+        params = self.parameters()
         if self.hparams.optimizer == "adamw":
-            optimizer = torch.optim.AdamW(self.parameters(),
+            optimizer = torch.optim.AdamW(params,
                                           lr=self.hparams.lr,
                                           weight_decay=self.hparams.weight_decay)
         elif self.hparams.optimizer == "sgd":
-            optimizer = torch.optim.SGD(self.parameters(),
+            optimizer = torch.optim.SGD(params,
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
@@ -150,6 +156,20 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # If specified, use Grokfast-EMA algorithm to filter for slow gradients
         if self.hparams.get("use_grokfast"):
             gradfilter_ema(self)
+
+
+    def on_train_epoch_start(self):
+        """
+        Deal with Stochastic Weight Averaging (SWA) Issue in Lightning<=2.3.2
+        """
+        if self.hparams.get("swa") and self.current_epoch == self.trainer.max_epochs - 1:
+            # Workaround to always save the last epoch until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/4539)
+            self.trainer.check_val_every_n_epoch = 1
+
+            # Disable backward pass for SWA until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/17245)
+            self.automatic_optimization = False
+        else:
+            self.automatic_optimization = True
 
 
     ############################################################################
@@ -301,20 +321,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def on_train_epoch_start(self):
-        """
-        Deal with Stochastic Weight Averaging (SWA) Issue in Lightning<=2.3.2
-        """
-        if self.hparams.get("swa") and self.current_epoch == self.trainer.max_epochs - 1:
-            # Workaround to always save the last epoch until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/4539)
-            self.trainer.check_val_every_n_epoch = 1
-
-            # Disable backward pass for SWA until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/17245)
-            self.automatic_optimization = False
-        else:
-            self.automatic_optimization = True
-
-
     def on_train_epoch_end(self):
         """
         Compute and log evaluation metrics for training epoch.
