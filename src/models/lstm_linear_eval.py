@@ -70,7 +70,7 @@ class LSTMLinearEval(L.LightningModule):
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["conv_backbone", "temporal_backbone"])
 
         # Store convolutional backbone, and freeze its weights
         self.conv_backbone = conv_backbone
