@@ -84,10 +84,137 @@ class SimCLRCollateFunction(lightly.data.collate.BaseCollateFunction):
         return X_transformed_paired, metadata_accum
 
 
-class SameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
+class BYOLSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
     """
-    SameLabelCollateFunction. Used to create two augmentations for each images,
-    and pair images with the same label.
+    BYOLSameLabelCollateFunction.
+
+    Note
+    ----
+    Used to augment each image once and pair the image with another image of the
+    same label.
+    """
+
+    def forward(self, batch):
+        """
+        For each image in the batch, randomly augments each image and pairs with
+        a same-label image. Those missing a pair will be discarded.
+
+        Parameters
+        ----------
+            batch: tuple of (torch.Tensor, dict)
+                Tuple of image tensors and metadata dict (containing filenames,
+                etc.)
+
+        Returns
+        -------
+            tuple of ((torch.Tensor, torch.Tensor), dict).
+                The two tensors with corresponding images that have the same
+                label.
+        """
+        # Accumulate lists for keys in metadata dicts
+        metadata_accum = {}
+        for item in batch:
+            metadata = item[1]
+            for key, val in metadata.items():
+                if key not in metadata_accum:
+                    metadata_accum[key] = []
+
+                if not isinstance(val, str):
+                    try:
+                        metadata_accum[key].extend(val)
+                    except:
+                        metadata_accum[key].append(val)
+                else:
+                    metadata_accum[key].append(val)
+
+        # Convert metadata lists to torch tensors
+        for key, val_list in metadata_accum.items():
+            try:
+                metadata_accum[key] = torch.Tensor(val_list)
+            except:
+                metadata_accum[key] = np.array(val_list)
+
+        # Group by label
+        # NOTE: Precondition that label exists
+        # NOTE: Duplicate by 2 to account for the two augmentations
+        labels = np.array(metadata_accum)
+        label_to_indices = {
+            label: np.argwhere(labels == label).squeeze() \
+                for label in np.unique(labels)
+        }
+
+        # Create indices to pair images of the same label
+        first_idx = []
+        second_idx = []
+        for _, indices in label_to_indices.items():
+            n = len(indices)
+
+            # CASE 1: Only 1 image of this label in the batch, don't include
+            if n == 1:
+                continue
+
+            # CASE 2: 2+ images of this label in the batch
+            # Only sample an even number of images
+            n = n - 1 if (n % 2 == 1) else n
+            # Randomly pair images
+            chosen_indices = np.random.choice(indices, size=n, replace=False)
+
+            first_idx.extend(chosen_indices[:int(n/2)])
+            second_idx.extend(chosen_indices[int(n/2):])
+
+        # Reorganize accumulated metadata
+        # Convert metadata lists to torch tensors
+        for key, val_list in metadata_accum.items():
+            metadata_accum[key] = [val_list[first_idx], val_list[second_idx]]
+
+        # Get images
+        # If batch size is 1, but contains multiple US images
+        if len(batch) == 1 and len(batch[0][0]) > 1:
+            imgs = batch[0][0]
+        else:
+            imgs = [data[0] for data in batch]
+
+            # Get shape of each image
+            shape = imgs[0].size()
+            # Expects image (1, 3, W, H)
+            if len(shape) == 5 and shape[0] == 1:
+                imgs = [img[0] for img in imgs]
+
+        # Raise error, if batch size is only one
+        batch_size = len(imgs)
+        if batch_size == 1:
+            raise NotImplementedError("Same-Label BYOL is not implemented for `batch_size = 1`!")
+
+        # Perform random augmentation on each image once
+        X_transformed = [
+            self.transform(imgs[i % batch_size]).unsqueeze_(0)
+            for i in range(batch_size)]
+
+        # Tuple of paired transforms
+        X_transformed_paired = (
+            torch.cat([X_transformed[idx] for idx in first_idx], 0),
+            torch.cat([X_transformed[idx] for idx in second_idx], 0)
+        )
+
+        return X_transformed_paired, metadata_accum
+
+
+# TODO: Fix issue with same image negative sample
+# TODO: Create custom memory bank for label-specific negative samples
+# TODO: Fix metadata returned
+class MoCoSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
+    """
+    MoCoSameLabelCollateFunction.
+
+    Note
+    ----
+    Used to create two augmentations for each images, and pair images with the
+    same label.
+
+    Issue
+    -----
+    The same image with a different augmentation can be considered a negative
+    sample.
     """
 
     def forward(self, batch):

@@ -1,11 +1,8 @@
 """
-moco_dataset.py
+byol_dataset.py
 
-Description: Contains module to load data for Momentum Contrastive learning
-             (MoCo) self-supervised pretraining.
-
-Note: Model trained on this dataset does NOT take advantage of temporal
-      information in patient ultrasound image sequences.
+Description: Contains module to load data for Bootstrap Your Own Latent (BYOL)
+             self-supervised pretraining.
 """
 
 # Non-standard libraries
@@ -23,7 +20,7 @@ from src.data_prep.dataset import (UltrasoundDataModule,
 ################################################################################
 #                             Data Module Classes                              #
 ################################################################################
-class MoCoDataModule(UltrasoundDataModule):
+class BYOLDataModule(UltrasoundDataModule):
     """
     Top-level object used to access all data preparation and loading
     functionalities in the self-supervised setting.
@@ -35,7 +32,7 @@ class MoCoDataModule(UltrasoundDataModule):
                  augment_training=True,
                  **kwargs):
         """
-        Initialize MoCoDataModule object.
+        Initialize BYOLDataModule object.
 
         Note
         ----
@@ -60,8 +57,8 @@ class MoCoDataModule(UltrasoundDataModule):
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
         same_label : bool, optional
-            If True, positive samples are same-patient images with the same
-            label, by default False.
+            If True, positive samples are images with the same label, by default
+            False.
         custom_collate : str, optional
             One of (None, "same_label"). "same_label" pairs images of the same
             label. Defaults to None, which is the regular SimCLR collate
@@ -90,8 +87,12 @@ class MoCoDataModule(UltrasoundDataModule):
         if dataloader_params:
             default_dataloader_params.update(dataloader_params)
 
-        # Extra SSL flags
+        # Pair together same-label images, if specified
         self.same_label = same_label
+        # If same-label sampling, ensure correct collate function is used
+        if self.same_label:
+            custom_collate = "same_label"
+
         # Ensure custom collate function is as expected
         assert custom_collate in (None, "same_label"), \
             "Invalid `custom_collate` provided! (%s)" % (custom_collate,)
@@ -115,10 +116,8 @@ class MoCoDataModule(UltrasoundDataModule):
 
         # Determine collate function
         # 1. Pairs same-label images
-        # NOTE: If a custom loss is enabled, this should be turned off
-        if self.same_label and self.custom_collate == "same_label" \
-                and not kwargs.get("custom_ssl_loss"):
-            self.collate_fn = ssl_collate_fn.MoCoSameLabelCollateFunction(
+        if self.same_label and self.custom_collate == "same_label":
+            self.collate_fn = ssl_collate_fn.BYOLSameLabelCollateFunction(
                 self.augmentations)
         else:
         # 2. Pairs same-image pairs (different augmentation)

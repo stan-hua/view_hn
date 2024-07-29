@@ -20,8 +20,7 @@ from src.data_prep.dataset import (
     DEFAULT_DATALOADER_PARAMS,
     UltrasoundDataModule, UltrasoundDatasetDataFrame,
 )
-from src.data_prep.moco_dataset import MoCoDataModule
-from src.data_prep.tclr_dataset import TCLRDataModule
+from src.data_prep import BYOLDataModule, MoCoDataModule, TCLRDataModule
 
 
 ################################################################################
@@ -32,7 +31,7 @@ LOGGER = logging.getLogger(__name__)
 
 # Mapping of SSL model name to corresponding data module
 SSL_NAME_TO_DATA_MODULE = {
-    "byol": MoCoDataModule,         # NOTE: BYOL can use MoCo's data module
+    "byol": BYOLDataModule,
     "moco": MoCoDataModule,
     "tclr": TCLRDataModule,
 }
