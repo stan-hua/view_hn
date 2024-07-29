@@ -137,7 +137,7 @@ class BYOLSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         # Group by label
         # NOTE: Precondition that label exists
         # NOTE: Duplicate by 2 to account for the two augmentations
-        labels = np.array(metadata_accum)
+        labels = np.array(metadata_accum["label"])
         label_to_indices = {
             label: np.argwhere(labels == label).squeeze() \
                 for label in np.unique(labels)
