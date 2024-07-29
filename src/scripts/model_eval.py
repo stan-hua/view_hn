@@ -150,7 +150,7 @@ def init(parser):
 #                             Inference - Related                              #
 ################################################################################
 @torch.no_grad()
-def predict_on_images(model, filenames,
+def predict_on_images(model, filenames, labels=None,
                       img_dir=constants.DIR_IMAGES,
                       mask_bladder=False,
                       test_time_aug=False,
@@ -165,6 +165,8 @@ def predict_on_images(model, filenames,
         A trained PyTorch model.
     filenames : np.array or array-like
         Filenames (or full paths) to images to infer on.
+    labels : list of str
+        String label for each image
     img_dir : str, optional
         Path to directory containing images, by default constants.DIR_IMAGES
     mask_bladder : bool, optional
@@ -186,6 +188,7 @@ def predict_on_images(model, filenames,
     # Get mapping of index to class
     label_part = hparams.get("label_part")
     idx_to_class = constants.LABEL_PART_TO_CLASSES[label_part]["idx_to_class"]
+    class_to_idx = constants.LABEL_PART_TO_CLASSES[label_part]["class_to_idx"]
 
     # Set to evaluation mode
     model.eval()
@@ -194,8 +197,9 @@ def predict_on_images(model, filenames,
     preds = []
     probs = []
     outs = []
+    losses = []
 
-    for filename in tqdm(filenames):
+    for idx, filename in tqdm(enumerate(filenames)):
         img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
         # Load image as expected by model
@@ -219,6 +223,14 @@ def predict_on_images(model, filenames,
         # If test-time augmentation, averaging output across augmented samples
         out = out.mean(axis=0, keepdim=True)
 
+        # Compute loss, if label provided
+        loss = None
+        if labels:
+            label_idx = class_to_idx[labels[idx]]
+            label = torch.LongTensor([label_idx]).to(out.device)
+            loss = round(float(torch.nn.functional.cross_entropy(out, label).detach().cpu().item()), 4)
+        losses.append(loss)
+
         # Get index of predicted label
         pred = torch.argmax(out, dim=1)
         pred = int(pred.detach().cpu())
@@ -241,6 +253,7 @@ def predict_on_images(model, filenames,
         "pred": preds,
         "prob": probs,
         "out": outs,
+        "loss": losses,
     })
 
     return df_preds
@@ -1491,6 +1504,28 @@ def store_example_classifications(exp_name, dset, mask_bladder=False,
         )
 
 
+def get_highest_loss_samples(df_pred, n=100):
+    """
+    Get predicted samples with the highest loss.
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Each row is a prediction
+    n : int, optional
+        Number of samples per label
+        
+    Returns
+    -------
+    pd.DataFrame
+        Table with sampled highest losses per label
+    """
+    df_samples = df_pred.groupby(by=["label"]).apply(
+        lambda df: df.sort_values(by=["loss"], ascending=False).iloc[:n]
+    ).reset_index(drop=True)
+    return df_samples
+
+
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
@@ -2291,6 +2326,7 @@ def infer_dset(exp_name,
             df_preds = predict_on_images(
                 model=model,
                 filenames=filenames,
+                labels=df_metadata["label"].tolist(),
                 img_dir=None,
                 mask_bladder=mask_bladder,
                 test_time_aug=test_time_aug,
@@ -2406,7 +2442,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     # 1 Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
 
-    # If specified, calculate metrics
+    # 2. If specified, calculate metrics
     if CALCULATE_METRICS:
         # If 2+ dsets provided, calculate metrics on each dset individually
         dsets = [dset] if isinstance(dset, str) else dset
@@ -2440,7 +2476,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     log_to_comet=log_to_comet,
                 )
 
-    # If specified, create UMAP plots
+    # 3. If specified, create UMAP plots
     if EMBED:
         plot_umap.main(exp_name, dset=dset,
                        comet_exp_key=hparams.get("comet_exp_key") if log_to_comet else None)
