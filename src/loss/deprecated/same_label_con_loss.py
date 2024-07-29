@@ -66,7 +66,7 @@ class SameLabelConLoss:
         Forward pass through Contrastive Cross-Entropy Loss.
 
         Args:
-            out0: torch.Tensor
+            out0: torch.zTensor
                 Output projections of the first set of transformed images.
                 Shape: (batch_size, embedding_size)
             out1: torch.Tensor
