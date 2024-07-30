@@ -10,6 +10,7 @@ import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
 from torch.nn import functional as F
+from torchvision.transforms import v2
 
 # Custom libraries
 from src.data import constants
@@ -25,6 +26,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
     def __init__(self, num_classes=5, img_size=(256, 256),
                  optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  use_gradcam_loss=False,
+                 use_cutmix_aug=False,
                  freeze_weights=False, effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
@@ -49,6 +51,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         use_gradcam_loss : bool, optional
             If True, add auxiliary segmentation-attention GradCAM loss, by
             default False.
+        use_cutmix_aug : bool, optional
+            If True, use CutMix augmentation during training, by default False.
         freeze_weights : bool, optional
             If True, freeze convolutional weights, by default False.
         effnet_name : str, optional
@@ -64,8 +68,13 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # Save hyperparameters (now in self.hparams)
         self.save_hyperparameters()
 
+        # If specified, store augmentations
+        self.cutmix = torch.nn.Identity()
+        if use_cutmix_aug:
+            self.cutmix = v2.CutMix(num_classes=num_classes)
+
         # Define loss
-        self.loss = torch.nn.NLLLoss()
+        self.loss = torch.nn.CrossEntropyLoss()
         # If specified, include auxiliary GradCAM loss
         self.gradcam_loss = None
         if use_gradcam_loss:
@@ -193,15 +202,20 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         """
         data, metadata = train_batch
 
+        # Get label (and modify for loss if using cutmix)
+        y_true = metadata["label"]
+
+        # If specified, apply CutMix augmentation on images
+        y_true_aug = y_true
+        if self.hparams.get("use_cutmix_aug"):
+            data, y_true_aug = self.cutmix(data, y_true)
+
         # Get prediction
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
 
-        # Get label
-        y_true = metadata["label"]
-
         # Get loss
-        ce_loss = self.loss(F.log_softmax(out, dim=1), y_true)
+        ce_loss = self.loss(out, y_true_aug)
         # If specified, compute GradCAM loss
         if self.hparams.use_gradcam_loss:
             gradcam_loss = self.gradcam_loss(*train_batch)
@@ -252,7 +266,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         y_true = metadata["label"]
 
         # Get loss
-        loss = self.loss(F.log_softmax(out, dim=1), y_true)
+        loss = self.loss(out, y_true)
 
         # Log validation metrics
         self.val_acc.update(y_pred, y_true)
@@ -298,7 +312,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         y_true = metadata["label"]
 
         # Get loss
-        loss = self.loss(F.log_softmax(out, dim=1), y_true)
+        loss = self.loss(out, y_true)
 
         # Log test metrics
         self.test_acc.update(y_pred, y_true)
