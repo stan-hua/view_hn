@@ -18,8 +18,6 @@ from lightly.models.utils import (batch_shuffle, batch_unshuffle,
                                   deactivate_requires_grad, update_momentum)
 
 # Custom libraries
-from src.loss.soft_ntx_ent_loss import SoftNTXentLoss
-from src.loss.same_label_con_loss import SameLabelConLoss
 from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
@@ -115,9 +113,11 @@ class MoCo(L.LightningModule):
             # NOTE: With same-label positive sampling, attempts to learn
             #       features, such that any sample of the same label are
             #       equally likely distinguished
-            self.loss = SoftNTXentLoss(temperature=temperature)
+            # self.loss = SoftNTXentLoss(temperature=temperature)
+            raise RuntimeError("Soft NT-Xent loss has been deprecated!")
         elif self.hparams.custom_ssl_loss == "same_label":
-            self.loss = SameLabelConLoss()
+            # self.loss = SameLabelConLoss()
+            raise RuntimeError("Same-Label MoCo loss has been deprecated!")
         else:
             raise NotImplementedError(f"`custom_ssl_loss` must be one of (None, "
                                       "'soft', 'same_label')!")
