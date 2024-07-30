@@ -633,7 +633,7 @@ def plot_ssl_augmentations():
     data_module = MoCoDataModule(
         dataloader_params,
         df=df_metadata, img_dir=constants.DIR_IMAGES,
-        crop_scale=0.2,
+        crop_scale=0.3,
     )
 
     # Sample 1 batch of images
