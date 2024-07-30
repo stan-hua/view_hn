@@ -473,7 +473,7 @@ def plot_umap_for_one_patient_seq(exp_name, view_labels, patient_visit,
               **plot_kwargs)
 
 
-def plot_umap_for_n_patient(exp_name, patients, df_embeds_only, n=3,
+def plot_umap_for_n_patient(exp_name, patients, df_embeds_only, n=0,
                             raw=False,
                             **plot_kwargs):
     """
@@ -488,7 +488,7 @@ def plot_umap_for_n_patient(exp_name, patients, df_embeds_only, n=3,
     df_embeds_only : pd.DataFrame
         Extracted deep embeddings. Does not have file paths in any column.
     n : int
-        Number of patients to choose, by default 3
+        Number of patients to choose. If negative, show all, by default show all
     raw : bool, optional
         If True, loaded embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
@@ -498,8 +498,10 @@ def plot_umap_for_n_patient(exp_name, patients, df_embeds_only, n=3,
     umap_embeds_all = get_umap_embeddings(df_embeds_only)
 
     # Choose N patient
-    patients_selected = patients.unique()[:n]
-    
+    patients_selected = patients.unique()
+    if n:
+        patients_selected = patients.unique()[:n]
+
     # Filter UMAP embeddings for the chosen patients
     idx_patients = patients.isin(patients_selected)
     umap_embeds_patients = umap_embeds_all[idx_patients]
@@ -543,7 +545,9 @@ def plot_images_in_umap_clusters(exp_name, filenames, df_embeds_only, raw=False,
     for cluster in np.unique(cluster_labels):
         # Filter by cluster, and sample 25 images
         idx_cluster = (cluster_labels == cluster)
-        cluster_filenames = filenames[idx_cluster][:25]
+        cluster_filenames = np.random.choice(
+            filenames[idx_cluster], size=min(25, sum(idx_cluster)),
+            replace=False)
 
         print(f"""
 ################################################################################
@@ -813,8 +817,8 @@ def main(exp_name,
 
     # 6. Plot UMAP for N patients, colored by patient ID
     if n_patient_umap:
-        plot_umap_for_n_patient(exp_name, patients, df_embeds_only, n=3, raw=raw,
-                                **plot_kwargs)
+        plot_umap_for_n_patient(exp_name, patients, df_embeds_only,
+                                raw=raw, **plot_kwargs)
 
     # 7. Plot example images from UMAP clusters
     if cluster_umap:
