@@ -18,6 +18,7 @@ from lightly.models.utils import (batch_shuffle, batch_unshuffle,
                                   deactivate_requires_grad, update_momentum)
 
 # Custom libraries
+from src.loss import SupMoCoLoss
 from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
@@ -68,7 +69,7 @@ class MoCo(L.LightningModule):
             If True, uses labels to mark same-label samples as positives instead
             of supposed negatives. Defaults to False.
         custom_ssl_loss : str, optional
-            One of (None, "soft", "same_label"). Specifies custom SSL loss to
+            One of (None, "same_label"). Specifies custom SSL loss to
             use. Defaults to None.
         multi_objective : bool, optional
             If True, optimizes for both supervised loss and SSL loss. Defaults
@@ -116,8 +117,7 @@ class MoCo(L.LightningModule):
             # self.loss = SoftNTXentLoss(temperature=temperature)
             raise RuntimeError("Soft NT-Xent loss has been deprecated!")
         elif self.hparams.custom_ssl_loss == "same_label":
-            # self.loss = SameLabelConLoss()
-            raise RuntimeError("Same-Label MoCo loss has been deprecated!")
+            self.loss = SupMoCoLoss()
         else:
             raise NotImplementedError(f"`custom_ssl_loss` must be one of (None, "
                                       "'soft', 'same_label')!")
@@ -211,9 +211,10 @@ class MoCo(L.LightningModule):
         k = batch_unshuffle(k, shuffle)
 
         # Calculate loss
-        # 1. SSL loss
+        # 1. Regular NT-Xent loss
         if not self.same_label or self.hparams.custom_ssl_loss is None:
             loss = self.loss(q, k)
+        # 2. Supervised MoCo Loss
         else:
             # Get label
             labels = metadata["label"]
