@@ -90,8 +90,12 @@ class MoCoDataModule(UltrasoundDataModule):
         if dataloader_params:
             default_dataloader_params.update(dataloader_params)
 
-        # Extra SSL flags
+        # Pair together same-label images, if specified
         self.same_label = same_label
+        # If same-label sampling, ensure correct collate function is used
+        if self.same_label:
+            custom_collate = "same_label"
+
         # Ensure custom collate function is as expected
         assert custom_collate in (None, "same_label"), \
             "Invalid `custom_collate` provided! (%s)" % (custom_collate,)

@@ -105,22 +105,19 @@ class MoCo(L.LightningModule):
         deactivate_requires_grad(self.projection_head_momentum)
 
         # Define loss (NT-Xent Loss with memory bank)
-        if not self.same_label or self.hparams.custom_ssl_loss is None:
+        # 1. NT-Xent loss
+        if str(self.hparams.custom_ssl_loss) == "None":
             self.loss = lightly.loss.NTXentLoss(
                 temperature=temperature,
                 memory_bank_size=memory_bank_size)
-        # Below are custom losses for same-label contrastive learning
-        elif self.hparams.custom_ssl_loss == "soft":
-            # NOTE: With same-label positive sampling, attempts to learn
-            #       features, such that any sample of the same label are
-            #       equally likely distinguished
-            # self.loss = SoftNTXentLoss(temperature=temperature)
-            raise RuntimeError("Soft NT-Xent loss has been deprecated!")
+        # 2. Supervised MoCo
         elif self.hparams.custom_ssl_loss == "same_label":
             self.loss = SupMoCoLoss()
+        elif self.hparams.custom_ssl_loss == "soft":
+            raise RuntimeError("Soft NT-Xent loss has been deprecated!")
         else:
             raise NotImplementedError(f"`custom_ssl_loss` must be one of (None, "
-                                      "'soft', 'same_label')!")
+                                      "'same_label')!")
 
         # If multi-objective, add supervised loss + classification layer
         if self.hparams.multi_objective:
@@ -212,7 +209,7 @@ class MoCo(L.LightningModule):
 
         # Calculate loss
         # 1. Regular NT-Xent loss
-        if not self.same_label or self.hparams.custom_ssl_loss is None:
+        if str(self.hparams.custom_ssl_loss) == "None":
             loss = self.loss(q, k)
         # 2. Supervised MoCo Loss
         else:

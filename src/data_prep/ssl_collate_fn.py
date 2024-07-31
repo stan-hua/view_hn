@@ -165,7 +165,12 @@ class BYOLSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         # Reorganize accumulated metadata
         # Convert metadata lists to torch tensors
         for key, val_list in metadata_accum.items():
-            metadata_accum[key] = [val_list[first_idx], val_list[second_idx]]
+            # SPECIAL CASE: If label, then you know it's the same
+            if key == "label":
+                metadata_accum[key] = val_list[first_idx]
+            # GENERAL CASE: Store metadata for both
+            else:
+                metadata_accum[key] = [val_list[first_idx], val_list[second_idx]]
 
         # Get images
         # If batch size is 1, but contains multiple US images
@@ -199,9 +204,6 @@ class BYOLSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         return X_transformed_paired, metadata_accum
 
 
-# TODO: Fix issue with same image negative sample
-# TODO: Create custom memory bank for label-specific negative samples
-# TODO: Fix metadata returned
 class MoCoSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
     """
     MoCoSameLabelCollateFunction.
@@ -266,8 +268,7 @@ class MoCoSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         # Group by label
         # NOTE: Precondition that label exists
         # NOTE: Duplicate by 2 to account for the two augmentations
-        labels = np.concatenate([metadata_accum["label"],
-                                 metadata_accum["label"]])
+        labels = np.array(metadata_accum["label"])
         label_to_indices = {
             label: np.argwhere(labels == label).squeeze() \
                 for label in np.unique(labels)
@@ -277,12 +278,30 @@ class MoCoSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         first_idx = []
         second_idx = []
         for _, indices in label_to_indices.items():
-            # Pair randomly selected images
-            # Shuffle indices
             n = len(indices)
+
+            # CASE 1: Only 1 image of this label in the batch, don't include
+            if n == 1:
+                continue
+
+            # CASE 2: 2+ images of this label in the batch
+            # Only sample an even number of images
+            n = n - 1 if (n % 2 == 1) else n
+            # Randomly pair images
             chosen_indices = np.random.choice(indices, size=n, replace=False)
+
             first_idx.extend(chosen_indices[:int(n/2)])
             second_idx.extend(chosen_indices[int(n/2):])
+
+        # Reorganize accumulated metadata
+        # Convert metadata lists to torch tensors
+        for key, val_list in metadata_accum.items():
+            # SPECIAL CASE: If label, then you know it's the same
+            if key == "label":
+                metadata_accum[key] = val_list[first_idx]
+            # GENERAL CASE: Store metadata for both
+            else:
+                metadata_accum[key] = [val_list[first_idx], val_list[second_idx]]
 
         # Get images
         # If batch size is 1, but contains multiple US images
@@ -297,11 +316,15 @@ class MoCoSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
             if len(shape) == 5 and shape[0] == 1:
                 imgs = [img[0] for img in imgs]
 
-        # Perform random augmentation on each image twice
+        # Raise error, if batch size is only one
         batch_size = len(imgs)
+        if batch_size == 1:
+            raise NotImplementedError("Same-Label MoCo is not implemented for `batch_size = 1`!")
+
+        # Perform random augmentation on each image once
         X_transformed = [
             self.transform(imgs[i % batch_size]).unsqueeze_(0)
-            for i in range(batch_size * 2)]
+            for i in range(batch_size)]
 
         # Tuple of paired transforms
         X_transformed_paired = (
