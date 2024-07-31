@@ -473,9 +473,6 @@ class TCLR(L.LightningModule):
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         self.log('epoch_train_loss', loss)
 
-        # Log weights
-        self.custom_histogram_weights()
-
 
     def on_validation_epoch_end(self, outputs):
         """
@@ -488,16 +485,6 @@ class TCLR(L.LightningModule):
         """
         loss = torch.stack(outputs).mean()
         self.log('epoch_val_loss', loss)
-
-
-    def custom_histogram_weights(self):
-        """
-        Log histogram of weights. This is useful for debugging issues with
-        dimension collapse, etc.
-        """
-        for name, params in self.named_parameters():
-            self.logger.experiment[1].add_histogram(
-                name, params, self.current_epoch)
 
 
     ############################################################################

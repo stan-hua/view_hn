@@ -207,6 +207,12 @@ class MoCo(L.LightningModule):
             k = self.projection_head(k)
         k = batch_unshuffle(k, shuffle)
 
+        # Compute L2 norm of online embeddings
+        with torch.no_grad():
+            norm = torch.linalg.matrix_norm(q).item()
+            norm = norm / len(q)
+            self.log("proj_l2_norm", norm)
+
         # Calculate loss
         # 1. Regular NT-Xent loss
         if str(self.hparams.custom_ssl_loss) == "None":
@@ -328,9 +334,6 @@ class MoCo(L.LightningModule):
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         self.log('epoch_train_loss', loss)
 
-        # Log weights
-        self.custom_histogram_weights()
-
 
     def on_validation_epoch_end(self):
         """
@@ -339,16 +342,6 @@ class MoCo(L.LightningModule):
         outputs = self.dset_to_outputs["val"]
         loss = torch.stack(outputs).mean()
         self.log('epoch_val_loss', loss)
-
-
-    def custom_histogram_weights(self):
-        """
-        Log histogram of weights. This is useful for debugging issues with
-        dimension collapse, etc.
-        """
-        for name, params in self.named_parameters():
-            self.logger.experiment[1].add_histogram(
-                name, params, self.current_epoch)
 
 
     ############################################################################
