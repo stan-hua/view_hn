@@ -26,7 +26,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
     def __init__(self, num_classes=5, img_size=(256, 256),
                  optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  use_gradcam_loss=False,
-                 use_cutmix_aug=False,
+                 use_cutmix_aug=False, use_mixup_aug=False,
                  freeze_weights=False, effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
@@ -53,6 +53,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             default False.
         use_cutmix_aug : bool, optional
             If True, use CutMix augmentation during training, by default False.
+        use_mixup_aug : bool, optional
+            If True, use Mixup augmentation during training, by default False
         freeze_weights : bool, optional
             If True, freeze convolutional weights, by default False.
         effnet_name : str, optional
@@ -68,10 +70,15 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # Save hyperparameters (now in self.hparams)
         self.save_hyperparameters()
 
-        # If specified, store augmentations
-        self.cutmix = torch.nn.Identity()
+        # If specified, store training-specific augmentations
+        # NOTE: These augmentations require batches of input
+        self.train_aug = None
         if use_cutmix_aug:
-            self.cutmix = v2.CutMix(num_classes=num_classes)
+            assert not use_mixup_aug
+            self.train_aug = v2.CutMix(num_classes=num_classes)
+        if use_mixup_aug:
+            assert not use_cutmix_aug
+            self.train_aug = v2.MixUp(num_classes=num_classes)
 
         # Define loss
         self.loss = torch.nn.CrossEntropyLoss()
@@ -207,8 +214,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         # If specified, apply CutMix augmentation on images
         y_true_aug = y_true
-        if self.hparams.get("use_cutmix_aug"):
-            data, y_true_aug = self.cutmix(data, y_true)
+        if self.hparams.get("use_cutmix_aug") or self.hparams.get("use_mixup_aug"):
+            data, y_true_aug = self.train_aug(data, y_true)
 
         # Get prediction
         out = self.forward(data)

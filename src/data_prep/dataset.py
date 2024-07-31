@@ -5,6 +5,7 @@ Description: Contains functions/classes to load dataset in PyTorch.
 """
 # Standard libraries
 import glob
+import json
 import logging
 import os
 from abc import abstractmethod
@@ -156,6 +157,10 @@ class UltrasoundDataModule(L.LightningDataModule):
                 ensure_seg_mask : bool
                     If True, filter training set (post-split) for those with
                     segmentation masks (likely for use in GradCAM loss)
+                exclude_filename_json : str
+                    Path to JSON file containing image files to intentionally
+                    exclude from training/val/test set (post-split), by default
+                    None.
         """
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
@@ -301,6 +306,33 @@ class UltrasoundDataModule(L.LightningDataModule):
             self.dset_to_ids["train"] = self.dset_to_ids["train"][has_seg_mask]
             self.dset_to_paths["train"] = self.dset_to_paths["train"][has_seg_mask]
             self.dset_to_labels["train"] =self.dset_to_labels["train"][has_seg_mask]
+
+        # If specified, remove explicitly listed images from the training set
+        exclude_filename_json = self.us_dataset_kwargs.get("exclude_filename_json")
+        if exclude_filename_json:
+            # Raise error, if file doesn't exist
+            if not os.path.exists(exclude_filename_json):
+                raise RuntimeError("Exclude filename path doesn't exist!\n\t"
+                                   f"{exclude_filename_json}")
+
+            # Load JSON file
+            with open(exclude_filename_json, "r") as handler:
+                exclude_fnames = set(json.load(handler))
+
+            # For each of train/val/test, ensure images are all filtered
+            for dset in ("train", "val", "test"):
+                if self.dset_to_ids[dset] is None:
+                    continue
+
+                # Extract current filenames
+                curr_fnames = [os.path.basename(path) for path in self.dset_to_paths[dset]]
+                is_included_mask = np.array([fname not in exclude_fnames for fname in curr_fnames])
+                LOGGER.info(f"Explicitly excluding {is_included_mask.sum()} images from `{dset}`!")
+
+                # Remove from data split
+                self.dset_to_ids[dset] = self.dset_to_ids[dset][is_included_mask]
+                self.dset_to_paths[dset] = self.dset_to_paths[dset][is_included_mask]
+                self.dset_to_labels[dset] = self.dset_to_labels[dset][is_included_mask]
 
 
     def train_dataloader(self):
