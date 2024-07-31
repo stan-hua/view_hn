@@ -68,6 +68,7 @@ class EfficientNetLSTM(EfficientNet, L.LightningModule):
             self.model_name, {"image_size": img_size,
                               "include_top": False})
         super().__init__(blocks_args=blocks_args, global_params=global_params)
+        self._change_in_channels(kwargs.get("mode", 3))
 
         # Save hyperparameters (now in self.hparams)
         self.save_hyperparameters()
