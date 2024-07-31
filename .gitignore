@@ -9,3 +9,4 @@ renal-view
 .vscode
 config/model_training/*
 .cometml-runs
+test_vlm.py

@@ -1,9 +1,9 @@
 #!/bin/bash -l
-#SBATCH --job-name=stan_embed              # Job name
+#SBATCH --job-name=embed                  # Job name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Request one GPU
 #SBATCH --cpus-per-task=6                 # Number of CPU cores per task
-#SBATCH --mem=32GB
+#SBATCH --mem=8GB
 #SBATCH -o slurm/logs/slurm-%j.out
 
 # If you want to do it in the terminal,
@@ -13,8 +13,12 @@
 # Load any necessary modules or activate your virtual environment here
 micromamba activate view
 
+# Set experiment name
+# EXP_NAME=exp_ssl_pretrain-byol_accum_with_swa_no_seed
+EXP_NAME=exp_ssl_pretrain-byol-sup_plane
+
 # Create embeddings
-srun python -m src.scripts.embed --exp_name exp_descent-augment --dset  "train" "val"
+srun python -m src.scripts.embed --exp_name $EXP_NAME --dset "val"
 
 # Create UMAP
-srun python -m src.data_viz.plot_umap --exp_name exp_descent-augment --dset  "train" "val"
+srun python -m src.data_viz.plot_umap --exp_name $EXP_NAME --dset "val"
