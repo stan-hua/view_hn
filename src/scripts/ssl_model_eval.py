@@ -243,16 +243,12 @@ def analyze_eval_model_preds(exp_name, dset, model_type="linear_lstm",
     dsets = [dset] if isinstance(dset, str) else dset
     for dset in dsets:
         # Create overwriting parameters, if external dataset desired
-        overwrite_hparams = load_data.create_overwrite_hparams(
-            dset)
-        # Specify to mask bladder, if hospital w/o bladder labels
-        mask_bladder = dset in constants.DSETS_MISSING_BLADDER
+        overwrite_hparams = load_data.create_overwrite_hparams(dset)
 
         # 1. Perform inference on dataset
         model_eval.infer_dset(
             exp_eval_name,
             dset=dset,
-            mask_bladder=mask_bladder,
             **overwrite_hparams)
 
         # 2. Embed dataset
@@ -398,7 +394,6 @@ def prep_eval_exp_hparams(hparams, **overwrite_hparams):
         hparams["comet_exp_key"] = old_hparams.get("comet_exp_key", None)
     except:
         pass
-
 
     # Ensure number of classes is as expected
     label_part = hparams["label_part"]
