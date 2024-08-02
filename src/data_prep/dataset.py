@@ -327,7 +327,7 @@ class UltrasoundDataModule(L.LightningDataModule):
                 # Extract current filenames
                 curr_fnames = [os.path.basename(path) for path in self.dset_to_paths[dset]]
                 is_included_mask = np.array([fname not in exclude_fnames for fname in curr_fnames])
-                LOGGER.info(f"Explicitly excluding {is_included_mask.sum()} images from `{dset}`!")
+                LOGGER.info(f"Explicitly excluding {(~is_included_mask).sum()} images from `{dset}`!")
 
                 # Remove from data split
                 self.dset_to_ids[dset] = self.dset_to_ids[dset][is_included_mask]
