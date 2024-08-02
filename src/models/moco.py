@@ -112,7 +112,11 @@ class MoCo(L.LightningModule):
                 memory_bank_size=memory_bank_size)
         # 2. Supervised MoCo
         elif self.hparams.custom_ssl_loss == "same_label":
-            self.loss = SupMoCoLoss()
+            self.loss = SupMoCoLoss(
+                num_classes=kwargs.get("num_classes", 5),
+                temperature=temperature,
+                memory_bank_size=memory_bank_size,
+            )
         elif self.hparams.custom_ssl_loss == "soft":
             raise RuntimeError("Soft NT-Xent loss has been deprecated!")
         else:
@@ -334,14 +338,20 @@ class MoCo(L.LightningModule):
         loss = torch.stack([d['loss'] for d in outputs]).mean()
         self.log('epoch_train_loss', loss)
 
+        # Clean stored output
+        self.dset_to_outputs["train"].clear()
+
 
     def on_validation_epoch_end(self):
         """
         Compute and log evaluation metrics for validation epoch.
         """
         outputs = self.dset_to_outputs["val"]
-        loss = torch.stack(outputs).mean()
+        loss = torch.stack([d['loss'] for d in outputs]).mean()
         self.log('epoch_val_loss', loss)
+
+        # Clean stored output
+        self.dset_to_outputs["val"].clear()
 
 
     ############################################################################
