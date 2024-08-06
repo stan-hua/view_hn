@@ -5,21 +5,19 @@ Description: Contains functions to perform exploratory data analysis on dataset.
 """
 
 # Standard libraries
-import cv2
-import imageio
 import logging
 import os
 
 # Non-standard libraries
+import albumentations as A
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import imageio
 import pandas as pd
 import seaborn as sns
 import torch
-import torchvision.transforms.v2 as T
-from skimage.exposure import equalize_hist
-from torchvision.io import read_image, ImageReadMode
+from albumentations.pytorch.transforms import ToTensorV2
 
 # Custom libraries
 from src.data import constants
@@ -149,7 +147,7 @@ def plot_pixels_along_axis(imgs, ax1=None, ax2=None):
     ax2.set_title("along y-axis")
 
 
-def plot_pixels_histogram_by_label(df_metadata, fname_prefix):
+def plot_pixels_histogram_by_label(df_metadata, fname_prefix, src_paths=None):
     """
     Plot pixel-wise, width-wise (horizontal) and length-wise (vertical) pixel
     distributions, and save to EDA directory
@@ -160,6 +158,9 @@ def plot_pixels_histogram_by_label(df_metadata, fname_prefix):
         Each row contains metadata for an ultrasound image.
     fname_prefix : str
         Filename prefix
+    src_paths : list
+        List of image paths from source dataset. If provided, transforms images
+        to match source domain
 
     Returns
     -------
@@ -177,30 +178,53 @@ def plot_pixels_histogram_by_label(df_metadata, fname_prefix):
     # Get image paths
     img_paths = df_metadata["filename"].tolist()
 
-    # Define resize operation
-    resize_op = T.Resize(constants.IMG_SIZE)
-    normalize_op = T.Normalize([128], [75])
+    # If provided, load all "source domain" images for Domain Adaptation (DA) transform
+    da_transform = None
+    if src_paths:
+        da_transform = A.FDA(src_paths, beta_limit=0.1, p=1., read_fn=load_image)
+        # da_transform = A.HistogramMatching(src_paths, blend_ratio=(1, 1), p=1., read_fn=load_image)
 
     # Load all images
+    before_imgs = []
     imgs = []
-    for img_path in img_paths:
-        img = read_image(img_path, ImageReadMode.GRAY)
-        # Resize image
-        img = resize_op(img)
-        # Perform histogram equalization
-        img = T.functional.equalize(img).to(float)
-        # TODO: Consider normalizing by SickKids Train after
-        img = normalize_op(img)
+    for idx, img_path in enumerate(img_paths):
+        img = load_image(img_path)
 
-        # Normalize between 0 and 1, then multiply by 255
-        img = img - img.min()
-        img /= img.max()
-        img *= 255
+        # Apply domain adaptation transform
+        if da_transform is not None:
+            # Store before/after DA images
+            before_img = ToTensorV2()(image=img)["image"]
+            before_img = before_img.to(int).squeeze(dim=0)
+            before_imgs.append(before_img)
+
+            # Convert image to numpy array
+            img = da_transform(image=img)["image"]
+
+        # Convert to PyTorch tensor
+        img = ToTensorV2()(image=img)["image"]
+
+        # Convert to pixel values
+        if (img < 1).all():
+            img *= 255.
+            img = img.to(int)
 
         # Remove channel dimension
         img = img.squeeze(dim=0)
         imgs.append(img)
     imgs = torch.stack(imgs)
+
+    # TODO: Plot before and after domain adaptation transform
+    if da_transform is not None:
+        indices = torch.randperm(len(imgs))[:9]
+        before_imgs = torch.stack(before_imgs)
+        viz_utils.gridplot_images(
+            before_imgs[indices].numpy(),
+            filename=f"{fname_prefix}-before.png",
+            save_dir=constants.DIR_FIGURES_EDA)
+        viz_utils.gridplot_images(
+            imgs[indices].numpy(),
+            filename=f"{fname_prefix}-after.png",
+            save_dir=constants.DIR_FIGURES_EDA)
 
     # Convert images to numpy
     imgs = imgs.numpy()
@@ -247,9 +271,14 @@ def plot_pixels_histogram_by_label(df_metadata, fname_prefix):
     return img_stats
 
 
-def plot_img_histogram_per_hospital():
+def plot_img_histogram_per_hospital(da_transform=False):
     """
     Plot image histogram for each hospital
+
+    Parameters
+    ----------
+    da_transform : bool, optional
+        If True, perform domain adaptation transform on OOD datasets
     """
     shared_kwargs = {"prepend_img_dir": True, "extract": True}
 
@@ -271,10 +300,18 @@ def plot_img_histogram_per_hospital():
     df_sk_metadata_test = df_sk_metadata[df_sk_metadata["id"].isin(SK_TEST_IDS)]
     dset_stats["sk_test"] = plot_pixels_histogram_by_label(df_sk_metadata_test, "sickkids_test")
 
+    # Get source domain images
+    src_paths = None
+    if da_transform:
+        src_paths = df_sk_metadata_train.groupby(by=["label"])["filename"].sample(n=200).tolist()
+
     # 4. Other Test Sets
     for dset in ("stanford", "stanford_non_seq", "sickkids_silent_trial", "uiowa", "chop"):
         df_curr_metadata = load_metadata(dset, **shared_kwargs)
-        dset_stats[dset] = plot_pixels_histogram_by_label(df_curr_metadata, dset)
+        fname_prefix = f"{dset}_fda" if da_transform else dset
+        dset_stats[dset] = plot_pixels_histogram_by_label(
+            df_curr_metadata, fname_prefix,
+            src_paths=src_paths)
 
     print(dset_stats)
 
@@ -653,17 +690,44 @@ def plot_ssl_augmentations():
         save_dir=constants.DIR_FIGURES_EDA)
 
 
-if __name__ == '__main__':
-    ############################################################################
-    #                         Plot Example Images                              #
-    ############################################################################
-    plot_ssl_augmentations()
+################################################################################
+#                               Helper Functions                               #
+################################################################################
+def load_image(img_path):
+    """
+    Load image
 
+    Parameters
+    ----------
+    img_path : str
+        Path to image
+
+    Returns
+    -------
+    np.array
+        Loaded image
+    """
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+
+    # Histogram equalize image
+    img = cv2.equalizeHist(img)
+
+    # Resize image
+    img = A.Resize(*constants.IMG_SIZE, p=1)(image=img)["image"]
+
+    return img
+
+if __name__ == '__main__':
     ############################################################################
     #                        Plot Pixel Histograms                             #
     ############################################################################
     # Plot image histogram
     plot_img_histogram_per_hospital()
+
+    ############################################################################
+    #                         Plot Example Images                              #
+    ############################################################################
+    plot_ssl_augmentations()
 
     ############################################################################
     #                      Plot Distribution of Views                          #
