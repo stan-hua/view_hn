@@ -242,26 +242,34 @@ def analyze_eval_model_preds(exp_name, dset, model_type="linear_lstm",
 
     dsets = [dset] if isinstance(dset, str) else dset
     for dset in dsets:
+        # Correctly convert to dset and split
+        curr_dset = dset
+        curr_split = "test"
+        if dset in ("train", "val", "test"):
+            curr_dset = None
+            curr_split = dset
+
         # Create overwriting parameters, if external dataset desired
-        overwrite_hparams = load_data.create_overwrite_hparams(dset)
+        eval_hparams = load_data.create_eval_hparams(curr_dset, curr_split)
 
         # 1. Perform inference on dataset
         model_eval.infer_dset(
             exp_eval_name,
             dset=dset,
-            **overwrite_hparams)
+            **eval_hparams)
 
         # 2. Embed dataset
         model_eval.embed_dset(
             exp_eval_name,
             dset=dset,
-            **overwrite_hparams,
+            **eval_hparams,
         )
 
         # 3. Analyze predictions separately
         model_eval.analyze_dset_preds(
             exp_eval_name,
             dset=dset,
+            log_to_comet=True,
         )
 
     # 4. Create UMAP together

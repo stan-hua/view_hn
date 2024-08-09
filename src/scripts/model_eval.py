@@ -13,8 +13,10 @@ import random
 import sys
 from collections import OrderedDict
 from colorama import Fore, Style
+from functools import partial
 
 # Non-standard libraries
+import albumentations as A
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,6 +24,7 @@ import seaborn as sns
 import torch
 import torchvision.transforms.v2 as T
 from arch.bootstrap import IIDBootstrap
+from albumentations.pytorch.transforms import ToTensorV2
 from scipy.stats import pearsonr
 from sklearn import metrics as skmetrics
 from torchvision.io import read_image, ImageReadMode
@@ -68,7 +71,7 @@ THEME = "dark"
 CALCULATE_METRICS = True
 
 # Flag to create embeddings and plot UMAP for each evaluation set
-EMBED = True
+EMBED = False
 
 # Flag to overwrite existing results
 OVERWRITE_EXISTING = False
@@ -130,6 +133,9 @@ def init(parser):
         "dset": "List of dataset split or test dataset name to evaluate",
         "mask_bladder": "If True, mask bladder logit, if it's an US image dataset.",
         "test_time_aug": "If True, perform test-time augmentations during inference.",
+        "da_transform_name":
+            "If provided, performs domain adaptation transform on test images, "
+            "by default None. Must be one of ('fda', 'hm')",
         "log_to_comet": "If True, log results to Comet ML",
     }
     parser.add_argument("--exp_name", required=True,
@@ -142,6 +148,8 @@ def init(parser):
                         help=arg_help["mask_bladder"])
     parser.add_argument("--test_time_aug", action="store_true",
                         help=arg_help["test_time_aug"])
+    parser.add_argument("--da_transform_name", default=None,
+                        help=arg_help["da_transform_name"])
     parser.add_argument("--log_to_comet", action="store_true",
                         help=arg_help["log_to_comet"])
 
@@ -151,9 +159,10 @@ def init(parser):
 ################################################################################
 @torch.no_grad()
 def predict_on_images(model, filenames, labels=None,
-                      img_dir=constants.DIR_IMAGES,
+                      img_dir=constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"],
                       mask_bladder=False,
                       test_time_aug=False,
+                      da_transform=None,
                       **hparams):
     """
     Performs inference on images specified. Returns predictions, probabilities
@@ -168,12 +177,15 @@ def predict_on_images(model, filenames, labels=None,
     labels : list of str
         String label for each image
     img_dir : str, optional
-        Path to directory containing images, by default constants.DIR_IMAGES
+        Path to directory containing images, by default constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"]
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
     test_time_aug : bool, optional
         If True, perform test-time augmentation.
+    da_transform : A.Compose, optional
+        If provided, contains Domain Adaptation transform and ensures it's
+        converted back to a PyTorch tensor, by default None.
     hparams : dict, optional
         Keyword arguments for experiment hyperparameters
 
@@ -203,13 +215,22 @@ def predict_on_images(model, filenames, labels=None,
         img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
         # Load image as expected by model
-        img = read_image(img_path, ImageReadMode.RGB)
-        img = transform_image(
-            img,
+        # NOTE: Load as numpy, if passing into da_transform
+        as_numpy = False if da_transform is None else True
+        img = load_image(
+            img_path,
             augment=test_time_aug,
-            n=8 if test_time_aug else 1)
+            n=8 if test_time_aug else 1,
+            as_numpy=as_numpy,
+        )
 
-        # Convert to tensor and send to device
+        # Pass through da transform
+        if da_transform is not None:
+            # Remove batch size dimension
+            img = da_transform(image=img)["image"]
+            assert False, "Reached here!"
+
+        # Convert to float32 type and send to device
         img = img.to(torch.float32).to(DEVICE)
 
         # Perform inference
@@ -262,7 +283,7 @@ def predict_on_images(model, filenames, labels=None,
 # TODO: Implement test-time augmentations
 @torch.no_grad()
 def predict_on_sequences(model, filenames,
-                         img_dir=constants.DIR_IMAGES,
+                         img_dir=constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"],
                          mask_bladder=False,
                          test_time_aug=False,
                          **hparams):
@@ -277,7 +298,7 @@ def predict_on_sequences(model, filenames,
     filenames : np.array or array-like
         Filenames (or full paths) to images from one unique sequence to infer.
     img_dir : str, optional
-        Path to directory containing images, by default constants.DIR_IMAGES
+        Path to directory containing images, by default constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"]
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
@@ -350,7 +371,7 @@ def predict_on_sequences(model, filenames,
 
 
 @torch.no_grad()
-def multi_predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
+def multi_predict_on_sequences(model, filenames, img_dir=constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"],
                                **hparams):
     """
     Performs inference on a full ultrasound sequence specified with a
@@ -363,7 +384,7 @@ def multi_predict_on_sequences(model, filenames, img_dir=constants.DIR_IMAGES,
     filenames : np.array or array-like
         Filenames (or full paths) to images from one unique sequence to infer.
     img_dir : str, optional
-        Path to directory containing images, by default constants.DIR_IMAGES
+        Path to directory containing images, by default constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"]
     hparams : dict, optional
         Keyword arguments for experiment hyperparameters
 
@@ -1264,11 +1285,11 @@ def eval_calculate_all_metrics(df_pred):
     #     df_pred[df_pred["at_label_boundary"]])
     # df_metrics_at_boundary.name = "At Label Boundary"
 
-    # 1.4 Most confident view (per label) in each sequence
-    # NOTE: Disabled for now
-    # df_confident = filter_most_confident(df_pred, local=False)
-    # df_metrics_confident = calculate_metrics(df_confident, ci=True)
-    # df_metrics_confident.name = "Most Confident"
+    # 1.4 Most confident sample for each predicted view label across sequence
+    df_confident = filter_most_confident(df_pred, local=False)
+    df_metrics_confident = calculate_metrics(df_confident, ci=True)
+    df_metrics_confident.name = "Most Confident"
+    accum_metric_tables.append(df_metrics_confident)
 
     # 1.5 If bladder present, re-compute metrics without Bladder images
     # NOTE: Doesn't remove non-Bladder images misclassified as Bladder
@@ -1346,9 +1367,9 @@ def eval_create_plots(df_pred, hparams, inference_dir,
                                   label_part=hparams.get("label_part"))
 
 
-def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
-                          test_time_aug=False,
-                          log_to_comet=False):
+def calculate_exp_metrics(exp_name, dset, hparams=None,
+                          log_to_comet=False,
+                          **infer_kwargs):
     """
     Given that inference was performed, compute metrics for experiment model
     and dataset.
@@ -1361,19 +1382,15 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
         Name of evaluation split or test dataset
     hparams : dict, optional
         Experiment hyperparameters, by default None
-    mask_bladder : bool, optional
-        If True, bladder predictions are masked out, by default False
-    test_time_aug : bool, optional
-        If True, perform test-time augmentation.
     log_to_comet : bool, optional
         If True, log metrics and graphs to Comet ML
+    **infer_kwargs : Keyword arguments
+        Inference keyword arguments, which includes
+            mask_bladder : bool, optional
+                If True, bladder predictions are masked out, by default False
+            test_time_aug : bool, optional
+                If True, perform test-time augmentation.
     """
-    # 0. Overwrite `mask_bladder`, based on dset
-    if FORCE_MASK_BLADDER and dset in constants.DSETS_MISSING_BLADDER:
-        LOGGER.info("Hospital missing bladder labels found (%s)! "
-                    "Overwriting `mask_bladder`", dset)
-        mask_bladder = True
-
     # 1. Get experiment hyperparameters (if not provided)
     hparams = hparams if hparams \
         else load_model.get_hyperparameters(exp_name=exp_name)
@@ -1384,7 +1401,7 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
         comet_logger = load_comet_logger(exp_key=hparams.get("comet_exp_key"))
 
     # 2. Load inference
-    df_pred = load_view_predictions(exp_name, dset, mask_bladder, test_time_aug)
+    df_pred = load_view_predictions(exp_name, dset, **infer_kwargs)
 
     # If multi-output, evaluate each label part, separately
     label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
@@ -1408,8 +1425,7 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
         inference_dir = create_save_dir_by_flags(
             exp_name,
             dset=dset,
-            mask_bladder=mask_bladder,
-            test_time_aug=test_time_aug
+            **infer_kwargs,
         )
 
         # 4. Calculate metrics
@@ -1419,7 +1435,7 @@ def calculate_exp_metrics(exp_name, dset, hparams=None, mask_bladder=False,
 
         # 4.1 Store metrics in Comet ML, if possible
         if comet_logger is not None:
-            suffix = "(mask_bladder)" if mask_bladder else ""
+            suffix = "(mask_bladder)" if infer_kwargs.get("mask_bladder", False) else ""
             comet_logger.log_table(f"{dset}_metrics{(suffix)}.csv", df_metrics)
 
         # 5. Create plots for visual evaluation
@@ -1529,6 +1545,45 @@ def get_highest_loss_samples(df_pred, n=100):
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
+def load_image(img_path, as_numpy=False, **transform_hparams):
+    """
+    Load image as tensor or numpy
+
+    Parameters
+    ----------
+    img_path : str
+        Path to image
+    as_numpy : bool, optional
+        If True, return numpy array, by default False
+
+    Returns
+    -------
+    torch.Tensor or np.ndarray (if as_numpy)
+        Loaded and transformed image (images, if transform returns multiple images)
+    """
+    # Load and transform image
+    img = read_image(img_path, ImageReadMode.RGB)
+    img = transform_image(
+        img,
+        **transform_hparams
+    )
+
+    # If specified, convert to numpy and ensure channels are last
+    if as_numpy:
+        # Attempt to remove empty first dimension
+        img = img.squeeze(0)
+
+        # CASE 1: Multiple images returned as a result of augmentation
+        if len(img.shape) == 4:
+            img = img.numpy().transpose(0, 2, 3, 1)
+        # CASE 2: Only single image as expected
+        else:
+            assert len(img.shape) == 3
+            img = img.numpy().transpose(1, 2, 0)
+
+    return img
+
+
 def transform_image(img, augment=False, n=1, hparams=None):
     """
     Transforms image, as done during training.
@@ -1587,6 +1642,57 @@ def transform_image(img, augment=False, n=1, hparams=None):
     torch.set_rng_state(random_state)
 
     return img_stack
+
+
+def get_da_transform(da_transform_name, src_paths):
+    """
+    Return domain adaptation (DA) transform
+
+    Note
+    ----
+    Ensures that it's converted to a PyTorch tensor post-transform
+
+    Parameters
+    ----------
+    da_transform_name : str
+        Name of DA transform
+    src_paths : list
+        List of source dataset paths
+
+    Returns
+    -------
+    albumentations.Compose
+        Composed DA transform
+    """
+    # Early return identity, if none
+    if da_transform_name is None:
+        return T.Identity()
+
+    # Ensure valid transform is provided
+    if da_transform_name not in ("fda", "hm"):
+        raise RuntimeError(f"`da_transform_name` must be in {('fda', 'hm')}")
+
+    # Load transform
+    # CASE 1: Fourier Domain Adaptation
+    if da_transform_name == "fda":
+        da_transform = A.FDA(
+            src_paths,
+            beta_limit=0.1,
+            p=1,
+            read_fn=partial(load_image, as_numpy=True))
+    # CASE 2: Histogram Matching
+    elif da_transform_name == "hm":
+        da_transform = A.HistogramMatching(
+            src_paths,
+            blend_ratio=(1, 1),
+            p=1,
+            read_fn=partial(load_image, as_numpy=True))
+
+    # Compose transform
+    # NOTE: Ensure converted to PyTorch tensor after
+    transforms = A.Compose([da_transform, ToTensorV2()])
+
+    return transforms
 
 
 def get_local_groups(values):
@@ -1677,7 +1783,7 @@ def identify_repeating_segments(values):
     return np.array(mask)
 
 
-def filter_most_confident(df_pred, local=False):
+def filter_most_confident(df_pred, local=False, top_k=1, groupby="pred"):
     """
     Given predictions for all images across multiple US sequences, filter the
     prediction with the highest confidence (based on output activation).
@@ -1689,9 +1795,15 @@ def filter_most_confident(df_pred, local=False):
         prediction, and other patient and sequence-related metadata.
     local : bool, optional
         If True, gets the most confident prediction within each group of
-        consecutive images with the same label. Otherwise, aggregates by view
-        label to find the most confident view label predictions,
+        consecutive images with the same label. Otherwise, aggregates by
+        predicted view label to find the most confident view label predictions,
         by default False.
+    top_k : int, optional
+        Get top K most confident view label predictions, by default 1.
+    groupby : str, optional
+        If `local=False`, "pred" would find the most confident view prediction
+        (irrespective of the ground truth), and "label" would find the most
+        confident prediction grouping by the ground-truth label
 
     Returns
     -------
@@ -1700,10 +1812,13 @@ def filter_most_confident(df_pred, local=False):
     """
     df_pred = df_pred.copy()
 
+    # CASE 1: For each sequence, get the strongest predicted view
     if not local:
         # Get most confident pred per view per sequence (ignoring seq. number)
-        df_seqs = df_pred.groupby(by=["id", "visit", "label"])
-        df_filtered = df_seqs.apply(lambda df: df[df.out == df.out.max()])
+        assert groupby in ("pred", "label")
+        df_seqs = df_pred.groupby(by=["id", "visit", groupby])
+        df_filtered = df_seqs.apply(lambda df: df.nlargest(top_k, "out")).reset_index(drop=True)
+    # CASE 2: 
     else:
         # Get most confident pred per group of consecutive labels per sequence
         # 0. Sort by id, visit and sequence number
@@ -2037,8 +2152,7 @@ def calculate_accuracy(df_pred, label_col="label", pred_col="pred"):
     return acc
 
 
-def load_view_predictions(exp_name, dset, mask_bladder=False,
-                          test_time_aug=False):
+def load_view_predictions(exp_name, dset, **infer_kwargs):
     """
     Load predictions by model given by `exp_name` on dataset `dset`.
 
@@ -2048,28 +2162,19 @@ def load_view_predictions(exp_name, dset, mask_bladder=False,
         Name of experiment
     dset : str
         Name of evaluation split or test dataset
-    mask_bladder : bool, optional
-        If True, bladder predictions are masked out, by default False
-    test_time_aug : bool, optional
-        If True, perform test-time augmentation.
+    **infer_kwargs : Keyword arguments which includes:
+        mask_bladder : bool, optional
+            If True, bladder predictions are masked out, by default False
+        test_time_aug : bool, optional
+            If True, perform test-time augmentation.
 
     Returns
     -------
     pd.DataFrame
         Each row is an image with a view label (plane/side) predicted.
     """
-    # 0. Overwrite `mask_bladder`, based on dset
-    if FORCE_MASK_BLADDER and dset in constants.DSETS_MISSING_BLADDER:
-        LOGGER.info("Hospital missing bladder labels found (%s)! "
-                    "Overwriting `mask_bladder`", dset)
-        mask_bladder = True
-
     # 1. Specify path to inference file
-    save_path = create_save_path(
-        exp_name,
-        dset=dset,
-        mask_bladder=mask_bladder,
-        test_time_aug=test_time_aug)
+    save_path = create_save_path(exp_name, dset=dset, **infer_kwargs)
     # Raise error, if predictions not found
     if not os.path.exists(save_path):
         raise RuntimeError(f"Predictions not found on dataset {dset}!\n"
@@ -2080,6 +2185,7 @@ def load_view_predictions(exp_name, dset, mask_bladder=False,
 
     # 3. Ensure no duplicates (or sequential data only)
     # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
+    mask_bladder = infer_kwargs.get("mask_bladder")
     if not mask_bladder:
         df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
 
@@ -2213,6 +2319,7 @@ def infer_dset(exp_name,
                seq_number_limit=None,
                mask_bladder=False,
                test_time_aug=False,
+               da_transform_name=None,
                overwrite_existing=OVERWRITE_EXISTING,
                **overwrite_hparams):
     """
@@ -2233,6 +2340,9 @@ def infer_dset(exp_name,
         kidney labels. Defaults to False.
     test_time_aug : bool, optional
         If True, perform test-time augmentation.
+    da_transform_name : str, optional
+        If provided, performs domain adaptation transform on test images, by
+        default None. Must be one of ("fda", "hm").
     overwrite_existing : bool, optional
         If True and prediction file already exists, overwrite existing, by
         default OVERWRITE_EXISTING.
@@ -2244,11 +2354,15 @@ def infer_dset(exp_name,
     RuntimeError
         If `exp_name` does not lead to a valid training directory
     """
+    # Assertion on `da_transform`
+    assert da_transform_name in (None, "fda", "hm"), '`da_transform_name` must be one of (None, "fda", "hm")'
+
     # 0. Create path to save predictions
     pred_save_path = create_save_path(exp_name, dset=dset,
                                       seq_number_limit=seq_number_limit,
                                       mask_bladder=mask_bladder,
-                                      test_time_aug=test_time_aug)
+                                      test_time_aug=test_time_aug,
+                                      da_transform_name=da_transform_name)
     # Early return, if prediction already made
     if os.path.isfile(pred_save_path) and not overwrite_existing:
         return
@@ -2256,11 +2370,30 @@ def infer_dset(exp_name,
     # 0. Get experiment directory, where model was trained
     model_dir = load_model.get_exp_dir(exp_name)
 
-    # 1 Get experiment hyperparameters
+    # 1. Get experiment hyperparameters
     hparams = load_model.get_hyperparameters(model_dir)
+
+    # 2. If domain adaptation transform specified, load original training set
+    #    images and create transform
+    da_transform = None
+    if da_transform_name is not None:
+        # Get training data
+        dm = load_data.setup_data_module(hparams, self_supervised=False)
+        df_train_metadata = dm.filter_metadata(dset="sickkids", split="train")
+
+        # Filter for existing images
+        exists_mask = df_train_metadata["filename"].map(os.path.exists)
+        df_train_metadata = df_train_metadata[exists_mask]
+
+        # Get 200 examples from each label
+        src_paths = df_train_metadata.groupby(
+            by=["label"])["filename"].sample(n=200).tolist()
+        da_transform = get_da_transform(da_transform_name, src_paths)
+
+    # Overwrite hyperparameters (can change dataset loaded)
     hparams.update(overwrite_hparams)
 
-    # 2. Load existing model and send to device
+    # 4. Load existing model and send to device
     model = load_model.load_pretrained_from_exp_name(
         exp_name, overwrite_hparams=overwrite_hparams)
     model = model.to(DEVICE)
@@ -2270,7 +2403,7 @@ def infer_dset(exp_name,
     dm = load_data.setup_data_module(hparams, self_supervised=False)
 
     # 3.1 Get metadata (for specified split)
-    df_metadata = load_data.get_dset_metadata(dm, hparams, dset=dset)
+    df_metadata = dm.filter_metadata(dset=dset, split="test")
     # 3.2 If provided, filter out high sequence number images
     if seq_number_limit:
         mask = (df_metadata["seq_number"] <= seq_number_limit)
@@ -2281,6 +2414,10 @@ def infer_dset(exp_name,
     # 4. Predict on dset split
     # If multi-output model
     if hparams.get("multi_output"):
+        if da_transform_name is not None:
+            raise NotImplementedError(
+                "Domain Adaptation transform is not implemented for "
+                "multi-output model!")
         if not hparams["full_seq"]:
             raise NotImplementedError("Multi-output model is not implemented "
                                       "for single-images!")
@@ -2295,6 +2432,10 @@ def infer_dset(exp_name,
     else:
         # If temporal model
         if hparams["full_seq"]:
+            if da_transform_name is not None:
+                raise NotImplementedError(
+                    "Domain Adaptation transform is not implemented for "
+                    "video model!")
             # CASE 1: Dataset of US videos
             if dset not in constants.DSETS_NON_SEQ:
                 # Perform inference one sequence at a time
@@ -2330,6 +2471,7 @@ def infer_dset(exp_name,
                 img_dir=None,
                 mask_bladder=mask_bladder,
                 test_time_aug=test_time_aug,
+                da_transform=da_transform,
                 **hparams)
 
     # Join to metadata. NOTE: This works because of earlier sorting
@@ -2410,9 +2552,8 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
 
 def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
-                       mask_bladder=False,
-                       test_time_aug=False,
-                       log_to_comet=False):
+                       log_to_comet=False,
+                       **infer_kwargs):
     """
     Analyze dset split predictions.
 
@@ -2423,13 +2564,14 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
         constants.DEFAULT_EVAL_DSET.
-    mask_bladder : bool, optional
-        If True, mask out predictions on bladder/middle side, leaving only
-        kidney labels. Defaults to False.
-    test_time_aug : bool, optional
-        If True, perform test-time augmentation.
     log_to_comet : bool, optional
         If True, log metrics and UMAPs to Comet ML.
+    **infer_kwargs : Keyword arguments
+        Inference keyword arguments, which includes
+            mask_bladder : bool, optional
+                If True, bladder predictions are masked out, by default False
+            test_time_aug : bool, optional
+                If True, perform test-time augmentation.
 
     Raises
     ------
@@ -2452,28 +2594,34 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                     exp_name=exp_name,
                     dset=dset_,
                     hparams=hparams,
-                    mask_bladder=mask_bladder,
-                    test_time_aug=test_time_aug,
                     log_to_comet=log_to_comet,
+                    **infer_kwargs,
                 )
             except KeyError:
+                # Correctly convert to dset and split
+                curr_dset = dset
+                curr_split = "test"
+                if dset in ("train", "val", "test"):
+                    curr_dset = None
+                    curr_split = dset
+
+                # Log error
                 LOGGER.error(KeyError)
                 LOGGER.error("Unable to find file, performing inference... (again)")
+
                 # 1. Perform inference
                 infer_dset(
                     exp_name=exp_name, dset=dset_,
-                    mask_bladder=dset_ in constants.DSETS_MISSING_BLADDER,
                     overwrite_existing=True,
-                    test_time_aug=test_time_aug,
-                    **load_data.create_overwrite_hparams(dset_))
+                    **infer_kwargs,
+                    **load_data.create_eval_hparams(curr_dset, curr_split))
                 # 2. Attempt to calculate metrics again
                 calculate_exp_metrics(
                     exp_name=exp_name,
                     dset=dset_,
                     hparams=hparams,
-                    mask_bladder=mask_bladder,
-                    test_time_aug=test_time_aug,
                     log_to_comet=log_to_comet,
+                    **infer_kwargs,
                 )
 
     # 3. If specified, create UMAP plots
@@ -2485,6 +2633,60 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     plt.close("all")
 
 
+def main(args):
+    """
+    Run main flows to:
+        1. Perform inference
+        2. Analyze predictions
+    """
+    # For each experiment,
+    args = None
+    for exp_name in args.exp_name:
+        # Iterate over all specified eval dsets
+        for dset in args.dset:
+            # Correctly convert to dset and split
+            curr_dset = dset
+            curr_split = "test"
+            if dset in ("train", "val", "test"):
+                curr_dset = None
+                curr_split = dset
+
+            # Specify to mask bladder, if it's a hospital w/o bladder labels
+            if args.mask_bladder or FORCE_MASK_BLADDER:
+                mask_bladder = dset in constants.DSETS_MISSING_BLADDER
+            else:
+                mask_bladder = False
+
+            # 2. Create overwrite parameters
+            eval_hparams = load_data.create_eval_hparams(curr_dset, curr_split)
+
+            # 3. Perform inference
+            infer_kwargs = {
+                "mask_bladder": mask_bladder,
+                "test_time_aug": args.test_time_aug,
+                "da_transform_name": args.da_transform_name,
+            }
+            infer_dset(exp_name=exp_name, dset=dset,
+                       **infer_kwargs,
+                       **eval_hparams)
+
+            # 4. Extract embeddings
+            if EMBED:
+                embed_dset(exp_name=exp_name, dset=dset, **eval_hparams)
+
+            # 5. Evaluate predictions and embeddings
+            analyze_dset_preds(exp_name=exp_name, dset=dset,
+                               log_to_comet=args.log_to_comet,
+                               **infer_kwargs)
+
+        # 6. Create UMAPs embeddings on all dsets together
+        # NOTE: `mask_bladder` is not needed if combining all dsets
+        infer_kwargs.pop("mask_bladder")
+        analyze_dset_preds(exp_name=exp_name, dset=args.dset,
+                           log_to_comet=args.log_to_comet,
+                           **infer_kwargs)
+
+
 if __name__ == '__main__':
     # 0. Initialize ArgumentParser
     PARSER = argparse.ArgumentParser()
@@ -2493,36 +2695,5 @@ if __name__ == '__main__':
     # 1. Parse arguments
     ARGS = PARSER.parse_args()
 
-    # For each experiment,
-    for EXP_NAME in ARGS.exp_name:
-        # Iterate over all specified eval dsets
-        for DSET in ARGS.dset:
-            # Specify to mask bladder, if it's a hospital w/o bladder labels
-            if ARGS.mask_bladder:
-                MASK_BLADDER = DSET in constants.DSETS_MISSING_BLADDER
-            else:
-                MASK_BLADDER = False
-
-            # 2. Create overwrite parameters
-            OVERWRITE_HPARAMS = load_data.create_overwrite_hparams(DSET)
-
-            # 3. Perform inference
-            infer_dset(exp_name=EXP_NAME, dset=DSET,
-                       mask_bladder=MASK_BLADDER,
-                       test_time_aug=ARGS.test_time_aug,
-                       **OVERWRITE_HPARAMS)
-
-            # 4. Extract embeddings
-            if EMBED:
-                embed_dset(exp_name=EXP_NAME, dset=DSET, **OVERWRITE_HPARAMS)
-
-            # 5. Evaluate predictions and embeddings
-            analyze_dset_preds(exp_name=EXP_NAME, dset=DSET,
-                               mask_bladder=MASK_BLADDER,
-                               test_time_aug=ARGS.test_time_aug,
-                               log_to_comet=ARGS.log_to_comet)
-
-        # 6. Create UMAPs embeddings on all dsets together
-        analyze_dset_preds(exp_name=EXP_NAME, dset=ARGS.dset,
-                           log_to_comet=ARGS.log_to_comet,
-                           test_time_aug=ARGS.test_time_aug,)
+    # 2. Run main flows
+    main(ARGS)

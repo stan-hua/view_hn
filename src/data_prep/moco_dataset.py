@@ -139,19 +139,9 @@ class MoCoDataModule(UltrasoundDataModule):
         torch.utils.data.DataLoader
             Data loader for training data
         """
-        df_train = pd.DataFrame({
-            "filename": self.dset_to_paths["train"],
-            "label": self.dset_to_labels["train"]
-        })
-
-        # Get patient ID, visit number and sequence number, from orig. table
-        df_train = utils.left_join_filtered_to_source(
-            df_train, self.df,
-            index_cols="filename")
-
         # Instantiate UltrasoundDatasetDataFrame
         train_dataset = UltrasoundDatasetDataFrame(
-            df_train,
+            self.df[self.df["split"] == "train"],
             **self.us_dataset_kwargs,
         )
 
@@ -185,19 +175,9 @@ class MoCoDataModule(UltrasoundDataModule):
         torch.utils.data.DataLoader
             Data loader for validation data
         """
-        df_val = pd.DataFrame({
-            "filename": self.dset_to_paths["val"],
-            "label": self.dset_to_labels["val"]
-        })
-
-        # Get patient ID, visit number and sequence number, from orig. table
-        df_val = utils.left_join_filtered_to_source(
-            df_val, self.df,
-            index_cols="filename")
-
         # Instantiate UltrasoundDatasetDataFrame
         val_dataset = UltrasoundDatasetDataFrame(
-            df_val,
+            self.df[self.df["split"] == "val"],
             **self.us_dataset_kwargs,
         )
 
@@ -231,19 +211,9 @@ class MoCoDataModule(UltrasoundDataModule):
         torch.utils.data.DataLoader
             Data loader for test data
         """
-        df_test = pd.DataFrame({
-            "filename": self.dset_to_paths["test"],
-            "label": self.dset_to_labels["test"]
-        })
-
-        # Get patient ID, visit number and sequence number, from orig. table
-        df_test = utils.left_join_filtered_to_source(
-            df_test, self.df,
-            index_cols="filename")
-
         # Instantiate UltrasoundDatasetDataFrame
         test_dataset = UltrasoundDatasetDataFrame(
-            df_test,
+            self.df[self.df["split"] == "test"],
             **self.us_dataset_kwargs,
         )
 

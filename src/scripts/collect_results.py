@@ -490,7 +490,7 @@ def compute_r2_scores_between_dsets(df_metrics, task="plane"):
     # 1. `src_dset`: Dataset to compare against all dataset performance
     # 2. `dst_dsets`: Datasets to compare against source dataset
     src_dset = "stanford"
-    dst_dsets = ["stanford_non_seq", "uiowa", "chop"]
+    dst_dsets = ["stanford_image", "uiowa", "chop"]
 
     cols = df_metrics.columns.tolist()
 

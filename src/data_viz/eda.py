@@ -271,9 +271,9 @@ def plot_pixels_histogram_by_label(df_metadata, fname_prefix, src_paths=None):
     return img_stats
 
 
-def plot_img_histogram_per_hospital(da_transform=False):
+def plot_img_histogram_per_dset(da_transform=False):
     """
-    Plot image histogram for each hospital
+    Plot image histogram for each dset
 
     Parameters
     ----------
@@ -306,7 +306,7 @@ def plot_img_histogram_per_hospital(da_transform=False):
         src_paths = df_sk_metadata_train.groupby(by=["label"])["filename"].sample(n=200).tolist()
 
     # 4. Other Test Sets
-    for dset in ("stanford", "stanford_non_seq", "sickkids_silent_trial", "uiowa", "chop"):
+    for dset in ("stanford", "stanford_image", "sickkids_silent_trial", "uiowa", "chop"):
         df_curr_metadata = load_metadata(dset, **shared_kwargs)
         fname_prefix = f"{dset}_fda" if da_transform else dset
         dset_stats[dset] = plot_pixels_histogram_by_label(
@@ -665,11 +665,11 @@ def plot_ssl_augmentations():
     Plot example images of data augmented during self-supervised model training.
     """
     # Instantiate data module
-    df_metadata = load_metadata("sickkids", prepend_img_dir=True, extract=True)
+    df_metadata = load_metadata("sickkids", prepend_img_dir=True)
     dataloader_params = {"batch_size": 9}
     data_module = MoCoDataModule(
         dataloader_params,
-        df=df_metadata, img_dir=constants.DIR_IMAGES,
+        df=df_metadata, img_dir=constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"],
         crop_scale=0.3,
     )
 
@@ -717,12 +717,13 @@ def load_image(img_path):
 
     return img
 
+
 if __name__ == '__main__':
     ############################################################################
     #                        Plot Pixel Histograms                             #
     ############################################################################
     # Plot image histogram
-    plot_img_histogram_per_hospital()
+    plot_img_histogram_per_dset()
 
     ############################################################################
     #                         Plot Example Images                              #
@@ -732,11 +733,7 @@ if __name__ == '__main__':
     ############################################################################
     #                      Plot Distribution of Views                          #
     ############################################################################
-    df_metadata = load_sickkids_metadata(
-        extract=True,
-        include_unlabeled=True,
-        include_test_set=True,
-    )
+    df_metadata = load_metadata("sickkids", prepend_img_dir=True)
 
     # Plot distribution of view labels
     plot_hist_of_view_labels(df_metadata)
@@ -754,12 +751,9 @@ if __name__ == '__main__':
     ############################################################################
     #                 Print Examples of Label Progression                      #
     ############################################################################
-    df_metadata = load_sickkids_metadata(extract=True)
     get_unique_label_sequences(df_metadata)
 
     ############################################################################
     #                          Transition Matrix                               #
     ############################################################################
-    df_metadata = load_sickkids_metadata(extract=True, include_unlabeled=True,
-                                img_dir=constants.DIR_IMAGES)
     get_transition_matrix(df_metadata)

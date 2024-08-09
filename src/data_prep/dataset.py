@@ -161,6 +161,9 @@ class UltrasoundDataModule(L.LightningDataModule):
                     Path to JSON file containing image files to intentionally
                     exclude from training/val/test set (post-split), by default
                     None.
+                include_unlabeled : bool
+                    If True, include unlabeled as part of training set, by
+                    default False.
         """
         super().__init__()
         assert dataloader_params is None or isinstance(dataloader_params, dict)
@@ -179,30 +182,41 @@ class UltrasoundDataModule(L.LightningDataModule):
             **kwargs,
         }
 
-        # Get image paths, patient IDs, and labels (and visit)
+        # Process (or create) metadata table
+        # CASE 1: Metadata table is provided with file paths in each row
         if self.df is not None:
-            if img_dir:
-                df["filename"] = df["filename"].map(
-                    lambda x: os.path.join(img_dir, x))
+            exists_mask = df["filename"].map(os.path.exists)
+
+            # Raise error, if none exist
+            if not exists_mask.any():
+                raise RuntimeError(
+                    f"None of `{len(df)}` paths exist! Please inspect `df`...")
 
             # Filter for existing images
-            exists_mask = df["filename"].map(os.path.exists)
             if not all(exists_mask):
                 num_missing = len(~exists_mask[~exists_mask])
                 missing_paths = "\n\t".join(df[~exists_mask]["filename"].tolist())
                 LOGGER.warning(f"{num_missing} image files in table don't exist "
                                f"at path! Skipping...\n\t{missing_paths}")
                 df = df[exists_mask]
-
-            # Get specific metadata for splitting
-            self.img_paths = df["filename"].to_numpy()
-            self.labels = df["label"].to_numpy()
-            self.patient_ids = df["id"].to_numpy()
+        # CASE 2: Only image directory is provided
         else:
-            self.img_paths = np.array(glob.glob(os.path.join(img_dir, "*")))
-            self.labels = np.array([None] * len(self.img_paths))
-            # NOTE: Following may not work for newer hospital data
-            self.patient_ids = utils.get_from_paths(self.img_paths)
+            # Get images in directory
+            img_paths = np.array(glob.glob(os.path.join(img_dir, "*")))
+
+            # Create dataframe
+            # NOTE: Assume all training for now, can be split later
+            self.df = pd.DataFrame({
+                "dset": ["unknown"] * len(img_paths),
+                "split": ["train"] * len(img_paths),
+                "filename": img_paths,
+                "label": [None] * len(img_paths),
+                # NOTE: Following may not work for newer hospital data
+                "id": utils.get_from_paths(img_paths, "id"),
+            })
+        
+        # NOTE: Store static (original) version of dataframe
+        self.df_orig = self.df.copy()
 
         ########################################################################
         #                        DataLoader Parameters                         #
@@ -220,13 +234,6 @@ class UltrasoundDataModule(L.LightningDataModule):
         ########################################################################
         #                          Dataset Splitting                           #
         ########################################################################
-        # Mapping of dataset split to patient IDs and paths
-        self.dset_to_ids = {"train": self.patient_ids, "val": None,
-                            "test": None}
-        self.dset_to_paths = {"train": self.img_paths, "val": None, 
-                              "test": None}
-        self.dset_to_labels = {"train": self.labels, "val": None, "test": None}
-
         # Get list of patient IDs specifically to put in training set
         self.force_train_ids = kwargs.get("force_train_ids")
 
@@ -234,10 +241,11 @@ class UltrasoundDataModule(L.LightningDataModule):
         if "train_test_split" in kwargs:
             self.train_test_split = kwargs.get("train_test_split")
 
-        # (2) To further split training set into train-val or cross-val sets
+        # (2) To further split training set into train-val set
         if "train_val_split" in kwargs and kwargs["train_val_split"] != 1.0:
             self.train_val_split = kwargs.get("train_val_split")
 
+        # (3) To further split training set into cross-validation sets
         if "cross_val_folds" in kwargs and kwargs["cross_val_folds"] > 1:
             self.cross_val_folds = kwargs.get("cross_val_folds")
             self.fold = 0
@@ -270,69 +278,65 @@ class UltrasoundDataModule(L.LightningDataModule):
         """
         # (1) Split into training and test sets
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
-            train_idx, test_idx = utils.split_by_ids(
-                self.patient_ids, self.train_test_split,
+            # Split into train/test by each dataset
+            # NOTE: Do not overwrite train/test split if they already exist
+            self.df = utils.assign_split_table_by_dset(
+                self.df, other_split="test",
+                train_split=self.train_test_split,
                 force_train_ids=self.force_train_ids,
+                overwrite=False,
             )
-            self._assign_dset_idx("train", "test", train_idx, test_idx)
 
         # (2) Further split training set into train-val or cross-val sets
         # (2.1) Train-Val Split
         if hasattr(self, "train_val_split"):
-            train_idx, val_idx = utils.split_by_ids(
-                self.dset_to_ids["train"], self.train_val_split,
+            # Split data into training split and rest
+            df_train = self.df[self.df["split"] == "train"]
+            df_rest = self.df[self.df["split"] != "train"]
+
+            # Split training set into train/val by each dataset
+            # NOTE: Do not overwrite train/val split if they already exist
+            df_train_val = utils.assign_split_table_by_dset(
+                df_train, other_split="val",
+                train_split=self.train_val_split,
                 force_train_ids=self.force_train_ids,
+                overwrite=False,
             )
-            self._assign_dset_idx("train", "val", train_idx, val_idx)
+
+            # Recombine
+            self.df = pd.concat([df_train_val, df_rest], ignore_index=True)
+
         # (2.2) K-Fold Cross Validation
         elif hasattr(self, "cross_val_folds"):
-            self._cross_val_train_dict = {
-                "ids": self.dset_to_ids["train"],
-                "paths": self.dset_to_paths["train"],
-                "labels": self.dset_to_labels["train"]
-            }
-
+            # TODO: Re-implement when needed
+            raise NotImplementedError("Not currently implemented!")
+            train_ids = self.df[self.df["split"] == "train"]["id"].tolist()
             self.cross_fold_indices = utils.cross_validation_by_patient(
-                self.dset_to_ids["train"], self.cross_val_folds)
+                train_ids, self.cross_val_folds)
             # By default, set to first kfold
             self.set_kfold_index(0)
 
+        # Assign data split for unlabeled data
+        unlabeled_split = "train" if self.us_dataset_kwargs.get("include_unlabeled") else None
+        self.df = utils.assign_unlabeled_split(self.df, unlabeled_split)
+
         # If specified, filter training data for those with segmentation masks
         if self.us_dataset_kwargs.get("ensure_seg_mask"):
-            # Check if each image in the training set has a seg. mask
-            has_seg_mask = np.array([utils.has_seg_mask(p) for p in self.dset_to_paths["train"]])
+            # Split data into training split and rest
+            df_train = self.df[self.df["split"] == "train"]
+            df_rest = self.df[self.df["split"] != "train"]
 
-            # If not, remove it from training
-            self.dset_to_ids["train"] = self.dset_to_ids["train"][has_seg_mask]
-            self.dset_to_paths["train"] = self.dset_to_paths["train"][has_seg_mask]
-            self.dset_to_labels["train"] =self.dset_to_labels["train"][has_seg_mask]
+            # Remove images in the training set that DONT have a seg. mask
+            has_seg_mask = df_train["filename"].map(utils.has_seg_mask)
+            df_train.loc[has_seg_mask, "split"] = None
+
+            # Recombine
+            self.df = pd.concat([df_train, df_rest], ignore_index=True)
 
         # If specified, remove explicitly listed images from the training set
         exclude_filename_json = self.us_dataset_kwargs.get("exclude_filename_json")
         if exclude_filename_json:
-            # Raise error, if file doesn't exist
-            if not os.path.exists(exclude_filename_json):
-                raise RuntimeError("Exclude filename path doesn't exist!\n\t"
-                                   f"{exclude_filename_json}")
-
-            # Load JSON file
-            with open(exclude_filename_json, "r") as handler:
-                exclude_fnames = set(json.load(handler))
-
-            # For each of train/val/test, ensure images are all filtered
-            for dset in ("train", "val", "test"):
-                if self.dset_to_ids[dset] is None:
-                    continue
-
-                # Extract current filenames
-                curr_fnames = [os.path.basename(path) for path in self.dset_to_paths[dset]]
-                is_included_mask = np.array([fname not in exclude_fnames for fname in curr_fnames])
-                LOGGER.info(f"Explicitly excluding {(~is_included_mask).sum()} images from `{dset}`!")
-
-                # Remove from data split
-                self.dset_to_ids[dset] = self.dset_to_ids[dset][is_included_mask]
-                self.dset_to_paths[dset] = self.dset_to_paths[dset][is_included_mask]
-                self.dset_to_labels[dset] = self.dset_to_labels[dset][is_included_mask]
+            self.df = utils.exclude_from_any_split(self.df, exclude_filename_json)
 
 
     def train_dataloader(self):
@@ -344,19 +348,9 @@ class UltrasoundDataModule(L.LightningDataModule):
         torch.utils.data.DataLoader
             Data loader for training data
         """
-        df_train = pd.DataFrame({
-            "filename": self.dset_to_paths["train"],
-            "label": self.dset_to_labels["train"]
-        })
-
-        # Get patient ID, visit number and sequence number, from orig. table
-        df_train = utils.left_join_filtered_to_source(
-            df_train, self.df,
-            index_cols="filename")
-
         # Instantiate UltrasoundDatasetDataFrame
         train_dataset = UltrasoundDatasetDataFrame(
-            df_train,
+            self.df[self.df["split"] == "train"],
             transforms=self.transforms,
             **self.us_dataset_kwargs,
         )
@@ -375,18 +369,8 @@ class UltrasoundDataModule(L.LightningDataModule):
             Data loader for validation data
         """
         # Instantiate UltrasoundDatasetDataFrame
-        df_val = pd.DataFrame({
-            "filename": self.dset_to_paths["val"],
-            "label": self.dset_to_labels["val"]
-        })
-
-        # Get patient ID, visit number and sequence number, from orig. table
-        df_val = utils.left_join_filtered_to_source(
-            df_val, self.df,
-            index_cols="filename")
-
         val_dataset = UltrasoundDatasetDataFrame(
-            df_val,
+            self.df[self.df["split"] == "val"],
             **self.us_dataset_kwargs,
         )
 
@@ -404,23 +388,76 @@ class UltrasoundDataModule(L.LightningDataModule):
             Data loader for test data
         """
         # Instantiate UltrasoundDatasetDataFrame
-        df_test = pd.DataFrame({
-            "filename": self.dset_to_paths["test"],
-            "label": self.dset_to_labels["test"]
-        })
-
-        # Get patient ID, visit number and sequence number, from orig. table
-        df_test = utils.left_join_filtered_to_source(
-            df_test, self.df,
-            index_cols="filename")
-
         test_dataset = UltrasoundDatasetDataFrame(
-            df_test,
+            self.df[self.df["split"] == "test"],
             **self.us_dataset_kwargs,
         )
 
         # Create DataLoader with parameters specified
         return DataLoader(test_dataset, **self.val_dataloader_params)
+
+
+    def get_dataloader(self, split):
+        """
+        Get specific data loader
+
+        Parameters
+        ----------
+        split : str
+            Split must be one of train/val/test
+
+        Returns
+        -------
+        torch.utils.data.DataLoader
+            DataLoader
+        """
+        assert split in ("train", "val", "test")
+        split_to_func = {
+            "train": self.train_dataloader,
+            "val": self.val_dataloader,
+            "test": self.test_dataloader
+        }
+        return split_to_func[split]()
+
+
+    def get_filtered_dataloader(self, split, **filters):
+        """
+        Get data loader for a specific split with option to filter for specific
+        dataset.
+
+        Parameters
+        ----------
+        split : str
+            Name of data split to load. One of (train/val/test)
+        filters : Any
+            Keyword arguments, containing row filters.
+
+        Returns
+        -------
+        torch.utils.data.DataLoader
+            DataLoader with filtered data
+        """
+        # Create copy of data to restore later
+        df_orig = self.df.copy()
+
+        # Split data into specific split and rest
+        split_mask = self.df["split"] == split
+        df_split = self.df[split_mask].copy()
+        df_rest = self.df[~split_mask].copy()
+
+        # If provided, filter out rows in the specific split
+        df_split = self.filter_metadata(split=split, **filters)
+
+        # Modify stored metadata table
+        # NOTE: So that created dataloader would use applied filters
+        self.df = pd.concat([df_split, df_rest], ignore_index=True)
+        # Construct dataloader
+        dataloader = self.get_dataloader(split)
+
+        # Restore original table
+        self.df = df_orig
+
+        return dataloader
 
 
     ############################################################################
@@ -439,6 +476,8 @@ class UltrasoundDataModule(L.LightningDataModule):
         fold : int
             Fold index
         """
+        raise NotImplementedError("Not currently implemented!")
+
         assert hasattr(self, "cross_val_folds")
         assert fold in list(range(self.cross_val_folds))
 
@@ -446,49 +485,86 @@ class UltrasoundDataModule(L.LightningDataModule):
 
         # Set training and validation data for fold
         train_idx, val_idx = self.cross_fold_indices[self.fold]
-        self.dset_to_ids["train"] = self._cross_val_train_dict["ids"]
-        self.dset_to_paths["train"] = self._cross_val_train_dict["paths"]
-        self.dset_to_labels["train"] = self._cross_val_train_dict["labels"]
-        self._assign_dset_idx("train", "val", train_idx, val_idx)
+        # self.split_to_ids["train"] = self._cross_val_train_dict["ids"]
+        # self.split_to_paths["train"] = self._cross_val_train_dict["paths"]
+        # self.split_to_labels["train"] = self._cross_val_train_dict["labels"]
+        # self._assign_dset_idx("train", "val", train_idx, val_idx)
 
         LOGGER.info(f"==Fold {fold + 1}/{self.cross_val_folds}==:")
 
 
-    def _assign_dset_idx(self, from_dset, to_dset, keep_idx, transfer_idx):
+    def filter_metadata(self, dset=None, split=None, **filters):
         """
-        Reassigns patient IDs, image paths and labels from one dset to another,
-        given indices to assign from source dset.
-
-        Note
-        ----
-        <to_dset>'s items are reassigned, so previous samples assigned to
-        <to_dset> (if any) are lost.
+        Get metadata filtered for dataset or split.
 
         Parameters
         ----------
-        from_dset : str
-            One of ("train", "val", "test")
-        to_dset : str
-            One of ("train", "val", "test")
-        keep_idx : np.array
-            Array of indices of samples to keep in source dataset
-        transfer_idx : np.array
-            Array of indices of samples to
+        dset : str, optional
+            Dataset to filter for
+        split : str, optional
+            Data split to filter for, by default None
+        **filters : Any
+            Column to value keyword arguments to filter
         """
-        # Local references
-        dset_to_ids = self.dset_to_ids
-        dset_to_paths = self.dset_to_paths
-        dset_to_labels = self.dset_to_labels
+        df = self.df.copy()
 
-        # Reassign target dset
-        dset_to_ids[to_dset] = dset_to_ids[from_dset][transfer_idx]
-        dset_to_paths[to_dset] = dset_to_paths[from_dset][transfer_idx]
-        dset_to_labels[to_dset] = dset_to_labels[from_dset][transfer_idx]
+        # Filter on dataset and data split
+        if dset is not None:
+            df = df[df["dset"] == dset]
+        if split is not None:
+            df = df[df["split"] == split]
 
-        # Reassign source dset
-        dset_to_ids[from_dset] = dset_to_ids[from_dset][keep_idx]
-        dset_to_paths[from_dset] = dset_to_paths[from_dset][keep_idx]
-        dset_to_labels[from_dset] = dset_to_labels[from_dset][keep_idx]
+        # If provided, perform other filters
+        if filters:
+            for col, val in filters.items():
+                # Raise errors, if column not present
+                if col not in df:
+                    raise RuntimeError(f"Column {col} not in table provided!")
+
+                # CASE 1: Value is a list/tuple
+                if isinstance(val, (list, tuple, set)):
+                    mask = df[col].isin(val)
+                    df = df[mask]
+                # CASE 2: Value is a single item
+                else:
+                    mask = (df[col] == val)
+                    df = df[mask]
+
+        return df
+
+
+    def get_patient_ids(self, split=None):
+        """
+        Get unique patient IDs for dataset or a specific data split
+
+        Parameters
+        ----------
+        split : str, optional
+            Data split (train/val/test)
+
+        Returns
+        -------
+        list
+            List of patient IDs
+        """
+        return sorted(self.filter_metadata(split=split)["id"].unique().tolist())
+
+
+    def size(self, split=None):
+        """
+        Get size of dataset or specific data split
+
+        Parameters
+        ----------
+        split : str, optional
+            Data split (train/val/test)
+
+        Returns
+        -------
+        list
+            List of patient IDs
+        """
+        return len(self.filter_metadata(split=split))
 
 
 ################################################################################
@@ -528,7 +604,7 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         patient_id = self.ids[index]
         visit = self.visits[index]
         seq_number = self.seq_numbers[index]
-        hospital = self.hospitals[index]
+        dset = self.dsets[index]
 
         # Prepare metadata
         metadata = {
@@ -536,7 +612,7 @@ class UltrasoundDataset(torch.utils.data.Dataset):
             "id": patient_id,
             "visit": visit,
             "seq_number": seq_number,
-            "hospital": hospital,
+            "dset": dset,
         }
 
         return X, metadata
@@ -622,9 +698,9 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         # Get number in US sequence
         self.seq_numbers = utils.get_from_paths(self.paths, "seq_number")
 
-        # Add placeholder for hospital
+        # Add placeholder for dataset
         # NOTE: This is done for compatibility
-        self.hospitals = np.empty(len(self.paths))
+        self.dsets = np.empty(len(self.paths))
 
         # Flag if `filename` should be the full path (or the basename)
         self.full_path = full_path
@@ -719,11 +795,11 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         # 5. Metadata
         filenames = [path if self.full_path else os.path.basename(path)
                      for path in paths]
-        hospital = None
+        dset = None
 
         metadata = {"filename": filenames, "id": patient_id,
                     "visit": visit, "seq_number": seq_numbers,
-                    "hospital": hospital}
+                    "dset": dset}
 
         return X, metadata
 
@@ -831,8 +907,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # Get number in US sequence
         self.seq_numbers = df["seq_number"].to_numpy()
 
-        # Get hospital
-        self.hospitals = df["hospital"].to_numpy()
+        # Get dset
+        self.dsets = df["dset"].to_numpy()
 
         # Flag if `filename` should be the full path (or the basename)
         self.full_path = full_path
@@ -1013,7 +1089,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         paths = self.paths[mask]
         labels = self.labels[mask]
         seq_numbers = self.seq_numbers[mask]
-        hospital = self.hospitals[mask]
+        dset = self.dsets[mask]
 
         # 3. Order by sequence number
         sort_idx = np.argsort(seq_numbers)
@@ -1043,7 +1119,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             "id": list(patient_id.astype(str)),
             "visit": list(visit.astype(str)),
             "seq_number": list(seq_numbers),
-            "hospital": list(hospital),
+            "dset": list(dset),
         }
 
         # 6.1 If specified, split label into side/plane, and store separately

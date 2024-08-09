@@ -382,7 +382,7 @@ def extract_embeds_from_model_name(raw=False, segmented=False, reverse_mask=Fals
     img_dir = None
     img_dataloader = None
     if raw:
-        img_dir = constants.DIR_IMAGES_RAW
+        img_dir = constants.DSET_TO_IMG_SUBDIR_FULL["sickkids_raw"]
     elif segmented:
         data_module = SegmentedUSModule(
             mask_img_dir=constants.DIR_SEGMENT_MASK,
@@ -390,7 +390,7 @@ def extract_embeds_from_model_name(raw=False, segmented=False, reverse_mask=Fals
             reverse_mask=reverse_mask)
         img_dataloader = data_module.train_dataloader()
     else:
-        img_dir = constants.DIR_IMAGES
+        img_dir = constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"]
 
     # Check which models to extract embeddings with
     model_names = [name for name in constants.MODELS if name in kwargs]
@@ -461,10 +461,19 @@ def main(args):
         except RuntimeError:
             model = load_model.load_pretrained_from_model_name(exp_name)
 
+        # Load experiment hyperparameters
+        exp_hparams = load_model.get_hyperparameters(exp_name=exp_name)
+
         # Extract embeddings for each dataset
         for dset in args.dset:
-            # Get image dataloader
-            img_dataloader = load_data.get_dset_dataloader(dset, full_path=True)
+            # TODO: If dataset is actually a train/val/test split, load hyperparameters for model
+            if dset in ("train", "val", "test"):
+                split = dset
+                dm = load_data.setup_data_module(hparams=exp_hparams, full_path=True)
+                img_dataloader = dm.get_dataloader(split=split)
+            else:
+                # Get image dataloader
+                img_dataloader = load_data.setup_default_dataloader_for_dset(dset, full_path=True)
 
             # Create path to save embeddings
             save_embed_path = get_save_path(exp_name, dset=dset)

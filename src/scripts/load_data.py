@@ -38,7 +38,7 @@ SSL_NAME_TO_DATA_MODULE = {
 
 # Default hyperparameters
 DEFAULT_HPARAMS = {
-    "hospital": "sickkids",
+    "dset": "sickkids",
     "train_val_split": 0.75,
     "train_test_split": 0.75,
     "train": True,
@@ -46,23 +46,21 @@ DEFAULT_HPARAMS = {
 
     "img_size": constants.IMG_SIZE,
     "label_part": None,
-    "relative_side": False,
-    "include_unlabeled": False,
 
     "self_supervised": False,
 
     "batch_size": 16,
-    "full_seq": True,
+    "full_seq": False,
     "shuffle": False,
     "num_workers": 8,
-    "pin_memory": True,
+    "pin_memory": False,
 }
 
 
 ################################################################################
 #                                  Functions                                   #
 ################################################################################
-def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
+def setup_data_module(hparams=None, use_defaults=False,
                       full_path=False,
                       **overwrite_hparams):
     """
@@ -100,28 +98,16 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
     all_hparams.update(hparams)
     all_hparams.update(overwrite_hparams)
 
-    # 0. If no image directory provided, resort to defaults based on hospital
-    #    chosen.
-    img_dir = img_dir if img_dir \
-        else constants.HOSPITAL_TO_IMG_DIR.get(all_hparams["hospital"])
-
     # 1. Load metadata
     # 1.1 Prepare keyword arguments
-    load_meta_kwargs = {
+    load_meta_config = {
         "label_part": all_hparams.get("label_part"),
-        "relative_side": all_hparams.get("relative_side", False),
-        "include_unlabeled": all_hparams.get("include_unlabeled", False),
-        "keep_orig_label": all_hparams.get("keep_orig_label", False),
     }
-    # NOTE: Option to load in SickKids test data
-    if all_hparams["hospital"] == "sickkids" and "include_sickkids_test_set" in all_hparams:
-        load_meta_kwargs["include_test_set"] = all_hparams["include_sickkids_test_set"]
     # 1.2 Load metadata
     df_metadata = utils.load_metadata(
-        hospital=all_hparams["hospital"],
-        extract=True,
-        img_dir=img_dir,
-        **load_meta_kwargs
+        dsets=all_hparams["dsets"],
+        prepend_img_dir=True,
+        **load_meta_config
     )
 
     # 2. Instantiate data module
@@ -140,27 +126,27 @@ def setup_data_module(hparams=None, img_dir=None, use_defaults=False,
         "num_workers": all_hparams["num_workers"],
         "pin_memory": all_hparams["pin_memory"],
     }
-    dm = data_module_cls(dataloader_params, df=df_metadata,
-                         img_dir=img_dir, **all_hparams)
+    dm = data_module_cls(dataloader_params, df=df_metadata, **all_hparams)
     dm.setup()
 
-    # Modify hyperparameters to store training/val/test set IDs
-    for dset in ("train", "val", "test"):
-        dset_ids = dm.dset_to_ids[dset]
-        dset_ids = [] if dset_ids is None else dset_ids
-        hparams[f"{dset}_ids"] = tuple(sorted(set(dset_ids)))
+    # Modify hyperparameters in-place to store training/val/test set IDs
+    if hparams is not None:
+        for split in ("train", "val", "test"):
+            hparams[f"{split}_ids"] = dm.get_patient_ids(split)
 
     return dm
 
 
-def get_dset_data_module(dset, **kwargs):
+def setup_default_data_module_for_dset(dset=None, split="test", **kwargs):
     """
     Get image dataloader for dataset split/name specified.
 
     Parameters
     ----------
     dset : str
-        Name of dataset split or evaluation set
+        Name of dataset
+    split : str, optional
+        Name of data split
     **kwargs : dict, optional
         Keyword arguments for `setup_data_module`
         
@@ -170,95 +156,42 @@ def get_dset_data_module(dset, **kwargs):
         Each batch returns images and a dict containing metadata
     """
     # Prepare arguments for data module
-    overwrite_hparams = create_overwrite_hparams(dset)
+    dm_kwargs = create_eval_hparams(dset, split=split)
     # Update with kwargs
-    overwrite_hparams.update(kwargs)
+    dm_kwargs.update(kwargs)
 
     # Set up data module
-    dm = setup_data_module(use_defaults=True,
-                           **overwrite_hparams)
+    dm = setup_data_module(use_defaults=True, **dm_kwargs)
 
     return dm
 
 
-def get_dset_dataloader(dset, **kwargs):
+def setup_default_dataloader_for_dset(dset, split=None, filters=None, **overwrite_hparams):
     """
-    Get image dataloader for dataset split/name specified.
+    Create DataLoader for specific dataset and train/val/test split.
 
     Parameters
     ----------
     dset : str
-        Name of dataset split or evaluation set
-    **kwargs : dict, optional
-        Keyword arguments for `setup_data_module`
-        
-    Returns
-    -------
-    torch.DataLoader
-        Each batch returns images and a dict containing metadata
-    """
-    # Set up data module
-    dm = get_dset_data_module(dset=dset, **kwargs)
-
-    # Get dataloader
-    if dset == "val":
-        img_dataloader = dm.val_dataloader()
-    elif dset == "test":
-        img_dataloader = dm.test_dataloader()
-    else:
-        img_dataloader = dm.train_dataloader()
-
-    return img_dataloader
-
-
-def get_dset_dataloader_filtered(dset, filters=None, **overwrite_hparams):
-    """
-    Get DataLoader for dataset split or evaluation dataset specified with
-    filters, specified.
-
-    Parameters
-    ----------
-    dset : str
-        Name of data split or evaluation dataset
+        Name of dataset
+    split : str
+        Name of data split
     filters : dict, optional
         Mapping of column name to allowed value/s
     **overwrite_hparams : dict, optional
         Keyword arguments to overwrite hyperparameters
     """
+    # Ensure filters is a dict
+    filters = filters or {}
+
     # Create DataModule
-    dm = get_dset_data_module(
+    dm = setup_default_data_module_for_dset(
         dset=dset,
         **overwrite_hparams
     )
 
-    # Extract metadata table
-    df_metadata = get_dset_metadata(
-        dm=dm,
-        dset=dset,
-        **overwrite_hparams
-    )
-
-    # If provided, perform filters
-    if filters:
-        for col, val in filters.items():
-            # Raise errors, if column not present
-            if col not in df_metadata:
-                raise RuntimeError(f"Column {col} not in table provided!")
-
-            # CASE 1: Value is a list/tuple
-            if isinstance(val, (list, tuple, set)):
-                mask = df_metadata[col].isin(val)
-                df_metadata = df_metadata[mask]
-            # CASE 2: Value is a single item
-            else:
-                mask = (df_metadata[col] == val)
-                df_metadata = df_metadata[mask]
-
-    # Create DataLoader
-    dataloader = create_dataloader_from_metadata_table(
-        df_metadata=df_metadata,
-        **overwrite_hparams
-    )
+    # Get filtered dataloader
+    dataloader = dm.get_filtered_dataloader(split=split, **filters)
 
     return dataloader
 
@@ -296,93 +229,33 @@ def create_dataloader_from_metadata_table(df_metadata,
     return DataLoader(us_dataset, **dataloader_params)
 
 
-def get_dset_metadata(dm, hparams=None,
-                      dset=constants.DEFAULT_EVAL_DSET,
-                      **overwrite_hparams):
+def create_eval_hparams(dset=None, split="test"):
     """
-    Get metadata table containing (filename, label) for each image in the
-    specified set (train/val/test).
-
-    Parameters
-    ----------
-    dm : L.LightningDataModule
-        DataModule used in model training run, used to load exact dset split
-    hparams : dict, optional
-        Experiment hyperparameters. If not provided, resort to defaults.
-    dset : str, optional
-        Specific split of dataset, or name of test set. If not one of (train,
-        val, test), assume "train"., by default constants.DEFAULT_EVAL_DSET.
-    **overwrite_hparams : dict, optional
-        Keyword arguments to overwrite hyperparameters
-
-    Returns
-    -------
-    pandas.DataFrame
-        Metadata of each image in the dset split
-    """
-    # If not provided, use default hyperparameters
-    hparams = hparams.copy() if hparams else DEFAULT_HPARAMS
-
-    # Overwrite with keyword arguments
-    hparams.update(overwrite_hparams)
-
-    # Coerce to train, if not valid
-    # NOTE: This case is for non-standard dset names (i.e., external test sets)
-    hospital = "sickkids"
-    if dset not in ("train", "val", "test"):
-        LOGGER.warning(f"`{dset}` is not a valid data split. Assuming train "
-                       "set is desired...")
-        hospital = dset
-        dset = "train"
-
-    # Get filename and label of dset split data from data module
-    df_dset = pd.DataFrame({
-        "filename": dm.dset_to_paths[dset],
-        "label": dm.dset_to_labels[dset],
-    })
-
-    # Prepare keyword arguments
-    kwargs = {
-        "hospital": hospital,
-        "label_part": hparams.get("label_part"),
-        "keep_orig_label": hparams.get("keep_orig_label", False),
-    }
-    # NOTE: Add hyperparameter for SickKids test set
-    if hospital == "sickkids" and "include_sickkids_test_set" in hparams:
-        kwargs["include_test_set"] = hparams["include_sickkids_test_set"]
-
-    # Extract metadata through join
-    df_dset = utils.extract_data_from_filename_and_join(df_dset, **kwargs)
-
-    return df_dset
-
-
-def create_overwrite_hparams(dset):
-    """
-    If `dset` provided is for an external test set, return hyperparameters to
-    overwrite experiment hyperparameters to load test data for evaluation.
+    Create hyperparameters to evaluate on a data split (typically test)
 
     Parameters
     ----------
     dset : str
-        Dataset split (train/val/test), or test dataset name (stanford)
+        If provided, filter by dataset name
+    split : str, optional
+        Data split, by default "test"
 
     Returns
     -------
     dict
         Contains hyperparameters to overwrite, if necessary
     """
-    overwrite_hparams = {
-        "shuffle": False,
-    }
+    # Check that provided dataset or split is valid
+    if dset:
+        assert dset in constants.DSET_TO_IMG_SUBDIR_FULL
+    assert split in ("train", "val", "test")
 
-    if dset not in ("sickkids", "train", "val", "test") \
-            and dset in constants.HOSPITAL_TO_IMG_DIR:
-        overwrite_hparams = {
-            "hospital": dset,
-            "train_val_split": 1.0,
-            "train_test_split": 1.0,
-            "test": False,
-        }
+    # Accumulate hyperparameters to overwrite
+    overwrite_hparams = {"shuffle": False}
+
+    # If test, then only need to load that dataset
+    # NOTE: Since test is already set by default
+    if dset and split == "test":
+        overwrite_hparams["dsets"] = dset
 
     return overwrite_hparams

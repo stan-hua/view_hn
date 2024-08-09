@@ -7,6 +7,7 @@ Description: Contains helper functions for a variety of data/label preprocessing
 
 # Standard libraries
 import glob
+import json
 import logging
 import os
 
@@ -31,19 +32,31 @@ LOGGER = logging.getLogger(__name__)
 ################################################################################
 #                             Metadata Extraction                              #
 ################################################################################
-def load_metadata(hospital, prepend_img_dir=False, **kwargs):
+# TODO: Remove all calls that use removed keywords "extract"
+def load_metadata(dsets, prepend_img_dir=False, **config):
     """
-    Loads metadata for a specific hospital
+    Loads metadata for specified datasets/hospital/s
+
+    Note
+    ----
+    By default, unlabeled images are included, and potentially missing machine,
+    HN and surgery labels may be present for SickKids/Stanford data.
 
     Parameters
     ----------
-    hospital : str or list
+    dsets : str or list
         1+ hospital (and/or dataset) name/s
     prepend_img_dir : bool, optional
         If True, prepends default image directory for hospital to "filename"
         column, by default False
-    **kwargs : dict, optional
-        Keyword arguments to pass into specific metadata loading function.
+    **config : dict, optional
+        Configuration for metadata loading, which includes:
+        label_part : str, optional
+            If specified, either `side` or `plane` is extracted from each label
+            and used as the given label, by default None.
+        relative_side : bool, optional
+            If True, converts side (Left/Right) to order in which side appeared
+            (First/Second/None). Requires <extract> to be True, by default False.
 
     Returns
     -------
@@ -51,37 +64,53 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
         May contain metadata (filename, view label, patient id, visit, sequence
         number).
     """
-    # Mapping of hospital to metadata loading function
-    hospital_to_func = {
-        "sickkids": load_sickkids_metadata,
-        "stanford": load_stanford_metadata,
-        "uiowa": load_uiowa_metadata,
-        "chop": load_chop_metadata,
-        "stanford_non_seq": load_stanford_non_seq_metadata,
-        "sickkids_silent_trial": load_sickkids_silent_trial_metadata,
-    }
+    # Raise runtime error, if relative side specified
+    if config.get("relative_side"):
+        raise RuntimeError(
+            "Relative side is deprecated! Look at commented out code below for "
+            "implementation...")
+        # NOTE: Below was the implementation for creating relative side labels.
+        #       Feel free to re-use if need be
+        # df_metadata = df_metadata.sort_values(
+        #         by=["id", "visit", "seq_number"])
+        # relative_labels = df_metadata.groupby(by=["id", "visit"])\
+        #     .apply(lambda df: pd.Series(make_side_label_relative(
+        #         df.label.tolist()))).to_numpy()
+        # df_metadata["label"] = relative_labels
+
+    # Get mapping of dataset/hospital to clean metadata
+    dset_to_metadata = constants.DSET_TO_METADATA["clean"]
+
     # INPUT: Ensure `hospital` is a list
-    hospital = [hospital] if isinstance(hospital, str) else hospital
+    dsets = [dsets] if isinstance(dsets, str) else dsets
 
     # Accumulate metadata for each hospital specified
     metadata_tables = []
-    for hospital_ in hospital:
+    for dset in dsets:
         # Ensure hospital specified is implemented
-        if hospital_ not in hospital_to_func:
+        if dset not in constants.DSET_TO_METADATA["clean"]:
             raise RuntimeError("Metadata loading is NOT implemented for "
-                               f"hospital `{hospital_}`!")
+                               f"dataset `{dset}`!")
 
-        # Retrieve metadata
-        df_metadata_curr = hospital_to_func[hospital_](**kwargs)
+        # Load metadata table
+        df_metadata_curr = pd.read_csv(dset_to_metadata[dset])
+
+        # Set extracted side/plane as label, if specified
+        if config.get("label_part") in ("plane", "side"):
+            # Store original label in another column
+            df_metadata_curr["orig_label"] = df_metadata_curr["label"]
+            df_metadata_curr["label"] = df_metadata_curr[config["label_part"]]
+
+        # Add image directory as a separate column 
+        img_dir = constants.DSET_TO_IMG_SUBDIR_FULL[dset]
+        df_metadata_curr["dir_name"] = img_dir
 
         # If specified, attempt to prepend default image directory to filename
         if prepend_img_dir:
-            img_dir = constants.HOSPITAL_TO_IMG_DIR[hospital_]
             df_metadata_curr["filename"] = df_metadata_curr["filename"].map(
                 lambda x: os.path.join(img_dir, x)
             )
-        # Attach hospital name to data
-        df_metadata_curr["hospital"] = hospital_
+
         # Ensure all columns are string type
         df_metadata_curr = df_metadata_curr.astype(str)
 
@@ -89,563 +118,6 @@ def load_metadata(hospital, prepend_img_dir=False, **kwargs):
 
     # Concatenate metadata across hospitals
     df_metadata = pd.concat(metadata_tables, ignore_index=True)
-    return df_metadata
-
-
-# NOTE: Concatenates externally split test set, by default
-def load_sickkids_metadata(path=constants.SK_METADATA_FILE,
-                           label_part=None,
-                           keep_orig_label=False,
-                           extract=False,
-                           include_hn=False,
-                           relative_side=False,
-                           include_unlabeled=False,
-                           img_dir=constants.DIR_IMAGES,
-                           include_test_set=True,
-                           test_path=constants.SK_TEST_METADATA_FILE,
-                           ):
-    """
-    Load SickKids metadata table with filenames and view labels.
-
-    Note
-    ----
-    If <relative_side> is True, the following examples happens:
-        - [Sagittal_Left, Transverse_Right, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-        - [Sagittal_Right, Transverse_Left, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-
-    Parameters
-    ----------
-    path : str, optional
-        Path to CSV metadata file, by default constants.SK_METADATA_FILE
-    label_part : str, optional
-        If specified, either `side` or `plane` is extracted from each label
-        and used as the given label, by default None.
-    keep_orig_label : bool, optional
-        If True, create a new column "orig_label", which contains the original
-        label before potentially splitting it, by default False.
-    extract : bool, optional
-        If True, extracts patient ID, US visit, and sequence number from the
-        filename, by default False.
-    include_hn : bool, optional
-        If True, include all available hydronephrosis and surgery labels, by
-        default False.
-    relative_side : bool, optional
-        If True, converts side (Left/Right) to order in which side appeared
-        (First/Second/None). Requires <extract> to be True, by default False.
-    include_unlabeled : bool, optional
-        If True, include all unlabeled images in <img_dir>, by default False.
-    img_dir : str, optional
-        Directory containing unlabeled (and labeled) images, by default
-        constants.DIR_IMAGES
-    include_test_set : bool, optional
-        If True and path to test metadata file specified, include test set
-        labels in loaded metadata, by default True.
-    test_path : bool, optional
-        If <include_test_set>, this path points to the metadata file for the
-        internal test data, by default constants.SK_TEST_METADATA.
-
-    Returns
-    -------
-    pandas.DataFrame
-        May contain metadata (filename, view label, patient id, visit, sequence
-        number).
-    """
-    df_metadata = pd.read_csv(path)
-
-    # If specified, include internal test set labels
-    if include_test_set:
-        df_test_metadata = pd.read_csv(test_path)
-        df_metadata = pd.concat([df_metadata, df_test_metadata],
-                                ignore_index=True)
-
-    # Rename columns
-    df_metadata = df_metadata.rename(columns={"IMG_FILE": "filename",
-                                              "revised_labels": "label"})
-
-    # Fix mislabel saggital --> sagittal
-    fix_label_map = {"Saggital_Left": "Sagittal_Left",
-                     "Saggital_Right": "Sagittal_Right"}
-    df_metadata.label = df_metadata.label.map(lambda x: fix_label_map.get(x, x))
-
-    # If specified, create duplicate of original label
-    if keep_orig_label:
-        df_metadata["orig_label"] = df_metadata["label"]
-
-    # Change label to side/plane, if specified
-    if label_part in ("plane", "side"):
-        df_metadata["label"] = df_metadata["label"].map(
-            lambda x: extract_from_label(x, extract=label_part))
-
-    # If specified, include unlabeled images in directory provided
-    if include_unlabeled:
-        assert img_dir is not None, "Please provide `img_dir` as an argument!"
-
-        # Get all image paths
-        all_img_paths = glob.glob(os.path.join(img_dir, "*.*"))
-        df_others = pd.DataFrame({"filename": all_img_paths})
-        # Only keep filename
-        df_others["filename"] = df_others["filename"].map(os.path.basename)
-
-        # Remove found paths to already labeled images
-        labeled_img_paths = set(df_metadata["filename"].tolist())
-        df_others = df_others[~df_others["filename"].isin(labeled_img_paths)]
-
-        # Exclude Stanford data
-        df_others = df_others[~df_others["filename"].str.startswith("SU2")]
-
-        # NOTE: Unlabeled images have label "Other"
-        df_others["label"] = "Other"
-
-        # Merge labeled and unlabeled data
-        df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
-
-    if extract:
-        df_metadata = extract_data_from_filename(df_metadata)
-
-        # Include all available surgery labels
-        if include_hn:
-            df_metadata = extract_hn_labels(
-                df_metadata, sickkids=True, stanford=False)
-
-        # Convert side (in label) to order of relative appearance (First/Second)
-        if relative_side:
-            df_metadata = df_metadata.sort_values(
-                by=["id", "visit", "seq_number"])
-            relative_labels = df_metadata.groupby(by=["id", "visit"])\
-                .apply(lambda df: pd.Series(make_side_label_relative(
-                    df.label.tolist()))).to_numpy()
-            df_metadata["label"] = relative_labels
-
-    return df_metadata
-
-
-def load_stanford_metadata(path=constants.SU_METADATA_FILE,
-                           label_part=None,
-                           keep_orig_label=False,
-                           extract=False,
-                           include_hn=False,
-                           relative_side=False,
-                           include_unlabeled=False,
-                           img_dir=constants.DIR_IMAGES):
-    """
-    Load Stanford metadata table with filenames and view labels.
-
-    Note
-    ----
-    If <relative_side> is True, the following examples happens:
-        - [Sagittal_Left, Transverse_Right, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-        - [Sagittal_Right, Transverse_Left, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-
-    Parameters
-    ----------
-    path : str, optional
-        Path to CSV metadata file, by default constants.STANFORD_METADATA_FILE
-    label_part : str, optional
-        If specified, either `side` or `plane` is extracted from each label
-        and used as the given label, by default None.
-    keep_orig_label : bool, optional
-        If True, create a new column "orig_label", which contains the original
-        label before potentially splitting it, by default False.
-    extract : bool, optional
-        If True, extracts patient ID, US visit, and sequence number from the
-        filename, by default False.
-    include_hn : bool, optional
-        If True, include all available hydronephrosis and surgery labels, by
-        default False.
-    relative_side : bool, optional
-        If True, converts side (Left/Right) to order in which side appeared
-        (First/Second/None). Requires <extract> to be True, by default False.
-    include_unlabeled : bool, optional
-        If True, include all unlabeled images in <img_dir>, by default False.
-    img_dir : str, optional
-        Directory containing unlabeled (and labeled) images, by default
-        constants.DIR_IMAGES
-
-    Returns
-    -------
-    pandas.DataFrame
-        May contain metadata (filename, view label, patient id, visit, sequence
-        number).
-    """
-    df_metadata = pd.read_csv(path)
-
-    # Fix mislabel saggital --> sagittal
-    fix_label_map = {"Saggital_Left": "Sagittal_Left",
-                     "Saggital_Right": "Sagittal_Right"}
-    df_metadata.label = df_metadata.label.map(lambda x: fix_label_map.get(x, x))
-
-    # If specified, create duplicate of original label
-    if keep_orig_label:
-        df_metadata["orig_label"] = df_metadata["label"]
-
-    # Change label to side/plane, if specified
-    if label_part in ("plane", "side"):
-        df_metadata["label"] = df_metadata["label"].map(
-            lambda x: extract_from_label(x, extract=label_part))
-
-    # If specified, include unlabeled images in directory provided
-    if include_unlabeled:
-        assert img_dir is not None, "Please provide `img_dir` as an argument!"
-
-        # Get all image paths
-        all_img_paths = glob.glob(os.path.join(img_dir, "*.*"))
-        df_others = pd.DataFrame({"filename": all_img_paths})
-        df_others["filename"] = df_others["filename"].map(os.path.basename)
-        
-        # Remove found paths to already labeled images
-        labeled_img_paths = set(df_metadata["filename"].tolist())
-        df_others = df_others[~df_others["filename"].isin(labeled_img_paths)]
-
-        # Only include Stanford data
-        df_others = df_others[df_others["filename"].str.startswith("SU2")]
-
-        # NOTE: Unlabeled images have label "Other"
-        df_others["label"] = "Other"
-        
-        # Merge labeled and unlabeled data
-        df_metadata = pd.concat([df_metadata, df_others], ignore_index=True)
-
-    if extract:
-        df_metadata = extract_data_from_filename(df_metadata)
-
-        # Include all available surgery labels
-        if include_hn:
-            df_metadata = extract_hn_labels(
-                df_metadata, sickkids=False, stanford=True)
-
-        # Convert side (in label) to order of relative appearance (First/Second)
-        if relative_side:
-            df_metadata = df_metadata.sort_values(
-                by=["id", "visit", "seq_number"])
-            relative_labels = df_metadata.groupby(by=["id", "visit"])\
-                .apply(lambda df: pd.Series(make_side_label_relative(
-                    df.label.tolist()))).to_numpy()
-            df_metadata["label"] = relative_labels
-
-    # Drop duplicates
-    # NOTE: Metadata table contains duplicate rows
-    df_metadata = df_metadata.drop_duplicates()
-
-    return df_metadata
-
-
-def load_uiowa_metadata(path=constants.UIOWA_METADATA_FILE,
-                        label_part=None,
-                        keep_orig_label=False,
-                        extract=False,
-                        relative_side=False,
-                        include_hn=False,
-                        include_unlabeled=False,
-                        **kwargs,
-                        ):
-    """
-    Load UIOwa metadata table with filenames and view labels.
-
-    Note
-    ----
-    If <relative_side> is True, the following examples happens:
-        - [Sagittal_Left, Transverse_Right, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-        - [Sagittal_Right, Transverse_Left, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-
-    Parameters
-    ----------
-    path : str, optional
-        Path to CSV metadata file, by default constants.UIOWA_METADATA_FILE
-    label_part : str, optional
-        If specified, either `side` or `plane` is extracted from each label
-        and used as the given label, by default None.
-    keep_orig_label : bool, optional
-        If True, create a new column "orig_label", which contains the original
-        label before potentially splitting it, by default False.
-    extract : bool, optional
-        If True, extracts patient ID, US visit, and sequence number from the
-        filename, by default False.
-    relative_side : bool, optional
-        If True, converts side (Left/Right) to order in which side appeared
-        (First/Second/None). Requires <extract> to be True, by default False.
-
-    Returns
-    -------
-    pandas.DataFrame
-        May contain metadata (filename, view label, patient id, visit, sequence
-        number).
-    """
-    # Raise error, if asked to include unlabeled images
-    if include_unlabeled:
-        raise NotImplementedError("Getting unlabeled images from UIowa is "
-                                  "currently not supported!")
-    # Raise error, if asked to provide surgery labels
-    if include_hn:
-        raise NotImplementedError("UIowa has no HN labels!")
-
-    # Load metadata
-    df_metadata = pd.read_csv(path)
-
-    # If specified, create duplicate of original label
-    if keep_orig_label:
-        df_metadata["orig_label"] = df_metadata["label"]
-
-    # Change label to side/plane, if specified
-    if label_part in ("plane", "side"):
-        df_metadata["label"] = df_metadata["label"].map(
-            lambda x: extract_from_label(x, extract=label_part))
-
-    # Since other extracted metadata was already saved to the metadata file,
-    # simply remove extra metadata if not specified
-    if not extract:
-        df_metadata = df_metadata.drop(columns=["id", "visit", "seq_number"])
-    # Convert side (in label) to order of relative appearance (First/Second)
-    elif relative_side:
-        df_metadata = df_metadata.sort_values(
-            by=["id", "visit", "seq_number"])
-        relative_labels = df_metadata.groupby(by=["id", "visit"])\
-            .apply(lambda df: pd.Series(make_side_label_relative(
-                df.label.tolist()))).to_numpy()
-        df_metadata["label"] = relative_labels
-
-    return df_metadata
-
-
-def load_chop_metadata(path=constants.CHOP_METADATA_FILE,
-                       label_part=None,
-                       keep_orig_label=False,
-                       extract=False,
-                       relative_side=False,
-                       include_hn=False,
-                       include_unlabeled=False,
-                       **kwargs
-                       ):
-    """
-    Load CHOP metadata table with filenames and view labels.
-
-    Note
-    ----
-    If <relative_side> is True, the following examples happens:
-        - [Sagittal_Left, Transverse_Right, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-        - [Sagittal_Right, Transverse_Left, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-
-    Parameters
-    ----------
-    path : str, optional
-        Path to CSV metadata file, by default constants.CHOP_METADATA_FILE
-    label_part : str, optional
-        If specified, either `side` or `plane` is extracted from each label
-        and used as the given label, by default None.
-    keep_orig_label : bool, optional
-        If True, create a new column "orig_label", which contains the original
-        label before potentially splitting it, by default False.
-    extract : bool, optional
-        If True, extracts patient ID, US visit, and sequence number from the
-        filename, by default False.
-    relative_side : bool, optional
-        If True, converts side (Left/Right) to order in which side appeared
-        (First/Second/None). Requires <extract> to be True, by default False.
-
-    Returns
-    -------
-    pandas.DataFrame
-        May contain metadata (filename, view label, patient id, visit, sequence
-        number).
-    """
-    # Raise error, if asked to include unlabeled images
-    if include_unlabeled:
-        raise NotImplementedError("Getting unlabeled images from UIowa is "
-                                  "currently not supported!")
-    # Raise error, if asked to provide surgery labels
-    if include_hn:
-        raise NotImplementedError("CHOP has no HN labels!")
-
-    # Load metadata
-    df_metadata = pd.read_csv(path)
-
-    # If specified, create duplicate of original label
-    if keep_orig_label:
-        df_metadata["orig_label"] = df_metadata["label"]
-
-    # Change label to side/plane, if specified
-    if label_part in ("plane", "side"):
-        df_metadata["label"] = df_metadata["label"].map(
-            lambda x: extract_from_label(x, extract=label_part))
-
-    # Since other extracted metadata was already saved to the metadata file,
-    # simply remove extra metadata if not specified
-    if not extract:
-        df_metadata = df_metadata.drop(columns=["id", "visit", "seq_number"])
-    # Convert side (in label) to order of relative appearance (First/Second)
-    elif relative_side:
-        df_metadata = df_metadata.sort_values(
-            by=["id", "visit", "seq_number"])
-        relative_labels = df_metadata.groupby(by=["id", "visit"])\
-            .apply(lambda df: pd.Series(make_side_label_relative(
-                df.label.tolist()))).to_numpy()
-        df_metadata["label"] = relative_labels
-
-    return df_metadata
-
-
-def load_stanford_non_seq_metadata(path=constants.SU_NON_SEQ_METADATA_FILE,
-                                   label_part=None,
-                                   keep_orig_label=False,
-                                   extract=False,
-                                   relative_side=False,
-                                   include_hn=False,
-                                   include_unlabeled=False,
-                                   **kwargs
-                                   ):
-    """
-    Load Stanford (non-sequence) metadata table with filenames and view labels.
-
-    Note
-    ----
-    If <relative_side> is True, the following examples happens:
-        - [Sagittal_Left, Transverse_Right, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-        - [Sagittal_Right, Transverse_Left, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-
-    Parameters
-    ----------
-    path : str, optional
-        Path to CSV metadata file, by default constants.SU_NON_SEQ_METADATA_FILE
-    label_part : str, optional
-        If specified, either `side` or `plane` is extracted from each label
-        and used as the given label, by default None.
-    keep_orig_label : bool, optional
-        If True, create a new column "orig_label", which contains the original
-        label before potentially splitting it, by default False.
-    extract : bool, optional
-        If True, extracts patient ID, US visit, and sequence number from the
-        filename, by default False.
-    relative_side : bool, optional
-        If True, converts side (Left/Right) to order in which side appeared
-        (First/Second/None). Requires <extract> to be True, by default False.
-
-    Returns
-    -------
-    pandas.DataFrame
-        May contain metadata (filename, view label, patient id, visit, sequence
-        number).
-    """
-    # Raise error, if asked to include unlabeled images
-    if include_unlabeled:
-        raise NotImplementedError("Getting unlabeled images from UIowa is "
-                                  "currently not supported!")
-    # Raise error, if asked to provide surgery labels
-    if include_hn:
-        raise NotImplementedError("Stanford (Non-Seq) has no HN labels!")
-
-    # Load metadata
-    df_metadata = pd.read_csv(path)
-
-    # If specified, create duplicate of original label
-    if keep_orig_label:
-        df_metadata["orig_label"] = df_metadata["label"]
-
-    # Change label to side/plane, if specified
-    if label_part in ("plane", "side"):
-        df_metadata["label"] = df_metadata["label"].map(
-            lambda x: extract_from_label(x, extract=label_part))
-
-    # Since other extracted metadata was already saved to the metadata file,
-    # simply remove extra metadata if not specified
-    if not extract:
-        df_metadata = df_metadata.drop(columns=["id", "visit", "seq_number"])
-    # Convert side (in label) to order of relative appearance (First/Second)
-    elif relative_side:
-        df_metadata = df_metadata.sort_values(
-            by=["id", "visit", "seq_number"])
-        relative_labels = df_metadata.groupby(by=["id", "visit"])\
-            .apply(lambda df: pd.Series(make_side_label_relative(
-                df.label.tolist()))).to_numpy()
-        df_metadata["label"] = relative_labels
-
-    return df_metadata
-
-
-def load_sickkids_silent_trial_metadata(path=constants.SK_ST_METADATA_FILE,
-                                        label_part=None,
-                                        keep_orig_label=False,
-                                        extract=False,
-                                        relative_side=False,
-                                        include_hn=False,
-                                        include_unlabeled=False,
-                                        **kwargs
-                                        ):
-    """
-    Load Stanford (non-sequence) metadata table with filenames and view labels.
-
-    Note
-    ----
-    If <relative_side> is True, the following examples happens:
-        - [Sagittal_Left, Transverse_Right, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-        - [Sagittal_Right, Transverse_Left, Bladder] ->
-                [Sagittal_First, Transverse_Second, Bladder]
-
-    Parameters
-    ----------
-    path : str, optional
-        Path to CSV metadata file, by default constants.SK_ST_METADATA_FILE
-    label_part : str, optional
-        If specified, either `side` or `plane` is extracted from each label
-        and used as the given label, by default None.
-    keep_orig_label : bool, optional
-        If True, create a new column "orig_label", which contains the original
-        label before potentially splitting it, by default False.
-    extract : bool, optional
-        If True, extracts patient ID, US visit, and sequence number from the
-        filename, by default False.
-    relative_side : bool, optional
-        If True, converts side (Left/Right) to order in which side appeared
-        (First/Second/None). Requires <extract> to be True, by default False.
-
-    Returns
-    -------
-    pandas.DataFrame
-        May contain metadata (filename, view label, patient id, visit, sequence
-        number).
-    """
-    # Raise error, if asked to include unlabeled images
-    if include_unlabeled:
-        raise NotImplementedError("Getting unlabeled images from UIowa is "
-                                  "currently not supported!")
-    # Raise error, if asked to provide surgery labels
-    if include_hn:
-        raise NotImplementedError("CHOP has no HN labels!")
-
-    # Load metadata
-    df_metadata = pd.read_csv(path)
-
-    # If specified, create duplicate of original label
-    if keep_orig_label:
-        df_metadata["orig_label"] = df_metadata["label"]
-
-    # Change label to side/plane, if specified
-    if label_part in ("plane", "side"):
-        df_metadata["label"] = df_metadata["label"].map(
-            lambda x: extract_from_label(x, extract=label_part))
-
-    # Since other extracted metadata was already saved to the metadata file,
-    # simply remove extra metadata if not specified
-    if not extract:
-        df_metadata = df_metadata.drop(columns=["id", "visit", "seq_number"])
-    # Convert side (in label) to order of relative appearance (First/Second)
-    elif relative_side:
-        df_metadata = df_metadata.sort_values(
-            by=["id", "visit", "seq_number"])
-        relative_labels = df_metadata.groupby(by=["id", "visit"])\
-            .apply(lambda df: pd.Series(make_side_label_relative(
-                df.label.tolist()))).to_numpy()
-        df_metadata["label"] = relative_labels
-
     return df_metadata
 
 
@@ -680,7 +152,7 @@ def extract_data_from_filename(df_metadata, col="filename"):
     return df_metadata
 
 
-def extract_data_from_filename_and_join(df_metadata, hospital="sickkids",
+def extract_data_from_filename_and_join(df_metadata, dset="sickkids",
                                         **kwargs):
     """
     Extract extra metadata
@@ -690,8 +162,8 @@ def extract_data_from_filename_and_join(df_metadata, hospital="sickkids",
     df_metadata : pandas.DataFrame
         Each row contains metadata for an ultrasound image, but is missing
         extra desired metadata
-    hospital : str or list, optional
-        Name of hospital/s in `df_metadata`, by default "sickkids".
+    dset : str or list, optional
+        Name of dset/s in `df_metadata`, by default "sickkids".
     **kwargs : dict, optional
         Keyword arguments to pass into `load_metadata`.
 
@@ -699,19 +171,19 @@ def extract_data_from_filename_and_join(df_metadata, hospital="sickkids",
     -------
     Metadata table with additional data extracted
     """
-    # INPUT: If only 1 hospital provided, ensure its a list
-    hospitals = [hospital] if isinstance(hospital, str) else hospital
+    # INPUT: If only 1 dset provided, ensure its a list
+    dsets = [dset] if isinstance(dset, str) else dset
 
-    # Ensure hospitals are unique
-    hospitals = sorted(set(hospitals))
+    # Ensure dsets are unique
+    dsets = sorted(set(dsets))
 
     # Create copy to avoid in-place assignment
     df_metadata = df_metadata.copy()
     # Clean path
     df_metadata["filename"] = df_metadata["filename"].map(os.path.normpath)
 
-    # Load metadata from ALL hospitals specified
-    df_metadata_all = load_metadata(hospital=hospitals, extract=True, **kwargs)
+    # Load metadata from ALL dsets specified
+    df_metadata_all = load_metadata(dsets=dsets, extract=True, **kwargs)
     # Clean path
     df_metadata_all["filename"] = df_metadata_all["filename"].map(
         os.path.normpath)
@@ -719,7 +191,7 @@ def extract_data_from_filename_and_join(df_metadata, hospital="sickkids",
     # If not all filenames found, try loading all metadata WITH image directory
     if not vals_is_subset(df_metadata, df_metadata_all, "filename"):
         df_metadata_all = load_metadata(
-            hospital=hospitals,
+            dsets=dsets,
             extract=True,
             prepend_img_dir=True,
             **kwargs)
@@ -770,9 +242,9 @@ def extract_hn_labels(df_metadata, sickkids=True, stanford=True):
     # Load SickKids HN labels
     df_hn = pd.DataFrame()
     if sickkids:
-        df_hn = pd.concat([df_hn, pd.read_csv(constants.SK_HN_METADATA_FILE)])
+        df_hn = pd.concat([df_hn, pd.read_csv(constants.DSET_TO_METADATA["raw"]["sickkids_hn"])])
     if stanford:
-        df_hn = pd.concat([df_hn, pd.read_csv(constants.SU_HN_METADATA_FILE)])
+        df_hn = pd.concat([df_hn, pd.read_csv(constants.DSET_TO_METADATA["raw"]["stanford_hn"])])
 
     # Ensure ID is string
     df_hn["id"] = df_hn["id"].astype(str)
@@ -886,7 +358,7 @@ def get_labels_for_filenames(filenames, sickkids=True, stanford=True,
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default None.
     **kwargs : dict, optional
-        Keyword arguments to pass into hospital-specific metadata-loading
+        Keyword arguments to pass into dset-specific metadata-loading
         functions.
 
     Returns
@@ -943,8 +415,8 @@ def get_machine_for_filenames(filenames, sickkids=True):
     if sickkids:
         # Get mapping of filename to machine
         df_machines = pd.concat([
-            pd.read_csv(constants.SK_MACHINE_METADATA_FILE),
-            pd.read_csv(constants.SK_MACHINE_TEST_METADATA_FILE)
+            pd.read_csv(constants.DSET_TO_METADATA["raw"]["sickkids_machine"]),
+            pd.read_csv(constants.DSET_TO_METADATA["raw"]["sickkids_test_machine"])
         ])
         df_machines = df_machines.set_index("IMG_FILE")
         filename_to_machine.update(df_machines["machine"].to_dict())
@@ -1441,6 +913,206 @@ def cross_validation_by_patient(patient_ids, num_folds=5):
         folds.append((train_idx, val_idx))
 
     return folds
+
+
+def assign_split_table_by_dset(df_metadata, **split_kwargs):
+    """
+    Assign data split by dataset
+
+    Parameters
+    ----------
+    df_metadata : pd.DataFrame
+        Metadata table containing images from 1+ datasets specified in `dset`
+        column
+
+    Returns
+    -------
+    pd.DataFrame
+        Metadata table where `split` column was assigned
+    """
+    accum_df = []
+    for dset in df_metadata["dset"].unique().tolist():
+        df_dset = df_metadata[df_metadata["dset"] == dset]
+        df_dset = assign_split_table(df_dset, **split_kwargs)
+        accum_df.append(df_dset)
+    df_metadata = pd.concat(accum_df, ignore_index=True)
+
+    return df_metadata
+
+
+def assign_split_table(df_metadata,
+                       other_split="test",
+                       overwrite=False,
+                       **split_kwargs):
+    """
+    Split table into train and test, and add "split" column to specify which
+    split.
+
+    Note
+    ----
+    If image has no label, it's not part of any split.
+
+    Parameters
+    ----------
+    df_metadata : pd.DataFrame
+        Each row represents an US image at least a patient ID and label
+    other_split : str, optional
+        Name of other split. For example, ("val", "test"), by default "test"
+    overwrite : bool, optional
+        If val/test splits already exists, then don't overwrite
+    **split_kwargs : Any
+        Keyword arguments to pass into `split_by_ids`
+
+    Returns
+    -------
+    pd.DataFrame
+        Metadata table
+    """
+    # Reset index
+    df_metadata = df_metadata.reset_index(drop=True)
+
+    # If split already exists, then don't overwrite and return early
+    if (not overwrite and "split" in df_metadata.columns
+            and other_split in df_metadata["split"].unique()):
+        LOGGER.info(f"Split `{other_split}` already exists! Not overwriting...")
+        return df_metadata
+
+    # Add column for split
+    if "split" in df_metadata.columns:
+        LOGGER.warning(f"Overwriting existing data splits for (train/{other_split})!")
+    df_metadata["split"] = None
+
+    # Split into tables with labels and without
+    df_labeled = df_metadata[~df_metadata["label"].isna()]
+    df_unlabeled = df_metadata[df_metadata["label"].isna()]
+
+    # If specified, only modify val/test if there are none that exist
+    # Split labeled data into train and test
+    patient_ids = df_labeled["id"].tolist()
+    train_idx, test_idx = split_by_ids(patient_ids, **split_kwargs)
+    df_labeled.loc[train_idx, "split"] = "train"
+    df_labeled.loc[test_idx, "split"] = other_split
+
+    # Recombine data
+    df_metadata = pd.concat([df_labeled, df_unlabeled], ignore_index=True)
+
+    return df_metadata
+
+
+def assign_split_row(row, dset="sickkids"):
+    """
+    Given a row from a dataframe, assign its dataset based on the patient ID
+
+    Parameters
+    ----------
+    row : pd.Series or dict
+        Row from metadata table
+    dset : str
+        Hospital/dataset (e.g., sickkids, sickkids_silent_trial)
+
+    Returns
+    -------
+    str
+        Dataset split (train/val/test) or None (if not a split)
+    """
+    # Get flag if has label
+    has_label = not pd.isnull(row["label"])
+
+    # CASE 0: Not part of any split, if there's no label
+    if not has_label:
+        return None
+
+    # CASE 1: If no train/val/test splits, assume test if there's a label
+    if dset not in constants.DSET_TO_SPLIT_IDS:
+        return "test" if has_label else None
+
+    # CASE 2: Defined for the hospital
+    dset_to_ids = constants.DSET_TO_SPLIT_IDS[dset]
+    for split in ("train", "val", "test"):
+        if row["id"] in dset_to_ids[split]:
+            return split
+
+    # CASE 3: If reached this point, then its not part of any split
+    return None
+
+
+def assign_unlabeled_split(df_metadata, split="train"):
+    """
+    Assign unlabeled data to data split (e.g., train)
+
+    Parameters
+    ----------
+    df_metadata : pd.DataFrame
+        Metadata table where each row is an ultrasound image
+    split : str, optional
+        Data split. Can also be None, if not desired to be part of
+        train/val/test
+
+    Returns
+    -------
+    pd.DataFrame
+        Metadata table where unlabeled images are now part of specified split
+    """
+    # Don't perform in-place
+    df_metadata = df_metadata.copy()
+
+    # Add column for split, if not exists
+    if "split" not in df_metadata.columns:
+        df_metadata["split"] = None
+
+    # Split into tables with labels and without
+    df_labeled = df_metadata[~df_metadata["label"].isna()]
+    df_unlabeled = df_metadata[df_metadata["label"].isna()]
+
+    # Move unlabeled data to specified set
+    df_unlabeled["split"] = split
+
+    # Recombine data
+    df_metadata = pd.concat([df_labeled, df_unlabeled], ignore_index=True)
+
+    return df_metadata
+
+
+def exclude_from_any_split(df_metadata, json_path):
+    """
+    Get list of filenames to exclude from any split. Unset their assigned split.
+
+    Parameters
+    ----------
+    df_metadata : pd.DataFrame
+        Metadata table
+    json_path : str
+        Path to json file containing list of filenames to exclude
+
+    Returns
+    -------
+    pd.DataFrame
+        Metadata table with rows whose data splits were could be unassigned
+    """
+    # Raise error, if file doesn't exist
+    if not os.path.exists(json_path):
+        raise RuntimeError("Exclude filename path doesn't exist!\n\t"
+                            f"{json_path}")
+
+    # Create copy to avoid in-place operations
+    df_metadata = df_metadata.copy()
+
+    # Load JSON file
+    with open(json_path, "r") as handler:
+        exclude_fnames = set(json.load(handler))
+
+    # For each of train/val/test, ensure images are all filtered
+    splits = [split for split in df_metadata["split"].unique().tolist() if split]
+    for split in splits:
+        # Check if each file should be included/excluded
+        excluded_mask = df_metadata["filename"].map(
+            lambda x: x in exclude_fnames or os.path.basename(x) in exclude_fnames
+        )
+        # Unassign split
+        df_metadata.loc[excluded_mask, "split"] = None
+        LOGGER.info(f"Explicitly excluding {(excluded_mask).sum()} images from `{split}`!")
+
+    return df_metadata
 
 
 ################################################################################

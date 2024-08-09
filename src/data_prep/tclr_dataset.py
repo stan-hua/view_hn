@@ -32,6 +32,7 @@ LOGGER = logging.getLogger(__name__)
 ################################################################################
 #                             Data Module Classes                              #
 ################################################################################
+# TODO: Update train dataloader to stop using split_to_paths
 class TCLRDataModule(UltrasoundDataModule):
     """
     Top-level object used to access all data preparation and loading
@@ -127,8 +128,8 @@ class TCLRDataModule(UltrasoundDataModule):
             Data loader for training data
         """
         df_train = pd.DataFrame({
-            "filename": self.dset_to_paths["train"],
-            "label": self.dset_to_labels["train"]
+            "filename": self.split_to_paths["train"],
+            "label": self.split_to_labels["train"]
         })
 
         # Get patient ID, visit number and sequence number, from orig. table
@@ -171,8 +172,8 @@ class TCLRDataModule(UltrasoundDataModule):
             Data loader for validation data
         """
         df_val = pd.DataFrame({
-            "filename": self.dset_to_paths["val"],
-            "label": self.dset_to_labels["val"]
+            "filename": self.split_to_paths["val"],
+            "label": self.split_to_labels["val"]
         })
 
         # Get patient ID, visit number and sequence number, from orig. table

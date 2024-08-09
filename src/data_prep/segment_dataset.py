@@ -278,12 +278,12 @@ class SegmentedUSDataset(torch.utils.data.Dataset):
         patient_id = self.ids[index]
         visit = self.visits[index]
         seq_number = self.seq_numbers[index]
-        hospital = self.hospitals[index]
+        dset = self.dsets[index]
 
         metadata = {
             "filename": filename, "id": patient_id,
             "visit": visit, "seq_number": seq_number,
-            "hospital": hospital
+            "dset": dset
         }
 
         return X, metadata
@@ -334,11 +334,11 @@ class SegmentedUSDataset(torch.utils.data.Dataset):
 
         # 5. Metadata
         filenames = [os.path.basename(path) for path in src_paths]
-        hospital = "Stanford" if filenames[0].startswith("SU2") else "SickKids"
+        dset = "Stanford" if filenames[0].startswith("SU2") else "SickKids"
 
         metadata = {"filename": filenames, "id": patient_id,
                     "visit": visit, "seq_number": seq_numbers,
-                    "hospital": hospital}
+                    "dset": dset}
 
         return X, metadata
 

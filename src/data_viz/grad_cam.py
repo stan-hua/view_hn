@@ -168,10 +168,9 @@ def explain_model_for_images_with_label(cam, dset, label, label_part,
         filters["filename"] = set(filenames)
 
     # Create image dataloader, filtering for the right labels
-    img_dataloader = load_data.get_dset_dataloader_filtered(
+    img_dataloader = load_data.setup_default_dataloader_for_dset(
         dset=dset,
         filters=filters,
-        keep_orig_label=True,
         label_part=label_part,
         full_seq=False,
         full_path=True,

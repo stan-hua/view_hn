@@ -57,11 +57,11 @@ SIDE_LABEL_ORDER = ["Left", "None", "Right"]
 PLANE_LABEL_ORDER = ["Sagittal", "Transverse", "Bladder"]
 HOSPITAL_LABEL_ORDER = [
     "sickkids", "sickkids_train", "sickkids_val", "sickkids_test",
-    "sickkids_silent_trial", "stanford", "stanford_non_seq", "chop", "uiowa",
+    "sickkids_silent_trial", "stanford", "stanford_image", "chop", "uiowa",
 ]
 
 # Map `dset` string to more readable string
-MAP_HOSPITAL_STR = {
+MAP_DSET_STR = {
     "sickkids": "SickKids",
     "sickkids_train": "SickKids (Train)",
     "sickkids_val": "SickKids (Val)",
@@ -69,7 +69,7 @@ MAP_HOSPITAL_STR = {
     "stanford": "Stanford",
     "chop": "CHOP",
     "uiowa": "UIowa",
-    "stanford_non_seq": "Stanford (Non-Seq)",
+    "stanford_image": "Stanford (Non-Seq)",
     "sickkids_silent_trial": "SickKids (Silent Trial)",
 }
 
@@ -233,15 +233,15 @@ def plot_umap_all_patients(exp_name, df_data, label_col="patient",
     exp_name : str
         Name of experiment
     df_data : pd.DataFrame
-        Contains extracted embeddings, view labels and hospital labels.
+        Contains extracted embeddings, view labels and dset labels.
     label_col : str
-        Name of label column to color points by "patient" or by "hospital"
+        Name of label column to color points by "patient" or by "dset"
     raw : bool, optional
         If True, loaded embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
     **plot_kwargs : Keyword arguments to pass into `plot_umap`
     """
-    # Shuffle points to make each hospital appear more
+    # Shuffle points to make each dset appear more
     df_data = df_data.sample(frac=1)
 
     # Get labels
@@ -267,7 +267,7 @@ def plot_umap_all_patients(exp_name, df_data, label_col="patient",
 
 def plot_umap_by_view(exp_name, df_data,
                       label_col="label",
-                      hospital_col="hospital",
+                      dset_col="dset",
                       highlight=None,
                       raw=False,
                       **plot_kwargs):
@@ -279,11 +279,11 @@ def plot_umap_by_view(exp_name, df_data,
     exp_name : str
         Name of experiment
     df_data : pd.DataFrame
-        Contains extracted embeddings, view labels and hospital labels.
+        Contains extracted embeddings, view labels and dset labels.
     label_col : str, optional
         Name of column in `df_data` with view label, by default "label".
-    hospital_col : str, optional
-        Name of column in `df_data` with hospital label, by default "hospital".
+    dset_col : str, optional
+        Name of column in `df_data` with dset label, by default "dset".
     highlight : list, optional
         List of boolean values, corresponding to N samples. Those marked as
         False will appear softer (lower alpha value).
@@ -293,8 +293,8 @@ def plot_umap_by_view(exp_name, df_data,
     **plot_kwargs : Keyword arguments to pass into `plot_umap`
     """
     # INPUT: Ensure column names are in `df_data`
-    assert all(col in df_data.columns for col in [label_col, hospital_col]), \
-        "Specified label/hospital column/s are NOT in `df_data`!"
+    assert all(col in df_data.columns for col in [label_col, dset_col]), \
+        "Specified label/dset column/s are NOT in `df_data`!"
 
     # INPUT: Create copy of `plot_kwargs` to edit
     plot_kwargs = plot_kwargs.copy()
@@ -304,38 +304,38 @@ def plot_umap_by_view(exp_name, df_data,
     df_data = df_data[idx_labeled]
     highlight = highlight if highlight is None else highlight[idx_labeled]
 
-    # Shuffle points to make each hospital appear more
+    # Shuffle points to make each dset appear more
     df_data = df_data.sample(frac=1)
 
     # Get other metadata
     view_labels = df_data[label_col]
-    hospital_labels = df_data[hospital_col]
+    dset_labels = df_data[dset_col]
 
-    # Get unique hospitals in data provided
-    unique_hospitals = hospital_labels.unique()
-    # If 2+ hospitals, add "style" parameter to identify marker shape
-    if len(unique_hospitals) > 1:
-        plot_kwargs["style"] = hospital_labels
+    # Get unique dsets in data provided
+    unique_dsets = dset_labels.unique()
+    # If 2+ dsets, add "style" parameter to identify marker shape
+    if len(unique_dsets) > 1:
+        plot_kwargs["style"] = dset_labels
 
-    # Map hospital to more readable string
-    assert all(hospital in MAP_HOSPITAL_STR for hospital in unique_hospitals)
-    hospital_str = " & ".join(
-        sorted(MAP_HOSPITAL_STR[hospital] for hospital in unique_hospitals))
+    # Map dset to more readable string
+    assert all(dset in MAP_DSET_STR for dset in unique_dsets)
+    dset_str = " & ".join(
+        sorted(MAP_DSET_STR[dset] for dset in unique_dsets))
 
-    # Construct folder name (with hospital name)
+    # Construct folder name (with dset name)
     # 1. Attempt to shorten filename by grouping together dsets
-    fname_hospitals = unique_hospitals
-    group_hospitals = ["sickkids", "stanford"]
-    for group_hospital in group_hospitals:
-        if not any(f"{group_hospital}_" in hospital
-                   for hospital in fname_hospitals):
+    fname_dsets = unique_dsets
+    group_dsets = ["sickkids", "stanford"]
+    for group_dset in group_dsets:
+        if not any(f"{group_dset}_" in dset
+                   for dset in fname_dsets):
             continue
-        fname_hospitals = [hospital for hospital in fname_hospitals
-                        if not hospital.startswith(group_hospital)]
-        if group_hospital not in fname_hospitals:
-            fname_hospitals.append(group_hospital)
+        fname_dsets = [dset for dset in fname_dsets
+                        if not dset.startswith(group_dset)]
+        if group_dset not in fname_dsets:
+            fname_dsets.append(group_dset)
     # 2. Create folder name
-    hospital_folder_name = "-".join(sorted(fname_hospitals))
+    dset_folder_name = "-".join(sorted(fname_dsets))
 
     # Extract UMAP embeddings
     feature_cols = [col for col in df_data.columns if isinstance(col, int)]
@@ -350,8 +350,8 @@ def plot_umap_by_view(exp_name, df_data,
         highlight=highlight,
         label_order=label_order,
         save=True,
-        title=f"UMAP ({hospital_str}, colored by view)",
-        filename=f"{exp_name}/{hospital_folder_name}/umap"
+        title=f"UMAP ({dset_str}, colored by view)",
+        filename=f"{exp_name}/{dset_folder_name}/umap"
                 f"{'_raw' if raw else ''}(views"
                 f"{', highlighted' if highlight is not None else ''})",
         palette="tab10" if len(label_order) < 5 else "tab20",
@@ -361,7 +361,7 @@ def plot_umap_by_view(exp_name, df_data,
 
 def plot_umap_by_machine(exp_name, machine_labels, filenames, df_embeds_only,
                          raw=False,
-                         hospital="SickKids",
+                         dset="SickKids",
                          **plot_kwargs):
     """
     Plots UMAP for all machine-labeled patients, coloring by machine.
@@ -380,12 +380,12 @@ def plot_umap_by_machine(exp_name, machine_labels, filenames, df_embeds_only,
     raw : bool, optional
         If True, loaded embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
-    hospital : str, optional
-        Name of hospital with labels for images. One of (SickKids, Stanford,
+    dset : str, optional
+        Name of dset with labels for images. One of (SickKids, Stanford,
         Both), by default "SickKids".
     **plot_kwargs : Keyword arguments to pass into `plot_umap`
     """
-    assert hospital in ("SickKids", "Stanford", "Both")
+    assert dset in ("SickKids", "Stanford", "Both")
 
     # Filter out image files w/o labels
     idx_unlabeled = ~pd.isnull(machine_labels)
@@ -399,8 +399,8 @@ def plot_umap_by_machine(exp_name, machine_labels, filenames, df_embeds_only,
     # Plot all images by view
     plot_umap(umap_embeds_views, machine_labels,
               save=True,
-              title=f"UMAP ({hospital}, colored by machine)",
-              filename=f"{exp_name}/umap_{hospital.lower()}"
+              title=f"UMAP ({dset}, colored by machine)",
+              filename=f"{exp_name}/umap_{dset.lower()}"
                        f"{'_raw' if raw else ''}(machine)",
               **plot_kwargs)
 
@@ -556,7 +556,7 @@ def plot_images_in_umap_clusters(exp_name, filenames, df_embeds_only, raw=False,
         """)
 
         # Add directory to image paths
-        cluster_img_paths = [constants.DIR_IMAGES + filename \
+        cluster_img_paths = [constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"] + filename \
             for filename in cluster_filenames]
 
         print("\n".join(cluster_img_paths))
@@ -658,7 +658,7 @@ def main(exp_name,
          raw=False,
          segmented=False,
          reverse_mask=False,
-         hospital_umap=True,
+         dset_umap=True,
          view_umap=True,
          highlight_label_boundary=False,
          one_seq_umap=False,
@@ -699,8 +699,8 @@ def main(exp_name,
     # INPUT: Ensure `dset` is a list
     dsets = [dset] if isinstance(dset, str) else dset
 
-    # INPUT: Infer hospital/s from dset specified
-    hospitals = [
+    # INPUT: Infer dset/s from dset specified
+    dsets = [
         "sickkids" if dset in ("train", "val", "test") else dset
         for dset in dsets
     ]
@@ -717,12 +717,12 @@ def main(exp_name,
         # Rename old filename column
         df_embeds = df_embeds.rename(columns={"paths": "filename",
                                               "files": "filename"})
-        # Add hospital
-        hospital = hospitals[idx]
-        df_embeds["hospital"] = hospital
+        # Add dset
+        dset = dsets[idx]
+        df_embeds["dset"] = dset
         # Add dset
         # NOTE: If SickKids train/val/test, add name to dset for plots
-        df_embeds["dset"] = "sickkids_" + dset if hospital == "sickkids" \
+        df_embeds["dset"] = "sickkids_" + dset if dset == "sickkids" \
             else dset
         all_embed_lst.append(df_embeds)
 
@@ -733,7 +733,7 @@ def main(exp_name,
     try:
         df_metadata = utils.extract_data_from_filename_and_join(
             df_embeds_all,
-            hospital=hospitals,
+            dset=dsets,
             label_part=None,
         )
     # If errored, print experiment name
@@ -765,8 +765,8 @@ def main(exp_name,
         "comet_logger": comet_logger,
     }
 
-    # 1. Plot UMAP of all patients, colored by hospital
-    if hospital_umap and len(set(hospitals)) > 1:
+    # 1. Plot UMAP of all patients, colored by dset
+    if dset_umap and len(set(dsets)) > 1:
         plot_umap_all_patients(
             exp_name, df_data, label_col="dset", raw=raw,
             alpha=1,
@@ -791,7 +791,7 @@ def main(exp_name,
         plot_umap_by_view(
             exp_name,
             df_data=df_data,
-            hospital_col="dset",
+            dset_col="dset",
             raw=raw,
             **plot_kwargs)
 
@@ -801,7 +801,7 @@ def main(exp_name,
             plot_umap_by_view(
                 exp_name,
                 df_data=df_data,
-                hospital_col="dset",
+                dset_col="dset",
                 highlight=highlight,
                 raw=raw,
                 **plot_kwargs)
@@ -812,7 +812,7 @@ def main(exp_name,
         machine_labels = utils.get_machine_for_filenames(filenames)
         # Plot UMAP
         plot_umap_by_machine(exp_name, machine_labels, filenames, df_embeds_only,
-                             raw=raw, hospital="SickKids",
+                             raw=raw, dset="SickKids",
                              **plot_kwargs)
 
     # 6. Plot UMAP for N patients, colored by patient ID
