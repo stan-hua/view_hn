@@ -226,9 +226,9 @@ def predict_on_images(model, filenames, labels=None,
 
         # Pass through da transform
         if da_transform is not None:
-            # Remove batch size dimension
             img = da_transform(image=img)["image"]
-            assert False, "Reached here!"
+            # Add batch size dimension back
+            img = img.unsqueeze(0)
 
         # Convert to float32 type and send to device
         img = img.to(torch.float32).to(DEVICE)
@@ -2014,7 +2014,15 @@ def create_save_dir_by_flags(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
     # Add true flags to the experiment name
     for flag, val in extra_flags.items():
-        if val:
+        # Skip, if false-y
+        if not val:
+            continue
+
+        # CASE 1: String
+        if isinstance(val, str):
+            exp_name += f"__{val}"
+        # CASE 2: Boolean or other
+        else:
             exp_name += f"__{flag}"
 
     # Create inference directory, if not exists
@@ -2315,7 +2323,7 @@ def scale_and_round(x, factor=100, num_places=2):
 #                                  Main Flows                                  #
 ################################################################################
 def infer_dset(exp_name,
-               dset=constants.DEFAULT_EVAL_DSET,
+               dset_or_split=constants.DEFAULT_EVAL_DSET,
                seq_number_limit=None,
                mask_bladder=False,
                test_time_aug=False,
@@ -2358,7 +2366,7 @@ def infer_dset(exp_name,
     assert da_transform_name in (None, "fda", "hm"), '`da_transform_name` must be one of (None, "fda", "hm")'
 
     # 0. Create path to save predictions
-    pred_save_path = create_save_path(exp_name, dset=dset,
+    pred_save_path = create_save_path(exp_name, dset=dset_or_split,
                                       seq_number_limit=seq_number_limit,
                                       mask_bladder=mask_bladder,
                                       test_time_aug=test_time_aug,
@@ -2403,7 +2411,7 @@ def infer_dset(exp_name,
     dm = load_data.setup_data_module(hparams, self_supervised=False)
 
     # 3.1 Get metadata (for specified split)
-    df_metadata = dm.filter_metadata(dset=dset, split="test")
+    df_metadata = dm.filter_metadata(dset=dset_or_split, split="test")
     # 3.2 If provided, filter out high sequence number images
     if seq_number_limit:
         mask = (df_metadata["seq_number"] <= seq_number_limit)
@@ -2437,7 +2445,7 @@ def infer_dset(exp_name,
                     "Domain Adaptation transform is not implemented for "
                     "video model!")
             # CASE 1: Dataset of US videos
-            if dset not in constants.DSETS_NON_SEQ:
+            if dset_or_split not in constants.DSETS_NON_SEQ:
                 # Perform inference one sequence at a time
                 df_preds = df_metadata.groupby(by=["id", "visit"]).\
                     progress_apply(
@@ -2481,7 +2489,7 @@ def infer_dset(exp_name,
     df_metadata.to_csv(pred_save_path, index=False)
 
 
-def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
+def embed_dset(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
                overwrite_existing=OVERWRITE_EXISTING,
                **overwrite_hparams):
     """
@@ -2506,7 +2514,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
         If `exp_name` does not lead to a valid training directory
     """
     # 0. Create path to save embeddings
-    embed_save_path = embed.get_save_path(exp_name, dset=dset)
+    embed_save_path = embed.get_save_path(exp_name, dset=dset_or_split)
 
     # Early return, if embeddings already made
     if os.path.isfile(embed_save_path) and not overwrite_existing:
@@ -2527,7 +2535,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     model = model.to(DEVICE)
 
     # NOTE: For non-video datasets, ensure each image is treated independently
-    if dset in constants.DSETS_NON_SEQ:
+    if dset_or_split in constants.DSETS_NON_SEQ:
         hparams["full_seq"] = False
         hparams["batch_size"] = 1
 
@@ -2536,9 +2544,9 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     dm = load_data.setup_data_module(hparams, self_supervised=False)
 
     # 4. Create a DataLoader
-    if dset == "test":
+    if dset_or_split == "test":
         dataloader = dm.test_dataloader()
-    elif dset == "val":
+    elif dset_or_split == "val":
         dataloader = dm.val_dataloader()
     else:
         dataloader = dm.train_dataloader()
@@ -2551,7 +2559,7 @@ def embed_dset(exp_name, dset=constants.DEFAULT_EVAL_DSET,
         device=DEVICE)
 
 
-def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
+def analyze_dset_preds(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
                        log_to_comet=False,
                        **infer_kwargs):
     """
@@ -2587,7 +2595,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     # 2. If specified, calculate metrics
     if CALCULATE_METRICS:
         # If 2+ dsets provided, calculate metrics on each dset individually
-        dsets = [dset] if isinstance(dset, str) else dset
+        dsets = [dset_or_split] if isinstance(dset_or_split, str) else dset_or_split
         for dset_ in dsets:
             try:
                 calculate_exp_metrics(
@@ -2599,11 +2607,11 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
                 )
             except KeyError:
                 # Correctly convert to dset and split
-                curr_dset = dset
+                curr_dset = dset_or_split
                 curr_split = "test"
-                if dset in ("train", "val", "test"):
+                if dset_or_split in ("train", "val", "test"):
                     curr_dset = None
-                    curr_split = dset
+                    curr_split = dset_or_split
 
                 # Log error
                 LOGGER.error(KeyError)
@@ -2611,7 +2619,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
                 # 1. Perform inference
                 infer_dset(
-                    exp_name=exp_name, dset=dset_,
+                    exp_name=exp_name, dset_or_split=dset_,
                     overwrite_existing=True,
                     **infer_kwargs,
                     **load_data.create_eval_hparams(curr_dset, curr_split))
@@ -2626,7 +2634,7 @@ def analyze_dset_preds(exp_name, dset=constants.DEFAULT_EVAL_DSET,
 
     # 3. If specified, create UMAP plots
     if EMBED:
-        plot_umap.main(exp_name, dset=dset,
+        plot_umap.main(exp_name, dset=dset_or_split,
                        comet_exp_key=hparams.get("comet_exp_key") if log_to_comet else None)
 
     # Close all open figures
@@ -2639,8 +2647,7 @@ def main(args):
         1. Perform inference
         2. Analyze predictions
     """
-    # For each experiment,
-    args = None
+    # For each experiment, perform inference and analyze results
     for exp_name in args.exp_name:
         # Iterate over all specified eval dsets
         for dset in args.dset:
@@ -2666,23 +2673,23 @@ def main(args):
                 "test_time_aug": args.test_time_aug,
                 "da_transform_name": args.da_transform_name,
             }
-            infer_dset(exp_name=exp_name, dset=dset,
+            infer_dset(exp_name=exp_name, dset_or_split=dset,
                        **infer_kwargs,
                        **eval_hparams)
 
             # 4. Extract embeddings
             if EMBED:
-                embed_dset(exp_name=exp_name, dset=dset, **eval_hparams)
+                embed_dset(exp_name=exp_name, dset_or_split=dset, **eval_hparams)
 
             # 5. Evaluate predictions and embeddings
-            analyze_dset_preds(exp_name=exp_name, dset=dset,
+            analyze_dset_preds(exp_name=exp_name, dset_or_split=dset,
                                log_to_comet=args.log_to_comet,
                                **infer_kwargs)
 
         # 6. Create UMAPs embeddings on all dsets together
         # NOTE: `mask_bladder` is not needed if combining all dsets
         infer_kwargs.pop("mask_bladder")
-        analyze_dset_preds(exp_name=exp_name, dset=args.dset,
+        analyze_dset_preds(exp_name=exp_name, dset_or_split=args.dset,
                            log_to_comet=args.log_to_comet,
                            **infer_kwargs)
 

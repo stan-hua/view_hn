@@ -366,22 +366,15 @@ def get_labels_for_filenames(filenames, sickkids=True, stanford=True,
     numpy.array
         List of view labels. For filenames not found, label will None.
     """
-    df_labels = pd.DataFrame()
-
-    # Get SickKids metadata
+    dsets = []
     if sickkids:
-        df_labels = pd.concat([df_labels, load_sickkids_metadata(**kwargs)],
-                              ignore_index=True)
-
-    # Get Stanford metadata
+        dsets.append("sickkids")
     if stanford:
-        df_labels = pd.concat([df_labels, load_stanford_metadata()],
-                              ignore_index=True)
+        dsets.append("stanford")
+    assert sickkids or stanford, "This function doesn't work for other datasets!"
 
-    # If specified, extract specific label part
-    if label_part:
-        df_labels["label"] = df_labels["label"].map(
-            lambda x: extract_from_label(x, extract=label_part))
+    # Load metadata
+    df_labels = load_metadata(dsets, prepend_img_dir=True, label_part=label_part)
 
     # Get mapping of filename to labels
     filename_to_label = dict(zip(df_labels["filename"], df_labels["label"]))

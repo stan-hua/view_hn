@@ -255,27 +255,27 @@ def analyze_eval_model_preds(exp_name, dset, model_type="linear_lstm",
         # 1. Perform inference on dataset
         model_eval.infer_dset(
             exp_eval_name,
-            dset=dset,
+            dset_or_split=dset,
             **eval_hparams)
 
         # 2. Embed dataset
         model_eval.embed_dset(
             exp_eval_name,
-            dset=dset,
+            dset_or_split=dset,
             **eval_hparams,
         )
 
         # 3. Analyze predictions separately
         model_eval.analyze_dset_preds(
             exp_eval_name,
-            dset=dset,
+            dset_or_split=dset,
             log_to_comet=True,
         )
 
     # 4. Create UMAP together
     model_eval.analyze_dset_preds(
         exp_eval_name,
-        dset=dsets,
+        dset_or_split=dsets,
     )
 
 

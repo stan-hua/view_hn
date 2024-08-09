@@ -49,6 +49,11 @@ SSL_NAME_TO_MODEL_CLS = {
     "ensemble_linear_lstm": EnsembleLSTMLinear,
 }
 
+# Argument renaming
+HPARAM_RENAMED = {
+    "hospital": "dsets"
+}
+
 
 ################################################################################
 #                               Helper Functions                               #
@@ -344,6 +349,10 @@ def get_hyperparameters(hparam_dir=None, exp_name=None,
         with open(file_path, "r") as stream:
             try:
                 hparams = yaml.full_load(stream)
+                # Rename required arguments if necessary
+                for old_key, new_key in HPARAM_RENAMED.items():
+                    if old_key in hparams:
+                        hparams[new_key] = hparams.pop(old_key)
                 return hparams
             except yaml.YAMLError as exc:
                 LOGGER.critical(exc)
