@@ -88,7 +88,7 @@ def load_metadata_with_segmentation(segment_files):
     df_filenames.filename = df_filenames.filename.map(os.path.basename)
 
     # Load metadata
-    df_metadata = utils.load_sickkids_metadata(include_test_set=True)
+    df_metadata = utils.load_metadata("sickkids")
 
     # Temporarily set index for table join
     df_filenames = df_filenames.set_index("filename")

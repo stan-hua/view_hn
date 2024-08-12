@@ -39,7 +39,7 @@ DEFAULT_DATALOADER_PARAMS = {
     "batch_size": 16,
     "shuffle": False,
     "num_workers": 4,
-    "pin_memory": True,
+    "pin_memory": False,
 }
 
 # Pre-Computed Mean & Std for SickKids Training Set
