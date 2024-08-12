@@ -1210,6 +1210,8 @@ def prep_augmentations(img_size=(256, 256), crop_scale=0.5):
         T.RandomResizedCrop(img_size, scale=(crop_scale, 1)),
         T.RandomAdjustSharpness(1.25, p=0.25),
         T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
+        T.RandomZoomOut(fill=0, side_range=(1.0,  2.0), p=0.5),
+        T.Resize(img_size),
     ])
     return augmentations
 
