@@ -51,7 +51,7 @@ SEARCH_SPACE = {
         'weight_decay': [5e-3, 5e-4],
         "grad_clip_norm": [None, 1., 2.],
         'precision': 16, 
-        "pin_memory": True,
+        "pin_memory": False,
         "batch_size": [1, 8, 16],
         "train": True,
         "test": True,

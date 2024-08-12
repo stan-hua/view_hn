@@ -22,7 +22,7 @@ from albumentations.pytorch.transforms import ToTensorV2
 # Custom libraries
 from src.data import constants
 from src.data_prep.moco_dataset import MoCoDataModule
-from src.data_prep.utils import load_metadata, load_sickkids_metadata
+from src.data_prep.utils import load_metadata
 from src.data_viz import utils as viz_utils
 
 
@@ -669,8 +669,9 @@ def plot_ssl_augmentations():
     dataloader_params = {"batch_size": 9}
     data_module = MoCoDataModule(
         dataloader_params,
-        df=df_metadata, img_dir=constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"],
+        df=df_metadata,
         crop_scale=0.3,
+        augment_training=True,
     )
 
     # Sample 1 batch of images

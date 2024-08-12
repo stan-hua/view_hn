@@ -83,7 +83,7 @@ class BYOLDataModule(UltrasoundDataModule):
         default_dataloader_params = {"batch_size": 128,
                                      "shuffle": True,
                                      "num_workers": 7,
-                                     "pin_memory": True}
+                                     "pin_memory": False}
         if dataloader_params:
             default_dataloader_params.update(dataloader_params)
 
