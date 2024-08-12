@@ -392,6 +392,7 @@ def prep_eval_exp_hparams(hparams, **overwrite_hparams):
         freeze_weights=hparams["freeze_weights"],
         lp_ft=hparams["lp_ft"],
         augment_training=hparams["augment_training"],
+        exp_name_suffix=hparams.get("exp_name_suffix"),
     )
 
     # If new eval exp. name already exists, store the Comet ML experiment key
