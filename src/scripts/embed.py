@@ -98,13 +98,14 @@ class ImageEmbedder:
         # Set model to evaluation mode
         self.model.eval()
 
-        # Check if custom embed function present. If not, use forward pass
+        # Check if custom embed function present
         with torch.no_grad():
             if hasattr(self.model, "forward_embed"):
                 features = self.model.forward_embed(data)
             elif hasattr(self.model, "extract_embeds"):
                 features = self.model.extract_embeds(data)
             else:
+                self.model.extract_embeds
                 raise RuntimeError("No feature extraction function defined!")
         
         # If more than 1 image, attempt to flatten extra 3rd dimension
@@ -465,22 +466,22 @@ def main(args):
         exp_hparams = load_model.get_hyperparameters(exp_name=exp_name)
 
         # Extract embeddings for each dataset
-        for dset in args.dset:
+        for dset_or_split in args.dset:
             # TODO: If dataset is actually a train/val/test split, load hyperparameters for model
-            if dset in ("train", "val", "test"):
-                split = dset
+            if dset_or_split in ("train", "val", "test"):
+                split = dset_or_split
                 dm = load_data.setup_data_module(hparams=exp_hparams, full_path=True)
                 img_dataloader = dm.get_dataloader(split=split)
             else:
                 # Get image dataloader
-                img_dataloader = load_data.setup_default_dataloader_for_dset(dset, full_path=True)
+                img_dataloader = load_data.setup_default_dataloader_for_dset(dset_or_split, full_path=True)
 
             # Create path to save embeddings
-            save_embed_path = get_save_path(exp_name, dset=dset)
+            save_embed_path = get_save_path(exp_name, dset=dset_or_split)
             # Early return, if embeddings already made
             if os.path.isfile(save_embed_path):
                 LOGGER.info(f"Embeddings for exp_name: ({exp_name}), "
-                            f"dset: ({dset}) already exists! Skipping...")
+                            f"dset: ({dset_or_split}) already exists! Skipping...")
                 continue
 
             # Perform extraction
@@ -490,7 +491,7 @@ def main(args):
                            device=constants.DEVICE,)
 
             LOGGER.info(f"Success! Created embeddings for exp_name: "
-                        f"({exp_name}), dset: ({dset})")
+                        f"({exp_name}), dset: ({dset_or_split})")
 
 
 ################################################################################

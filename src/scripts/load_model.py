@@ -137,18 +137,14 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     """
     # 0. Redirect if `exp_name` is "imagenet"
     if exp_name == "imagenet":
-        # Instantiate CNN
-        model = EfficientNet.from_name(
-            overwrite_hparams.get("model_name", "efficientnet-b0"),
-            image_size=overwrite_hparams.get("img_size", (256, 256)),
-            include_top=False)
+        # Instantiate EfficientNet model
+        model = EfficientNetPL(
+            effnet_name=overwrite_hparams.get("effnet_name", "efficientnet-b0"),
+            img_size=overwrite_hparams.get("img_size", constants.IMG_SIZE),
+        )
 
         # Load ImageNet weights
-        effnet_utils.load_pretrained_weights(
-            model, overwrite_hparams.get("model_name", "efficientnet-b0"),
-            load_fc=False,
-            advprop=False)
-
+        model.load_imagenet_weights()
         return model
 
     # 0. Get experiment directory, where model was trained
@@ -365,10 +361,13 @@ def get_hyperparameters(hparam_dir=None, exp_name=None,
                        "experiment! Resorting to default hyperparameters...")
         hparams = {
             "img_size": constants.IMG_SIZE,
+            "dsets": ["sickkids"],
             "train": True,
             "test": True,
             "train_test_split": 0.75,
-            "train_val_split": 0.75
+            "train_val_split": 0.75,
+            "batch_size": 16,
+            "shuffle": False,
         }
         return hparams
     # CASE 1: Raise error

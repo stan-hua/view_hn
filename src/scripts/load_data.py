@@ -8,9 +8,9 @@ Note: `hparams` is a direct dependence on arguments in `model_training.py`.
 
 # Standard libraries
 import logging
+import os
 
 # Non-standard libraries
-import pandas as pd
 from torch.utils.data import DataLoader
 
 # Custom libraries
@@ -121,10 +121,10 @@ def setup_data_module(hparams=None, use_defaults=False,
     # 2.2 Pass in specified dataloader parameters
     dataloader_params = {
         "batch_size": all_hparams["batch_size"]
-                      if not all_hparams["full_seq"] else 1,
-        "shuffle": all_hparams["shuffle"],
-        "num_workers": all_hparams["num_workers"],
-        "pin_memory": all_hparams["pin_memory"],
+                      if not all_hparams.get("full_seq") else 1,
+        "shuffle": all_hparams.get("shuffle", False),
+        "num_workers": all_hparams.get("num_workers", min(os.cpu_count(), 7)),
+        "pin_memory": all_hparams.get("pin_memory", False),
     }
     dm = data_module_cls(dataloader_params, df=df_metadata, **all_hparams)
     dm.setup()
