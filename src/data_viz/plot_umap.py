@@ -655,6 +655,8 @@ def get_label_order(labels):
 #                                 Main Method                                  #
 ################################################################################
 def main(exp_name,
+         dset=constants.DEFAULT_EVAL_DSET,
+         split="all",
          raw=False,
          segmented=False,
          reverse_mask=False,
@@ -664,8 +666,7 @@ def main(exp_name,
          one_seq_umap=False,
          machine_umap=False,
          n_patient_umap=False,
-         cluster_umap=False,
-         dset=constants.DEFAULT_EVAL_DSET,
+         cluster_umap=True,
          comet_exp_key=None,
          ):
     """
@@ -675,6 +676,10 @@ def main(exp_name,
     ----------
     exp_name : str
         Name of experiment
+    dset : str or list, optional
+        1+ datasets, whose embeddings to plot
+    split : str or list, optional
+        Data split to use for each `dset`
     raw : bool, optional
         If True, loads embeddings extracted from raw images. Otherwise, uses
         preprocessed images, by default False.
@@ -684,9 +689,6 @@ def main(exp_name,
     reverse_mask : bool, optional
         If True, loads embeddings extracted from segmented images where the mask
         is reversed, by default False.
-    dset : str or list, optional
-        1+ dataset split or test dataset names, whose embeddings to plot, by
-        default constants.DEFAULT_EVAL_DSET
     comet_exp_key : str, optional
         If provided, log UMAPs to Comet ML.
     """
@@ -696,35 +698,35 @@ def main(exp_name,
         LOGGER.info("Logging UMAPs to Comet ML!")
         comet_logger = load_comet_logger(exp_key=comet_exp_key)
 
-    # INPUT: Ensure `dset` is a list
+    # INPUT: Ensure `dset` and `split` are lists
     dsets = [dset] if isinstance(dset, str) else dset
-
-    # INPUT: Infer dset/s from dset specified
-    dsets = [
-        "sickkids" if dset in ("train", "val", "test") else dset
-        for dset in dsets
-    ]
+    splits = [split] if isinstance(split, str) else split
+    assert len(dsets) == len(splits), "Length of `dsets` and `splits` do not match!"
 
     # Load embeddings
     all_embed_lst = []
     for idx, dset in enumerate(dsets):
-        df_embeds = get_embeds(
-            exp_name,
-            raw=raw,
-            segmented=segmented,
-            reverse_mask=reverse_mask,
-            dset=dset)
-        # Rename old filename column
-        df_embeds = df_embeds.rename(columns={"paths": "filename",
-                                              "files": "filename"})
-        # Add dset
-        dset = dsets[idx]
-        df_embeds["dset"] = dset
-        # Add dset
-        # NOTE: If SickKids train/val/test, add name to dset for plots
-        df_embeds["dset"] = "sickkids_" + dset if dset == "sickkids" \
-            else dset
-        all_embed_lst.append(df_embeds)
+        # If specified, use all splits
+        curr_split = splits[idx]
+        curr_splits = ["train", "val", "test"] if curr_split == "all" else [curr_split]
+
+        # Load embeddings for specified split (or all splits)
+        for curr_split in curr_splits:
+            df_embeds = get_embeds(
+                exp_name,
+                dset=dset,
+                split=curr_split,
+                raw=raw,
+                segmented=segmented,
+                reverse_mask=reverse_mask,
+            )
+            # Rename old filename column
+            df_embeds = df_embeds.rename(columns={"paths": "filename",
+                                                "files": "filename"})
+            # Add dset and split
+            df_embeds["dset"] = dset
+            df_embeds["split"] = curr_split
+            all_embed_lst.append(df_embeds)
 
     # Concatenate embeddings
     df_embeds_all = pd.concat(all_embed_lst, ignore_index=True)
@@ -761,7 +763,7 @@ def main(exp_name,
 
     # 0. Shared UMAP kwargs
     plot_kwargs = {
-        "filename_suffix": f"({dsets[0]})" if len(dsets) == 1 else "",
+        "filename_suffix": f"{tuple(sorted(set(dsets)))}-{tuple(sorted(set(splits)))}",
         "comet_logger": comet_logger,
     }
 
@@ -844,14 +846,17 @@ def init(parser):
     """
     arg_help = {
         "exp_name": "Name of experiment",
-        "dset": "Name of evaluation splits or datasets",
+        "dsets": "Name of datasets to plot UMAP",
+        "splits": "For each `dset`, what data split to plot UMAP",
         "comet_exp_key": "If logging to Comet ML, the Experiment key"
     }
 
     parser.add_argument("--exp_name", required=True, nargs="+",
                         help=arg_help["exp_name"])
-    parser.add_argument("--dset", required=True, nargs="+",
-                        help=arg_help["dset"])
+    parser.add_argument("--dsets", required=True, nargs="+",
+                        help=arg_help["dsets"])
+    parser.add_argument("--splits", required=True, nargs="+",
+                        help=arg_help["splits"])
     parser.add_argument("--comet_exp_key", default=None,
                         help=arg_help["comet_exp_key"])
 
@@ -864,8 +869,22 @@ if __name__ == "__main__":
     # 1. Parse arguments
     ARGS = PARSER.parse_args()
 
+    # 1.1. Preprocess arguments
+    # INPUT: Ensure `dset` and `split` are lists
+    dsets = ARGS.dsets
+    splits = ARGS.splits
+    # If only one of dset/split is > 1, assume it's meant to be broadcast
+    if len(dsets) == 1 and len(splits) > 1:
+        LOGGER.info("Only 1 `dset` provided! Assuming same `dset` for all `splits`...")
+        dsets = dsets * len(splits)
+    if len(splits) == 1 and len(dsets) > 1:
+        LOGGER.info("Only 1 `split` provided! Assuming same `split` for all `dsets`...")
+        splits = splits * len(dsets)
+
     # 2. Run main flow
     for EXP_NAME in ARGS.exp_name:
-        for DSET in ARGS.dset:
-            main(exp_name=EXP_NAME, dset=DSET, comet_exp_key=ARGS.comet_exp_key)
-        main(exp_name=EXP_NAME, dset=ARGS.dset, comet_exp_key=ARGS.comet_exp_key)
+        for idx, dset in enumerate(dsets):
+            split = splits[idx]
+            main(exp_name=EXP_NAME, dset=dset, split=split,
+                 comet_exp_key=ARGS.comet_exp_key)
+        main(exp_name=EXP_NAME, dset=dsets, comet_exp_key=ARGS.comet_exp_key)

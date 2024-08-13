@@ -454,6 +454,15 @@ def main(args):
     args : argparse.Namespace
         Contains command-line arguments
     """
+    dsets = args.dsets
+    splits = args.splits
+    # If there is only 1 dset and multiple splits, assume same dset across splits
+    if len(dsets) == 1 and len(splits) > 1:
+        dsets = dsets * len(splits)
+
+    # Ensure number of datasets match number of splits
+    assert len(dsets) == len(splits), "Length of `dsets` and `splits` do not match!"
+
     # Extract embeddings for each experiment name
     for exp_name in args.exp_name:
         # 1. Attempt to load (1) as experiment, or (2) from legacy model name
@@ -466,18 +475,21 @@ def main(args):
         exp_hparams = load_model.get_hyperparameters(exp_name=exp_name)
 
         # Extract embeddings for each dataset
-        for dset_or_split in args.dset:
-            # TODO: If dataset is actually a train/val/test split, load hyperparameters for model
-            if dset_or_split in ("train", "val", "test"):
-                split = dset_or_split
+        for idx, dset in enumerate(dsets):
+            split = splits[idx]
+
+            # If dataset was used in training, then load DM as usual
+            if dset in exp_hparams.get("dsets", ["sickkids"]):
                 dm = load_data.setup_data_module(hparams=exp_hparams, full_path=True)
-                img_dataloader = dm.get_dataloader(split=split)
+                img_dataloader = dm.get_filtered_dataloader(split=split, dset=dset)
             else:
                 # Get image dataloader
-                img_dataloader = load_data.setup_default_dataloader_for_dset(dset_or_split, full_path=True)
+                img_dataloader = load_data.setup_default_dataloader_for_dset(
+                    dset=dset, split=split,
+                    full_path=True)
 
             # Create path to save embeddings
-            save_embed_path = get_save_path(exp_name, dset=dset_or_split)
+            save_embed_path = get_save_path(exp_name, dset=dset, split=split)
             # Early return, if embeddings already made
             if os.path.isfile(save_embed_path):
                 LOGGER.info(f"Embeddings for exp_name: ({exp_name}), "
@@ -507,18 +519,21 @@ def init(parser):
         ArgumentParser object
     """
     arg_help = {
-        "exp_name": "Name of experiment",
-        "dset": "Name of evaluation splits or datasets",
+        "exp_name": "Name of experiment/s to create embeddings for",
+        "dsets": "Name of datasets to embed",
+        "splits": "For each `dset`, what data split to embed",
     }
 
     parser.add_argument("--exp_name", required=True, nargs="+",
                         help=arg_help["exp_name"])
-    parser.add_argument("--dset", required=True, nargs="+",
-                        help=arg_help["dset"])
+    parser.add_argument("--dsets", required=True, nargs="+",
+                        help=arg_help["dsets"])
+    parser.add_argument("--splits", required=True, nargs="+",
+                        help=arg_help["splits"])
 
 
-def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
-                  dset=None):
+def get_save_path(name, dset, split,
+                  raw=False, segmented=False, reverse_mask=False):
     """
     Create expected save path from model name and parameters.
 
@@ -526,6 +541,10 @@ def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
     ----------
     name : str
         Model/Experiment name
+    dset : str, optional
+        Name of dataset (e.g., sickkids)
+    split : str, optional
+        Specific data split (i.e., train/val/test)
     raw : bool, optional
         If True, extracts embeddings for raw images. Otherwise, uses
         preprocessed images, by default False.
@@ -533,8 +552,6 @@ def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
         If True, extracts embeddings for segmented images, by default False.
     reverse_mask : bool, optional
         If True, reverses mask for segmented images, by default False
-    dset : str, optional
-        Dataset split to perform inference on, by default None
 
     Returns
     -------
@@ -550,7 +567,7 @@ def get_save_path(name, raw=False, segmented=False, reverse_mask=False,
     segmented_suffix = f"_segmented{'_reverse' if reverse_mask else ''}"
     save_path = f"{constants.DIR_EMBEDS}/{name}"\
                 f"{segmented_suffix if segmented else ''}"\
-                f"{f'({dset})' if dset else ''}"\
+                f"{f'({dset}-{split})'}"\
                 f"{embed_suffix}"
 
     return save_path
