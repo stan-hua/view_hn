@@ -10,6 +10,7 @@ import re
 
 # Non-standard libraries
 import cv2
+import fire
 import pandas as pd
 from tqdm import tqdm
 
@@ -23,6 +24,13 @@ from src.data_prep import utils
 ################################################################################
 # Originating source data directory
 SRC_DIR_UIOWA_DATA = os.path.join(os.path.dirname(constants.DIR_DATA), "UIowa")
+
+# Video/image dataset names
+VIDEO_DSETS = ("sickkids", "stanford")
+IMAGE_DSETS = ("sickkids_silent_trial", "stanford_image", "uiowa", "chop")
+
+# Label columns
+LABEL_COLS = ["plane", "side", "label"]
 
 
 ################################################################################
@@ -682,10 +690,65 @@ def main_clean_metadata():
     clean_image_dsets_metadata()
 
 
-if __name__ == "__main__":
-    # 1. Prepare image datasets
-    # NOTE: Commented out for now
-    # main_prepare_image_datasets()
+def main_correct_labels(ref_path="corrected_view_labels.xlsx", label_col="plane"):
+    """
+    Correct labels for each dataset based on a reference file
 
-    # 2. Post-process metadata
-    main_clean_metadata()
+    Parameters
+    ----------
+    ref_path : str
+        Path to XLSX file containing modified labels and
+        (dset, id, visit, seq_number) for every image that needs correction
+    label_col : str
+        Name of column whose label is corrected
+    """
+    assert label_col in LABEL_COLS, f"`label_col` must be one of {LABEL_COLS}"
+    # Load file with label corrections
+    df_correct = pd.read_excel(ref_path)
+    # Convert to dictionary, mapping to new label
+    index_cols = ["dset", "id", "visit", "seq_number"]
+    df_correct[index_cols] = df_correct[index_cols].astype(str)
+    idx_to_label = df_correct.set_index(index_cols)["new_label"].to_dict()
+
+    # For each metadata, check if any of the labels overlap
+    for dset in list(VIDEO_DSETS) + list(IMAGE_DSETS):
+        clean_dset_path = constants.DSET_TO_METADATA["clean"][dset]
+        df_metadata = pd.read_csv(clean_dset_path)
+        df_metadata[index_cols] = df_metadata[index_cols].astype(str)
+        # Check if any rows will be modififed
+        corrected_mask = df_metadata.apply(
+            lambda row: tuple(row[col] for col in index_cols) in idx_to_label,
+            axis=1,
+        )
+        # Skip, if no labels corrected
+        if not corrected_mask.sum():
+            continue
+
+        # Modify labels
+        print(f"Dataset: `{dset}` | Modifying {corrected_mask.sum()} labels!")
+        df_metadata.loc[corrected_mask, label_col] = df_metadata[corrected_mask].apply(
+            lambda row: idx_to_label[tuple(row[col] for col in index_cols)],
+            axis=1,
+        )
+
+        # For rows whose new label is Bladder, set other label columns
+        # NOTE: In case old side/plane label contains kidney information
+        bladder_mask = df_metadata[label_col].isin(["Bladder", None])
+        corrected_bladder_mask = corrected_mask & bladder_mask
+        if corrected_bladder_mask.sum():
+            other_label_cols = [col for col in LABEL_COLS if col != label_col]
+            for col in other_label_cols:
+                new_val = None if col == "side" else "Bladder"
+                df_metadata.loc[corrected_bladder_mask, col] = new_val
+
+        # Save changes
+        df_metadata.to_csv(clean_dset_path)
+
+
+if __name__ == "__main__":
+    # Add command-line interface
+    fire.Fire({
+        "prep_img_dsets": main_prepare_image_datasets,
+        "clean_metadata": main_clean_metadata,
+        "correct_labels": main_correct_labels,
+    })
