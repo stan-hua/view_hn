@@ -171,6 +171,9 @@ def extract_data_from_filename_and_join(df_metadata, dset="sickkids",
     -------
     Metadata table with additional data extracted
     """
+    # CHECK: No duplicates in filenames
+    assert df_metadata["filename"].duplicated().sum() == 0, "Filenames in `df_metadata` contain duplicates!"
+
     # INPUT: If only 1 dset provided, ensure its a list
     dsets = [dset] if isinstance(dset, str) else dset
 
@@ -183,7 +186,7 @@ def extract_data_from_filename_and_join(df_metadata, dset="sickkids",
     df_metadata["filename"] = df_metadata["filename"].map(os.path.normpath)
 
     # Load metadata from ALL dsets specified
-    df_metadata_all = load_metadata(dsets=dsets, extract=True, **kwargs)
+    df_metadata_all = load_metadata(dsets=dsets, **kwargs)
     # Clean path
     df_metadata_all["filename"] = df_metadata_all["filename"].map(
         os.path.normpath)
@@ -192,7 +195,6 @@ def extract_data_from_filename_and_join(df_metadata, dset="sickkids",
     if not vals_is_subset(df_metadata, df_metadata_all, "filename"):
         df_metadata_all = load_metadata(
             dsets=dsets,
-            extract=True,
             prepend_img_dir=True,
             **kwargs)
         # Clean path
@@ -618,6 +620,27 @@ def has_seg_mask(img_path, include_liver_seg=False):
     return False
 
 
+def is_null(x):
+    """
+    Returns True, if x is null
+
+    Parameters
+    ----------
+    x : Any
+        Any object
+
+    Returns
+    -------
+    bool
+        True if x is null and False otherwise
+    """
+    if pd.isnull(x) or x is None:
+        return True
+    if x == "nan" or x == "None" or x == "N/A":
+        return True
+    return False
+
+
 ################################################################################
 #                           Metadata Post-Processing                           #
 ################################################################################
@@ -965,8 +988,8 @@ def assign_split_table(df_metadata,
     df_metadata = df_metadata.reset_index(drop=True)
 
     # If split already exists, then don't overwrite and return early
-    if (not overwrite and "split" in df_metadata.columns
-            and other_split in df_metadata["split"].unique()):
+    if (not overwrite and "split" in df_metadata.columns.tolist()
+            and other_split in df_metadata["split"].unique().tolist()):
         LOGGER.info(f"Split `{other_split}` already exists! Not overwriting...")
         return df_metadata
 
@@ -1009,7 +1032,7 @@ def assign_split_row(row, dset="sickkids"):
         Dataset split (train/val/test) or None (if not a split)
     """
     # Get flag if has label
-    has_label = not pd.isnull(row["label"])
+    has_label = not is_null(row["label"])
 
     # CASE 0: Not part of any split, if there's no label
     if not has_label:
@@ -1022,7 +1045,7 @@ def assign_split_row(row, dset="sickkids"):
     # CASE 2: Defined for the hospital
     dset_to_ids = constants.DSET_TO_SPLIT_IDS[dset]
     for split in ("train", "val", "test"):
-        if row["id"] in dset_to_ids[split]:
+        if row["id"] in dset_to_ids[split] or str(row["id"]) in dset_to_ids[split]:
             return split
 
     # CASE 3: If reached this point, then its not part of any split
@@ -1101,6 +1124,8 @@ def exclude_from_any_split(df_metadata, json_path):
         excluded_mask = df_metadata["filename"].map(
             lambda x: x in exclude_fnames or os.path.basename(x) in exclude_fnames
         )
+        # Filter for split-specific data
+        excluded_mask = excluded_mask & (df_metadata["split"] == split)
         # Unassign split
         df_metadata.loc[excluded_mask, "split"] = None
         LOGGER.info(f"Explicitly excluding {(excluded_mask).sum()} images from `{split}`!")

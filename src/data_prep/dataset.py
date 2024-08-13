@@ -280,7 +280,7 @@ class UltrasoundDataModule(L.LightningDataModule):
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
             # Split into train/test by each dataset
             # NOTE: Do not overwrite train/test split if they already exist
-            self.df = utils.assign_split_table_by_dset(
+            self.df = utils.assign_split_table(
                 self.df, other_split="test",
                 train_split=self.train_test_split,
                 force_train_ids=self.force_train_ids,
@@ -291,13 +291,14 @@ class UltrasoundDataModule(L.LightningDataModule):
         # (2.1) Train-Val Split
         if hasattr(self, "train_val_split"):
             # Split data into training split and rest
-            df_train = self.df[self.df["split"] == "train"]
-            df_rest = self.df[self.df["split"] != "train"]
+            train_val_mask = self.df["split"].isin(["train", "val"])
+            df_train_val = self.df[train_val_mask]
+            df_rest = self.df[~train_val_mask]
 
             # Split training set into train/val by each dataset
             # NOTE: Do not overwrite train/val split if they already exist
-            df_train_val = utils.assign_split_table_by_dset(
-                df_train, other_split="val",
+            df_train_val = utils.assign_split_table(
+                df_train_val, other_split="val",
                 train_split=self.train_val_split,
                 force_train_ids=self.force_train_ids,
                 overwrite=False,
