@@ -11,3 +11,5 @@ config/model_training/*
 config/ssl_model_eval/*
 .cometml-runs
 test_vlm.py
+.envrc
+.vscode/launch.json
