@@ -5,6 +5,7 @@ Description: Contains general helper functions for data visualization.
 """
 
 # Standard libraries
+import math
 import os
 
 # Non-standard libraries
@@ -15,6 +16,17 @@ import numpy as np
 import seaborn as sns
 from mpl_toolkits.axes_grid1 import ImageGrid
 from tabulate import tabulate
+
+
+################################################################################
+#                                  Constants                                   #
+################################################################################
+# Constants used in calibration plots
+CALIB_COUNT = 'count'
+CALIB_CONF = 'conf'
+CALIB_ACC = 'acc'
+CALIB_BIN_ACC = 'bin_acc'
+CALIB_BIN_CONF = 'bin_conf'
 
 
 ################################################################################
@@ -232,3 +244,115 @@ def grouped_barplot(data, x, y, hue, yerr_low, yerr_high, legend=False,
         ax.legend()
 
     return ax
+
+
+################################################################################
+#                     Calibration-Related Helper Functions                     #
+################################################################################
+# Adapted from https://github.com/torrvision/focal_calibration/blob/main/Metrics/plots.py
+def _bin_initializer(bin_dict, num_bins=10):
+    for i in range(num_bins):
+        bin_dict[i][CALIB_COUNT] = 0
+        bin_dict[i][CALIB_CONF] = 0
+        bin_dict[i][CALIB_ACC] = 0
+        bin_dict[i][CALIB_BIN_ACC] = 0
+        bin_dict[i][CALIB_BIN_CONF] = 0
+
+
+def _populate_bins(confs, preds, labels, num_bins=10):
+    bin_dict = {}
+    for i in range(num_bins):
+        bin_dict[i] = {}
+    _bin_initializer(bin_dict, num_bins)
+    num_test_samples = len(confs)
+
+    for i in range(0, num_test_samples):
+        confidence = confs[i]
+        prediction = preds[i]
+        label = labels[i]
+        binn = int(math.ceil(((num_bins * confidence) - 1)))
+        bin_dict[binn][CALIB_COUNT] = bin_dict[binn][CALIB_COUNT] + 1
+        bin_dict[binn][CALIB_CONF] = bin_dict[binn][CALIB_CONF] + confidence
+        bin_dict[binn][CALIB_ACC] = bin_dict[binn][CALIB_ACC] + \
+            (1 if (label == prediction) else 0)
+
+    for binn in range(0, num_bins):
+        if (bin_dict[binn][CALIB_COUNT] == 0):
+            bin_dict[binn][CALIB_BIN_ACC] = 0
+            bin_dict[binn][CALIB_BIN_CONF] = 0
+        else:
+            bin_dict[binn][CALIB_BIN_ACC] = float(
+                bin_dict[binn][CALIB_ACC]) / bin_dict[binn][CALIB_COUNT]
+            bin_dict[binn][CALIB_BIN_CONF] = bin_dict[binn][CALIB_CONF] / \
+                float(bin_dict[binn][CALIB_COUNT])
+    return bin_dict
+
+
+def plot_reliability_diagram(confs, preds, labels, num_bins=10):
+    """
+    Plot Reliability Diagram.
+
+    Note
+    ----
+    Used to assess if model's output probabilities accurately represent the
+    probability of the outcome in the calibration set (e.g., Does a model
+    predict a 70% prob. for an event that occurs 70% of the time?)
+
+    Parameters
+    ----------
+    confs : list or array-like
+        Probability of each prediction
+    preds : list or array-like
+        List of predicted labels
+    labels : list or array-like
+        List of true labels
+    num_bins : int, optional
+        Number of bins across probability range (0 to 1), by default 10
+    """
+    bin_dict = _populate_bins(confs, preds, labels, num_bins)
+    bns = [(i / float(num_bins)) for i in range(num_bins)]
+    y = []
+    for i in range(num_bins):
+        y.append(bin_dict[i][CALIB_BIN_ACC])
+    plt.figure(figsize=(10, 8))  # width:20, height:3
+    plt.bar(bns, bns, align='edge', width=0.05, color='pink', label='Expected')
+    plt.bar(bns, y, align='edge', width=0.05,
+            color='blue', alpha=0.5, label='Actual')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Confidence')
+    plt.legend()
+    plt.show()
+
+
+def plot_confidence_histogram(confs, preds, labels, num_bins=10):
+    """
+    Plot Confidence Histogram.
+
+    Note
+    ----
+    Used to see the percentage of calibration samples in each confidence bin.
+
+    Parameters
+    ----------
+    confs : list or array-like
+        Probability of each prediction
+    preds : list or array-like
+        List of predicted labels
+    labels : list or array-like
+        List of true labels
+    num_bins : int, optional
+        Number of bins across probability range (0 to 1), by default 10
+    """
+    bin_dict = _populate_bins(confs, preds, labels, num_bins)
+    bns = [(i / float(num_bins)) for i in range(num_bins)]
+    num_samples = len(labels)
+    y = []
+    for i in range(num_bins):
+        n = (bin_dict[i][CALIB_COUNT] / float(num_samples)) * 100
+        y.append(n)
+    plt.figure(figsize=(10, 8))  # width:20, height:3
+    plt.bar(bns, y, align='edge', width=0.05,
+            color='blue', alpha=0.5, label='Percentage samples')
+    plt.ylabel('Percentage of samples')
+    plt.xlabel('Confidence')
+    plt.show()
