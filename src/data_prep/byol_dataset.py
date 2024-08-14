@@ -6,13 +6,13 @@ Description: Contains module to load data for Bootstrap Your Own Latent (BYOL)
 """
 
 # Non-standard libraries
-import pandas as pd
 import torch
+import torchvision.transforms.v2 as T
 from lightly.data import LightlyDataset
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
 # Custom libraries
-from src.data_prep import ssl_collate_fn, utils
+from src.data_prep import ssl_collate_fn
 from src.data_prep.dataset import (UltrasoundDataModule,
                                    UltrasoundDatasetDataFrame)
 
@@ -112,17 +112,18 @@ class BYOLDataModule(UltrasoundDataModule):
 
         # If specified, turn off augmentations during SSL
         if not augment_training:
-            self.augmentations = torch.nn.Identity()
+            self.augmentations = {}
 
         # Determine collate function
+        augment_list = T.Compose(list(self.augmentations.values()))
         # 1. Pairs same-label images
         if self.same_label and self.custom_collate == "same_label":
             self.collate_fn = ssl_collate_fn.BYOLSameLabelCollateFunction(
-                self.augmentations)
+                augment_list)
         else:
         # 2. Pairs same-image pairs (different augmentation)
             self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
-                self.augmentations)
+                augment_list)
 
 
     def train_dataloader(self):

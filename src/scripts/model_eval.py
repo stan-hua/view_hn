@@ -1622,9 +1622,9 @@ def transform_image(img, augment=False, n=1, hparams=None):
 
     # If specified, add training augmentations
     if augment:
-        transforms.append(utils.prep_augmentations(
+        transforms.append(T.Compose(list(utils.prep_augmentations(
             img_size=img_size,
-            crop_scale=crop_scale))
+            crop_scale=crop_scale).values())))
     transforms = T.Compose(transforms)
 
     # Get RNG state (for later restoration)

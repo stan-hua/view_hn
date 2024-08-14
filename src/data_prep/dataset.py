@@ -50,7 +50,7 @@ SK_TRAIN_STD = 74. / 255.
 ################################################################################
 #                                Main Functions                                #
 ################################################################################
-def load_dataset_from_dir(img_dir, full_seq=True):
+def load_dataset_from_dir(img_dir, full_seq=False):
     """
     Loads image dataset from directory of images.
 
@@ -70,7 +70,7 @@ def load_dataset_from_dir(img_dir, full_seq=True):
     return UltrasoundDatasetDir(img_dir, img_size=None, full_seq=full_seq)
 
 
-def load_dataset_from_dataframe(df, img_dir=None, full_seq=True):
+def load_dataset_from_dataframe(df, img_dir=None, full_seq=False):
     """
     Loads image dataset from dataframe of image paths and labels.
 
@@ -269,7 +269,9 @@ class UltrasoundDataModule(L.LightningDataModule):
         # NOTE: This is to avoid using augmentations twice:
         #       i) During data loading
         #       ii) In SSL collate function
-        self.transforms = self.augmentations if augment_training else None
+        self.transforms = None
+        if augment_training:
+            self.transforms = self.augmentations
 
 
     def setup(self, stage="fit"):
@@ -596,9 +598,44 @@ class UltrasoundDataset(torch.utils.data.Dataset):
             include path to image, patient ID, and hospital.
         """
         img_path = self.paths[index]
+        assert os.path.exists(img_path), "No image at path specified!"
 
         # Load image
-        X = self.load_image(img_path)
+        X = read_image(img_path, self.mode)
+
+        # Transforms 1. Apply texture transforms
+        if self.transforms.get("texture") is not None:
+            X = self.transforms["texture"](X)
+
+        # Transforms 2. Apply geometric transforms
+        if self.transforms.get("geometric") is not None:
+            # CASE 1: Segmentation mask was stored, and will be transformed with image
+            if hasattr(self, "_seg_masks") and index in self._seg_masks:
+                seg_mask = self._seg_masks[index]
+                # Add channel dimension
+                if len(seg_mask.shape) == 2:
+                    seg_mask = seg_mask.unsqueeze(0)
+
+                # Append to X as last channel
+                X_and_mask = torch.cat([X, seg_mask.float()])
+
+                # Apply geometric transform
+                X_and_mask = self.transforms["geometric"](X_and_mask)
+
+                # Separate and store
+                self._seg_masks[index] = X_and_mask[-1].round().bool()
+                X = X_and_mask[:-1]
+            # CASE 2: Just the image
+            else:
+                X = self.transforms["geometric"](X)
+
+        # Transforms 3. Apply post-processing transforms, if specified
+        if self.transforms.get("post-processing") is not None:
+            X = self.transforms["post-processing"](X)
+
+        # If image values not between 0 and 1, divide by 255
+        if (X > 1).any():
+            X = X / 255.
 
         # Get metadata
         filename = img_path if self.full_path else os.path.basename(img_path)
@@ -617,35 +654,6 @@ class UltrasoundDataset(torch.utils.data.Dataset):
         }
 
         return X, metadata
-
-
-    def load_image(self, img_path):
-        """
-        Loads an image given the image path
-
-        Parameters
-        ----------
-        img_path : str
-            Path to image
-
-        Returns
-        -------
-        torch.Tensor
-            Image
-        """
-        assert os.path.exists(img_path), "No image at path specified!"
-
-        # Load image
-        X = read_image(img_path, self.mode)
-
-        # Perform image transforms/augmentations
-        X = self.transforms(X)
-
-        # CASE 1: If still not between 0 and 1, assume pixels and divide by 255
-        if (X > 1).any():
-            X = X / 255.
-
-        return X
 
 
     def __len__(self):
@@ -678,8 +686,8 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         mode : int
             Number of channels (mode) to read images into (1=grayscale, 3=RGB),
             by default 3.
-        transforms : torchvision.transforms.v2.Compose or Transforms, optional
-            If provided, perform transform on images loaded, by default None.
+        transforms : dict, optional
+            Maps from type of transform to composed transform
         full_path : bool, optional
             If True, "filename" metadata contains full path to the image/s.
             Otherwise, contains path basename, by default False.
@@ -719,11 +727,14 @@ class UltrasoundDatasetDir(UltrasoundDataset):
         ########################################################################
         #                           Image Transforms                           #
         ########################################################################
-        transforms = [transforms] if transforms is not None else []
+        transforms = transforms if transforms is not None else {}
         if img_size:
-            transforms.insert(0, T.Resize(img_size))
+            transform_type = "geometric"
+            transforms[transform_type] = [transforms[transform_type]] if transform_type in transforms else []
+            transforms[transform_type].insert(0, T.Resize(img_size))
+            transforms[transform_type] = T.Compose(transforms[transform_type])
 
-        self.transforms = T.Compose(transforms)
+        self.transforms = transforms
 
 
     def __getitem__(self, index):
@@ -871,8 +882,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             use kidney/bladder segmentations, by default False.
         standardize_images : bool, optional
             If True, standardize images by the training set pre-computed stats.
-        transforms : torchvision.transforms.v2.Compose or Transforms, optional
-            If provided, perform transform on images loaded, by default None.
+        transforms : dict, optional
+            Maps from type of transform to composed transform
         full_path : bool, optional
             If True, "filename" metadata contains full path to the image/s.
             Otherwise, contains path basename, by default False.
@@ -883,6 +894,8 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         self.mode = IMAGE_MODES[mode]
         self.img_size = img_size
 
+        # Hidden variable to retrieve masks during data loading
+        self._seg_masks = {}
         # Set to load available masks
         self.load_seg_mask = load_seg_mask
         self.include_liver_seg = include_liver_seg
@@ -927,17 +940,22 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         ########################################################################
         #                           Image Transforms                           #
         ########################################################################
-        transforms = [transforms] if transforms is not None else []
+        transforms = transforms if transforms is not None else {}
+        # If image size specified, at Resize transform
         if img_size:
-            transforms.insert(0, T.Resize(img_size))
-
+            transform_type = "geometric"
+            transforms[transform_type] = [transforms[transform_type]] if transform_type in transforms else []
+            transforms[transform_type].insert(0, T.Resize(img_size))
+            transforms[transform_type] = T.Compose(transforms[transform_type])
         # If specified, standardize images by pre-computed channel means/stds
         if standardize_images:
-            transforms.insert(1, T.ToDtype(torch.float32, scale=True))
-            transforms.insert(2, T.Normalize(mean=[SK_TRAIN_MEAN] * 3,
-                                             std=[SK_TRAIN_STD] * 3))
-
-        self.transforms = T.Compose(transforms)
+            transform_type = "post-processing"
+            transforms[transform_type] = [transforms[transform_type]] if transform_type in transforms else []
+            transforms.append(T.ToDtype(torch.float32, scale=True))
+            transforms.append(T.Normalize(mean=[SK_TRAIN_MEAN] * 3,
+                                          std=[SK_TRAIN_STD] * 3))
+            transforms[transform_type] = T.Compose(transforms[transform_type])
+        self.transforms = transforms
 
 
     def __getitem__(self, index):
@@ -960,8 +978,21 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         if self.full_seq:
             return self.get_sequence(index)
 
+        # HACK: Load segmentation mask before image to group in transform
+        # NOTE: See __getitem__ in UltrasoundDataset
+        seg_metadata = {}
+        if self.load_seg_mask:
+            seg_metadata.update(self.get_segmentation_mask(index))
+            if seg_metadata.get("has_seg_mask"):
+                self._seg_masks[index] = seg_metadata["seg_mask"]
+
         # If returning an image
         X, metadata = super().__getitem__(index)
+
+        # If segmentation mask was transformed, update
+        if self.load_seg_mask and seg_metadata.get("has_seg_mask"):
+            seg_metadata["seg_mask"] = self._seg_masks[index]
+            self._seg_masks.clear()
 
         # Encode label to integer (-1, if not found)
         class_to_idx = \
@@ -982,7 +1013,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             return X, metadata
 
         # Load and store segmentation masks
-        metadata.update(self.get_segmentation_mask(index))
+        metadata.update(seg_metadata)
         return X, metadata
 
 
@@ -1005,7 +1036,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         # CASE 1: Bladder image
         seg_fname_suffixes = []
-        if self.labels[index] in ("bladder", "none"):
+        if str(self.labels[index]).lower() in ("bladder", "none"):
             seg_fname_suffixes.append("_bseg")
         # CASE 2: Kidney image
         else:

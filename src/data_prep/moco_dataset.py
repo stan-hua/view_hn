@@ -9,13 +9,13 @@ Note: Model trained on this dataset does NOT take advantage of temporal
 """
 
 # Non-standard libraries
-import pandas as pd
 import torch
+import torchvision.transforms.v2 as T
 from lightly.data import LightlyDataset
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
 # Custom libraries
-from src.data_prep import ssl_collate_fn, utils
+from src.data_prep import ssl_collate_fn
 from src.data_prep.dataset import (UltrasoundDataModule,
                                    UltrasoundDatasetDataFrame)
 
@@ -115,19 +115,20 @@ class MoCoDataModule(UltrasoundDataModule):
 
         # If specified, turn off augmentations during SSL
         if not augment_training:
-            self.augmentations = torch.nn.Identity()
+            self.augmentations = {"identity": torch.nn.Identity()}
 
         # Determine collate function
+        augment_list = T.Compose(list(self.augmentations.values()))
         # 1. Pairs same-label images
         # NOTE: If a custom loss is enabled, this should be turned off
         if self.same_label and self.custom_collate == "same_label" \
                 and not kwargs.get("custom_ssl_loss"):
             self.collate_fn = ssl_collate_fn.MoCoSameLabelCollateFunction(
-                self.augmentations)
+                augment_list)
         else:
         # 2. Pairs same-image pairs (different augmentation)
             self.collate_fn = ssl_collate_fn.SimCLRCollateFunction(
-                self.augmentations)
+                augment_list)
 
 
     def train_dataloader(self):
