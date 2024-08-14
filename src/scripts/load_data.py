@@ -38,7 +38,7 @@ SSL_NAME_TO_DATA_MODULE = {
 
 # Default hyperparameters
 DEFAULT_HPARAMS = {
-    "dset": "sickkids",
+    "dsets": "sickkids",
     "train_val_split": 0.75,
     "train_test_split": 0.75,
     "train": True,

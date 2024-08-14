@@ -91,13 +91,14 @@ def load_model(hparams):
 
         # Load pretrained model
         pretrained_model = load_pretrained_from_exp_name(
-            hparams.get("from_exp_name"),
+            from_exp_name,
             **model_cls_kwargs)
+        pretrained_model_hparams = get_hyperparameters(exp_name=from_exp_name)
+
         # CASE 1: If pretrained model is the same, replace with existing model
         if type(model) == type(pretrained_model):
             overwrite_model(model, src_model=pretrained_model)
-        # CASE 2: Update model weights with those from pretrained model
-        # CASE 2.1: Model weight names don't need to be changed
+        # CASE 2: SSL-pretrained model and want to load into LinearEval
         elif hparams.get("self_supervised"):
             pretrained_state_dict = pretrained_model.state_dict()
             # NOTE: SSL conv. backbone weights are prefixed by "conv_backbone."
@@ -108,9 +109,30 @@ def load_model(hparams):
             model = overwrite_model(
                 model,
                 src_state_dict=pretrained_state_dict)
+        # CASE 3: SSL pre-trained model and want to fine-tune with EfficientNet
+        elif pretrained_model_hparams.get("self_supervised") and not hparams.get("self_supervised"):
+            # Remove "conv_backbone."/"temporal_backbone." from weight names
+            pretrained_state_dict = pretrained_model.state_dict()
+            pretrained_state_dict = remove_prefix(
+                pretrained_state_dict, "conv_backbone.")
+            pretrained_state_dict = remove_prefix(
+                pretrained_state_dict, "temporal_backbone.")
+
+            # Drop all SSL momentum weights
+            pretrained_state_dict = drop_weights_containing(
+                pretrained_state_dict, "_momentum.")
+
+            # Attempt to load into model
+            model = overwrite_model(
+                model,
+                src_state_dict=pretrained_state_dict)
         # UNKNOWN CASE: Not supported case
         else:
-            raise NotImplementedError
+            raise NotImplementedError(
+                "Model loading is not implemented for:"
+                f"\n\texp_name: `{hparams['exp_name']}`",
+                f"\n\tfrom_exp_name: `{from_exp_name}`"
+            )
 
     # If specified, compile model
     if hparams.get("torch_compile"):
@@ -602,7 +624,7 @@ def create_conv_backbone(hparams=None):
 
     # Create conv. backbone
     conv_backbone = EfficientNet.from_name(
-        hparams.get("model_name", "efficientnet-b0"),
+        hparams.get("effnet_name", "efficientnet-b0"),
         image_size=hparams.get("img_size", (256, 256)),
         include_top=False)
 
@@ -694,6 +716,62 @@ def prepend_prefix(state_dict, prefix, exclude_regex=None):
             continue
         new_weight_name = prefix + weight_name
         state_dict[new_weight_name] = state_dict.pop(weight_name)
+
+    return state_dict
+
+
+def remove_prefix(state_dict, prefix):
+    """
+    Given a state dict, remove prefix from every weight name.
+
+    Parameters
+    ----------
+    state_dict : dict
+        Model state dict for a torch.nn.Module object
+    prefix : str
+        Prefix to remove from each weight name
+
+    Returns
+    -------
+    dict
+        Modified state dict
+    """
+    # Create copy to avoid in-place modification
+    state_dict = state_dict.copy()
+
+    # Remove prefix, for valid weight names
+    for weight_name in list(state_dict.keys()):
+        if weight_name.startswith(prefix):
+            new_weight_name = weight_name.replace(prefix, "")
+            state_dict[new_weight_name] = state_dict.pop(weight_name)
+
+    return state_dict
+
+
+def drop_weights_containing(state_dict, substr):
+    """
+    Drop weights containing specific substring
+
+    Parameters
+    ----------
+    state_dict : dict
+        Model state dict for a torch.nn.Module object
+    substr : str
+        Substring of weights to drop
+
+    Returns
+    -------
+    dict
+        Modified state dict
+    """
+    # Create copy to avoid in-place modification
+    state_dict = state_dict.copy()
+
+    # Remove weights with substring in weight name
+    for weight_name in list(state_dict.keys()):
+        if substr in weight_name:
+            LOGGER.debug(f"Dropping weight: `{weight_name}`")
+            state_dict.pop(weight_name)
 
     return state_dict
 

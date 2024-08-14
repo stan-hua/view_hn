@@ -115,6 +115,10 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         """
         If specified by internal attribute, freeze all convolutional weights.
         """
+        # Skip, if not freezing weights
+        if not self.hparams.freeze_weights:
+            return
+
         # SPECIAL CASE: If using GradCAM loss, not compatible with below setup
         if self.hparams.use_gradcam_loss:
             raise NotImplementedError("GradCAM loss is not compatible with freezing weights!")
