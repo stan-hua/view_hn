@@ -67,6 +67,7 @@ class LSTMLinearEval(L.LightningModule):
         bidirectional : bool, optional
             If True, trains a bidirectional LSTM, by default True
         """
+        raise RuntimeError("LSTMLinear is now deprecated!")
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)

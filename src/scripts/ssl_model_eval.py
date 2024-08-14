@@ -44,16 +44,16 @@ LP_FT = False
 
 # Template for experiment name of a SSL evaluation model
 EVAL_EXP_NAME = \
-    """{{ exp_name }}__{{ model_type }}__{{ label_part }}
+    """{{ exp_name }}{{ exp_name_suffix }}-{{ model_type }}-{{ label_part }}
         {%- if lp_ft -%}
-            __lp__ft
+            -lp_ft
         {%- elif freeze_weights -%}
-            __lp
+            -lp
         {%- else -%}
-            __finetuned
+            -ft
         {%- endif -%}
         {%- if augment_training is defined and augment_training -%}
-            __aug
+            -aug
         {%- endif -%}
     """
 TEMPLATE_EVAL_EXP_NAME = Environment().from_string(EVAL_EXP_NAME)
@@ -384,15 +384,19 @@ def prep_eval_exp_hparams(hparams, **overwrite_hparams):
     # Remove comet ML key
     hparams.pop("comet_exp_key", None)
 
+    # Get experiment name suffix
+    exp_name_suffix = hparams.get("exp_name_suffix")
+    exp_name_suffix = f"-{exp_name_suffix}" if exp_name_suffix else ""
+
     # Create new eval exp. name
     exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
         exp_name=hparams["exp_name"],
+        exp_name_suffix=exp_name_suffix,
         model_type=hparams["model_type"],
         label_part=hparams["label_part"],
         freeze_weights=hparams["freeze_weights"],
         lp_ft=hparams["lp_ft"],
         augment_training=hparams["augment_training"],
-        exp_name_suffix=hparams.get("exp_name_suffix"),
     )
 
     # If new eval exp. name already exists, store the Comet ML experiment key

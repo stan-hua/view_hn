@@ -54,6 +54,7 @@ class LinearEval(L.LightningModule):
             Weight decay value to slow gradient updates when performance
             worsens, by default 0.0005
         """
+        raise RuntimeError("LinearEval is now deprecated!")
         super().__init__()
 
         # Save hyperparameters (now in self.hparams)
