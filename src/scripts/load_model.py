@@ -20,12 +20,8 @@ from efficientnet_pytorch import EfficientNet
 # from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
+from src import models
 from src.data import constants
-from src.models import (
-    EfficientNetLSTM, EfficientNetLSTMMulti, EfficientNetPL,
-    LinearEval, LSTMLinearEval, EnsembleLinear, EnsembleLSTMLinear,
-    BYOL, CPC, MoCo, TCLR,
-)
 from src.utils import efficientnet_pytorch_utils as effnet_utils
 
 
@@ -38,15 +34,15 @@ logging.basicConfig(level=logging.INFO)
 
 # Mapping of SSL model name to model class
 SSL_NAME_TO_MODEL_CLS = {
-    "moco": MoCo,
-    "tclr": TCLR,
-    "byol": BYOL,
+    "moco": models.MoCo,
+    "byol": models.BYOL,
 
-    # Evaluation models
-    "linear": LinearEval,
-    "linear_lstm": LSTMLinearEval,
-    "ensemble_linear": EnsembleLinear,
-    "ensemble_linear_lstm": EnsembleLSTMLinear,
+    # Deprecated models
+    # "tclr": TCLR,
+    # "linear": LinearEval,
+    # "linear_lstm": LSTMLinearEval,
+    # "ensemble_linear": EnsembleLinear,
+    # "ensemble_linear_lstm": EnsembleLSTMLinear,
 }
 
 # Argument renaming
@@ -160,7 +156,7 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     # 0. Redirect if `exp_name` is "imagenet"
     if exp_name == "imagenet":
         # Instantiate EfficientNet model
-        model = EfficientNetPL(
+        model = models.EfficientNetPL(
             effnet_name=overwrite_hparams.get("effnet_name", "efficientnet-b0"),
             img_size=overwrite_hparams.get("img_size", constants.IMG_SIZE),
         )
@@ -223,100 +219,27 @@ def get_model_cls(hparams):
     # Accumulate arguments, needed to instantiate class
     model_cls_kwargs = {}
 
-    # For self-supervised (SSL) image-based model
-    if hparams.get("self_supervised"):
-        ssl_model = hparams.get("ssl_model", "moco")
-        ssl_model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
-
-        # If training SSL (not evaluating an SSL-pretrained model)
-        if not (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"]):
-            return ssl_model_cls, model_cls_kwargs
-
-        # Check if loading backbones from multiple SSL-finetuned models
-        multi_backbone = isinstance(hparams["ssl_ckpt_path"], list) and \
-            len(hparams["ssl_ckpt_path"]) > 1
-
-        # Specify eval. model to load
-        if hparams["ssl_eval_linear"]:
-            model_cls = LinearEval
-        elif multi_backbone:
-            if hparams["full_seq"]:
-                model_cls = EnsembleLSTMLinear
-            else:
-                model_cls = EnsembleLinear
-        else:
-            model_cls = LSTMLinearEval
-
-        # Load backbones from ssl checkpoint path/s, provided in hyperparameters
-        # NOTE: If loading from previous SSL eval. model, use that model class
-        #       instead of SSL model
-        backbone_dict = extract_backbones_from_ssl(
-            hparams,
-            model_cls if hparams.get("from_ssl_eval") else ssl_model_cls,
-        )
-
-        # Check temporal backbone (if TCLR)
-        if ssl_model == "tclr" and \
-                hparams["ssl_eval_linear_lstm"] and \
-                "temporal_backbone" not in backbone_dict:
-            raise RuntimeError("Could not find `temporal_backbone` for model!")
-
-        # NOTE: Backbones need to be added to load the model
-        model_cls_kwargs.update(backbone_dict)
-
+    # Raise error for deprecated models
+    # NOTE: Multi-output single-image model is not implemented
+    if hparams.get("multi_output"):
+        raise NotImplementedError("Multi-output models are deprecated...")
+    elif hparams.get("full_seq") or hparams.get("ssl_eval_linear_lstm"):
+        raise NotImplementedError("Video models are deprecated...")
     # For ensembling multiple models. NOTE: Needs to be sequence model
     elif hparams.get("from_exp_name") \
             and not isinstance(hparams.get("from_exp_name"), str) \
             and len(hparams.get("from_exp_name")) > 1:
-        if hparams.get("full_seq"):
-            model_cls = EnsembleLSTMLinear
-        else:
-            model_cls = EnsembleLinear
+        raise NotImplementedError("Ensembling is currently deprecated...")
 
-        # Load pretrained models
-        exp_names = hparams.get("from_exp_name")
-        pretrained_models = [load_pretrained_from_exp_name(exp_name)
-                             for exp_name in exp_names]
+    # CASE 1: SSL Image model
+    is_ssl_eval = (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"])
+    if hparams.get("self_supervised") and not is_ssl_eval:
+        ssl_model = hparams.get("ssl_model", "moco")
+        ssl_model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
+        return ssl_model_cls, model_cls_kwargs
 
-        # Extract conv. backbones
-        conv_backbones = []
-        for pretrained_model in pretrained_models:
-            conv_backbone = pretrained_model
-            # CASE 1: Pretrained model is an EfficientNet model
-            if isinstance(pretrained_model, EfficientNet):
-                backbone_dict = extract_backbone_dict_from_efficientnet_model(
-                    conv_backbone)
-                conv_backbone = backbone_dict["conv_backbone"]
-            # CASE 2: Pretrained model is NOT an EfficientNet model
-            else:
-                backbone_dict = extract_backbone_dict_from_ssl_model(
-                    pretrained_model)
-                conv_backbone = backbone_dict["conv_backbone"]
-            conv_backbones.append(conv_backbone)
-
-        # Send models to device
-        device = hparams.get("device", constants.DEVICE)
-        if device != "cpu" and torch.cuda.is_available():
-            conv_backbones = [conv_backbone.to(device)
-                              for conv_backbone in conv_backbones]
-
-        # Update accumulator
-        model_cls_kwargs["conv_backbones"] = conv_backbones
-
-    # For supervised full-sequence model
-    elif not hparams.get("self_supervised") and hparams.get("full_seq"):
-        # If multi-output
-        if hparams.get("multi_output"):
-            model_cls = EfficientNetLSTMMulti
-        else:
-            model_cls = EfficientNetLSTM
-    # For supervised image-based model
-    else:
-        # NOTE: Multi-output single-image model is not implemented
-        if hparams.get("multi_output"):
-            raise NotImplementedError("Supervised Multi-output model is not "
-                                      "implemented for single images!")
-        model_cls = EfficientNetPL
+    # CASE 2: Fully Supervised Image model
+    model_cls = models.EfficientNetPL
     return model_cls, model_cls_kwargs
 
 
@@ -862,42 +785,6 @@ def find_layers_in_model(model, layer_type):
 ################################################################################
 #                                  Deprecated                                  #
 ################################################################################
-def load_pretrained_from_model_name(model_name):
-    """
-    Loads pretrained model by name.
-
-    Parameters
-    ----------
-    model_name : str
-        Model name
-    
-    Returns
-    -------
-    tf.Model or torch.nn.Module
-        Pretrained model
-    """
-    # Attempt to get model weights
-    weights = constants.MODEL_NAME_TO_WEIGHTS.get(model_name)
-
-    if model_name == "cytoimagenet":
-        raise NotImplementedError()
-        # model = EfficientNetB0(weights=weights,
-        #                        include_top=False,
-        #                        input_shape=(None, None, 3),
-        #                        pooling="avg")
-    elif model_name == "imagenet":
-        model = EfficientNetPL()
-        model.load_imagenet_weights()
-    elif model_name == "cpc":
-        model = CPC.load_from_checkpoint(weights)
-    elif model_name == "random":
-        model = EfficientNetLSTM()
-    else:
-        raise RuntimeError("Invalid model_name specified!")
-
-    return model
-
-
 def rename_torch_module(ckpt_path):
     """
     Rename module in a saved model checkpoint

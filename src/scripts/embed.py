@@ -348,65 +348,6 @@ def extract_embeds(model,
     return embedder.embed(save_embed_path, **embedder_kwargs)
 
 
-def extract_embeds_from_model_name(raw=False, segmented=False, reverse_mask=False,
-                                   **kwargs):
-    """
-    Given 1+ model names (given as flags), extract embeddings for each model,
-    based on data-related flags.
-
-    Parameters
-    ----------
-    raw : bool, optional
-        If True, extracts embeddings for raw images. Otherwise, uses
-        preprocessed images, by default False.
-    segmented : bool, optional
-        If True, extracts embeddings for segmented images, by default False.
-    reverse_mask : bool, optional
-        If True, reverses mask for segmented images, by default False
-    kwargs : keyword arguments
-        hn : bool, optional
-            If True, extracts embeddings using HN model, by default False.
-        cytoimagenet : bool, optional
-            If True, extracts embeddings using CytoImageNet model, by default
-            False.
-        imagenet : bool, optional
-            If True, extracts embeddings using ImageNet model, by default False.
-        cpc : bool, optional
-            If True, extracts embeddings using CPC model, by default False.
-        moco : bool, optional
-            If True, extracts embeddings using MoCo model, by default False.
-    """
-    # Input sanitization
-    assert not (raw and segmented), "Specify only one of (raw, segmented)!"
-
-    # Prepare data-related arguments
-    img_dir = None
-    img_dataloader = None
-    if raw:
-        img_dir = constants.DSET_TO_IMG_SUBDIR_FULL["sickkids_raw"]
-    elif segmented:
-        data_module = SegmentedUSModule(
-            mask_img_dir=constants.DIR_SEGMENT_MASK,
-            src_img_dir=constants.DIR_SEGMENT_SRC,
-            reverse_mask=reverse_mask)
-        img_dataloader = data_module.train_dataloader()
-    else:
-        img_dir = constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"]
-
-    # Check which models to extract embeddings with
-    model_names = [name for name in constants.MODELS if name in kwargs]
-
-    # Extract embeddings
-    for model_name in model_names:
-        save_path = get_save_path(model_name, raw, segmented, reverse_mask)
-        model = load_model.load_pretrained_from_model_name(model_name)
-        extract_embeds(
-            model, save_path,
-            img_dir=img_dir,
-            img_dataloader=img_dataloader
-        )
-
-
 ################################################################################
 #                              Loading Embeddings                              #
 ################################################################################
@@ -465,11 +406,8 @@ def main(args):
 
     # Extract embeddings for each experiment name
     for exp_name in args.exp_name:
-        # 1. Attempt to load (1) as experiment, or (2) from legacy model name
-        try:
-            model = load_model.load_pretrained_from_exp_name(exp_name)
-        except RuntimeError:
-            model = load_model.load_pretrained_from_model_name(exp_name)
+        # 1. Load pre-trained model
+        model = load_model.load_pretrained_from_exp_name(exp_name)
 
         # Load experiment hyperparameters
         exp_hparams = load_model.get_hyperparameters(exp_name=exp_name)
