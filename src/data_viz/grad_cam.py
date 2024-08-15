@@ -102,7 +102,12 @@ def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
 
     # Load predictions
     pred_path = model_eval.create_save_path(exp_name=exp_name, dset=dset)
-    df_preds = pd.read_csv(pred_path)
+    try:
+        df_preds = pd.read_csv(pred_path)
+    except Exception as error_msg:
+        LOGGER.error("Missing predictions file!"
+                     f"\n\texp_name: {exp_name}\n\tdset: {dset}")
+        raise error_msg
 
     # Make GradCAMs for correctly AND incorrectly predicted images
     for op in ("==", "!="):

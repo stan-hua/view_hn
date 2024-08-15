@@ -245,17 +245,14 @@ def create_eval_hparams(dset=None, split="test"):
     dict
         Contains hyperparameters to overwrite, if necessary
     """
-    # Check that provided dataset or split is valid
-    if dset:
-        assert dset in constants.DSET_TO_IMG_SUBDIR_FULL
-    assert split in ("train", "val", "test")
-
     # Accumulate hyperparameters to overwrite
     overwrite_hparams = {"shuffle": False}
 
-    # If test, then only need to load that dataset
-    # NOTE: Since test is already set by default
-    if dset and split == "test":
-        overwrite_hparams["dsets"] = dset
+    # Check that provided dataset or split is valid
+    if dset:
+        assert dset in constants.DSET_TO_IMG_SUBDIR_FULL
+    # Set dataset
+    overwrite_hparams["dsets"] = [dset]
+    assert split in ("train", "val", "test")
 
     return overwrite_hparams

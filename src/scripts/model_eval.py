@@ -129,8 +129,9 @@ def init(parser):
         ArgumentParser object
     """
     arg_help = {
-        "exp_name": "Name/s of experiment/s (to evaluate)",
-        "dset": "List of dataset split or test dataset name to evaluate",
+        "exp_names": "Name/s of experiment/s (to evaluate)",
+        "dsets": "List of dataset names to evaluate",
+        "splits": "Name of data splits for each `dset` to evaluate",
         "mask_bladder": "If True, mask bladder logit, if it's an US image dataset.",
         "test_time_aug": "If True, perform test-time augmentations during inference.",
         "da_transform_name":
@@ -138,12 +139,15 @@ def init(parser):
             "by default None. Must be one of ('fda', 'hm')",
         "log_to_comet": "If True, log results to Comet ML",
     }
-    parser.add_argument("--exp_name", required=True,
+    parser.add_argument("--exp_names", required=True,
                         nargs='+',
-                        help=arg_help["exp_name"])
-    parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
+                        help=arg_help["exp_names"])
+    parser.add_argument("--dsets", default=["sickkids"],
                         nargs='+',
-                        help=arg_help["dset"])
+                        help=arg_help["dsets"])
+    parser.add_argument("--splits", default=["test"],
+                        nargs='+',
+                        help=arg_help["splits"])
     parser.add_argument("--mask_bladder", action="store_true",
                         help=arg_help["mask_bladder"])
     parser.add_argument("--test_time_aug", action="store_true",
@@ -1312,8 +1316,7 @@ def eval_calculate_all_metrics(df_pred):
     return df_metrics
 
 
-def eval_create_plots(df_pred, hparams, inference_dir,
-                      dset=constants.DEFAULT_EVAL_DSET,
+def eval_create_plots(df_pred, hparams, inference_dir, dset, split,
                       comet_logger=None):
     """
     Visual evaluation of model performance
@@ -1328,8 +1331,9 @@ def eval_create_plots(df_pred, hparams, inference_dir,
     inference_dir : str
         Path to experiment-specific inference directory
     dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     comet_logger : comet_ml.ExistingExperiment
         If provided, log figures to Comet ML
     """
@@ -1343,10 +1347,10 @@ def eval_create_plots(df_pred, hparams, inference_dir,
     # 1.2 Plot confusion matrix for all predictions
     plot_confusion_matrix(df_pred, filter_confident=False, ax=ax2, **hparams)
     plt.tight_layout()
-    plt.savefig(os.path.join(inference_dir, f"{dset}_confusion_matrix.png"))
+    plt.savefig(os.path.join(inference_dir, f"{dset}-{split}_confusion_matrix.png"))
 
     if comet_logger is not None:
-        comet_logger.log_figure(f"{dset}_confusion_matrix.png", plt.gcf(),
+        comet_logger.log_figure(f"{dset}-{split}_confusion_matrix.png", plt.gcf(),
                                 overwrite=True)
 
     # 1.3 Print confusion matrix for all predictions
@@ -1367,7 +1371,7 @@ def eval_create_plots(df_pred, hparams, inference_dir,
                                   label_part=hparams.get("label_part"))
 
 
-def calculate_exp_metrics(exp_name, dset, hparams=None,
+def calculate_exp_metrics(exp_name, dset, split, hparams=None,
                           log_to_comet=False,
                           **infer_kwargs):
     """
@@ -1378,8 +1382,10 @@ def calculate_exp_metrics(exp_name, dset, hparams=None,
     ----------
     exp_name : str
         Name of experiment
-    dset : str
-        Name of evaluation split or test dataset
+    dset : str, optional
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     hparams : dict, optional
         Experiment hyperparameters, by default None
     log_to_comet : bool, optional
@@ -1401,7 +1407,8 @@ def calculate_exp_metrics(exp_name, dset, hparams=None,
         comet_logger = load_comet_logger(exp_key=hparams.get("comet_exp_key"))
 
     # 2. Load inference
-    df_pred = load_view_predictions(exp_name, dset, **infer_kwargs)
+    df_pred = load_view_predictions(exp_name, dset=dset, split=split,
+                                    **infer_kwargs)
 
     # If multi-output, evaluate each label part, separately
     label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
@@ -1431,22 +1438,22 @@ def calculate_exp_metrics(exp_name, dset, hparams=None,
         # 4. Calculate metrics
         df_metrics = eval_calculate_all_metrics(df_pred)
         df_metrics.to_csv(os.path.join(inference_dir,
-                                        f"{dset}_metrics.csv"))
+                                        f"{dset}-{split}_metrics.csv"))
 
         # 4.1 Store metrics in Comet ML, if possible
         if comet_logger is not None:
             suffix = "(mask_bladder)" if infer_kwargs.get("mask_bladder", False) else ""
-            comet_logger.log_table(f"{dset}_metrics{(suffix)}.csv", df_metrics)
+            comet_logger.log_table(f"{dset}-{split}_metrics{(suffix)}.csv", df_metrics)
 
         # 5. Create plots for visual evaluation
-        eval_create_plots(df_pred, hparams, inference_dir, dset=dset)
+        eval_create_plots(df_pred, hparams, inference_dir, dset=dset, split=split)
 
         # Revert temporary changes
         hparams["label_part"] = orig_label_part
         df_pred = df_pred.drop(columns=["label", "pred", "prob", "out"])
 
 
-def store_example_classifications(exp_name, dset, mask_bladder=False,
+def store_example_classifications(exp_name, dset, split, mask_bladder=False,
                                   save_dir=constants.DIR_FIGURES_PRED):
     """
     Store correctly/incorrectly classified images in nested folders.
@@ -1466,10 +1473,8 @@ def store_example_classifications(exp_name, dset, mask_bladder=False,
         constants.DIR_FIGURES_PRED
     """
     # Load inference
-    save_path = create_save_path(
-        exp_name,
-        dset=dset,
-        mask_bladder=mask_bladder)
+    save_path = create_save_path(exp_name, dset=dset, split=split,
+                                 mask_bladder=mask_bladder)
     df_pred = pd.read_csv(save_path)
 
     # Sort by video
@@ -1987,7 +1992,7 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False,
         print(colored_pred_str)
 
 
-def create_save_dir_by_flags(exp_name, dset=constants.DEFAULT_EVAL_DSET,
+def create_save_dir_by_flags(exp_name, dset=constants.DEFAULT_EVAL_SPLIT,
                              **extra_flags):
     """
     Create directory to save dset predictions, based on experiment name and
@@ -1998,8 +2003,7 @@ def create_save_dir_by_flags(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     exp_name : str
         Name of experiment
     dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        Name of dataset
     **extra_flags : dict, optional
         Keyword arguments, specifying extra flags used during inference
 
@@ -2033,7 +2037,8 @@ def create_save_dir_by_flags(exp_name, dset=constants.DEFAULT_EVAL_DSET,
     return inference_dir
 
 
-def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
+def create_save_path(exp_name, dset, split,
+                     **extra_flags):
     """
     Create file path to dset predictions, based on experiment name and keyword
     arguments
@@ -2043,8 +2048,9 @@ def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
     exp_name : str
         Name of experiment
     dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     **extra_flags : dict, optional
         Keyword arguments, specifying extra flags used during inference
 
@@ -2057,15 +2063,15 @@ def create_save_path(exp_name, dset=constants.DEFAULT_EVAL_DSET, **extra_flags):
     inference_dir = create_save_dir_by_flags(exp_name, dset, **extra_flags)
 
     # Expected path to dset inference
-    fname = f"{dset}_set_results.csv"
+    fname = f"{dset}-{split}_set_results.csv"
     save_path = os.path.join(inference_dir, fname)
 
     return save_path
 
 
-def calculate_per_seq_silhouette_score(exp_name, label_part="side",
-                                       exclude_labels=("None",),
-                                       dset=constants.DEFAULT_EVAL_DSET):
+def calculate_per_seq_silhouette_score(exp_name, dset, split,
+                                       label_part="side",
+                                       exclude_labels=("None",)):
     """
     Calculate a per - ultrasound sequence Silhouette score.
 
@@ -2073,15 +2079,16 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
     ----------
     exp_name : str
         Name of experiment
+    dset : str, optional
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     label_part : str, optional
         If specified, either `side` or `plane` is extracted from each label
         and used as the given label, by default "side"
     exclude_labels : list or array-like, optional
         List of labels whose matching samples will be excluded when calculating
         the Silhouette score, by default ("None",)
-    dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
 
     Returns
     -------
@@ -2089,7 +2096,7 @@ def calculate_per_seq_silhouette_score(exp_name, label_part="side",
         Mean Silhouette Score across unique ultrasound sequences
     """
     # Load embeddings
-    df_embeds = embed.get_embeds(exp_name, dset=dset)
+    df_embeds = embed.get_embeds(exp_name, dset=dset, split=split)
     df_embeds = df_embeds.rename(columns={"paths": "files"})    # legacy name
 
     # Extract metadata from image file paths
@@ -2160,7 +2167,7 @@ def calculate_accuracy(df_pred, label_col="label", pred_col="pred"):
     return acc
 
 
-def load_view_predictions(exp_name, dset, **infer_kwargs):
+def load_view_predictions(exp_name, dset, split, **infer_kwargs):
     """
     Load predictions by model given by `exp_name` on dataset `dset`.
 
@@ -2185,7 +2192,7 @@ def load_view_predictions(exp_name, dset, **infer_kwargs):
     save_path = create_save_path(exp_name, dset=dset, **infer_kwargs)
     # Raise error, if predictions not found
     if not os.path.exists(save_path):
-        raise RuntimeError(f"Predictions not found on dataset {dset}!\n"
+        raise RuntimeError(f"Predictions not found on dataset {dset}-{split}!\n"
                            f"`exp_name`: {exp_name}")
 
     # 2. Load results
@@ -2322,8 +2329,7 @@ def scale_and_round(x, factor=100, num_places=2):
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
-def infer_dset(exp_name,
-               dset_or_split=constants.DEFAULT_EVAL_DSET,
+def infer_dset(exp_name, dset, split,
                seq_number_limit=None,
                mask_bladder=False,
                test_time_aug=False,
@@ -2338,8 +2344,9 @@ def infer_dset(exp_name,
     exp_name : str
         Name of experiment
     dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     seq_number_limit : int, optional
         If provided, filters out dset split samples with sequence numbers higher
         than this value, by default None.
@@ -2366,7 +2373,7 @@ def infer_dset(exp_name,
     assert da_transform_name in (None, "fda", "hm"), '`da_transform_name` must be one of (None, "fda", "hm")'
 
     # 0. Create path to save predictions
-    pred_save_path = create_save_path(exp_name, dset=dset_or_split,
+    pred_save_path = create_save_path(exp_name, dset=dset, split=split,
                                       seq_number_limit=seq_number_limit,
                                       mask_bladder=mask_bladder,
                                       test_time_aug=test_time_aug,
@@ -2411,7 +2418,7 @@ def infer_dset(exp_name,
     dm = load_data.setup_data_module(hparams, self_supervised=False)
 
     # 3.1 Get metadata (for specified split)
-    df_metadata = dm.filter_metadata(dset=dset_or_split, split="test")
+    df_metadata = dm.filter_metadata(dset=dset, split=split)
     # 3.2 If provided, filter out high sequence number images
     if seq_number_limit:
         mask = (df_metadata["seq_number"] <= seq_number_limit)
@@ -2445,7 +2452,7 @@ def infer_dset(exp_name,
                     "Domain Adaptation transform is not implemented for "
                     "video model!")
             # CASE 1: Dataset of US videos
-            if dset_or_split not in constants.DSETS_NON_SEQ:
+            if dset not in constants.DSETS_NON_SEQ:
                 # Perform inference one sequence at a time
                 df_preds = df_metadata.groupby(by=["id", "visit"]).\
                     progress_apply(
@@ -2489,7 +2496,7 @@ def infer_dset(exp_name,
     df_metadata.to_csv(pred_save_path, index=False)
 
 
-def embed_dset(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
+def embed_dset(exp_name, dset, split,
                overwrite_existing=OVERWRITE_EXISTING,
                **overwrite_hparams):
     """
@@ -2500,8 +2507,9 @@ def embed_dset(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
     exp_name : str
         Name of experiment
     dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     overwrite_existing : bool, optional
         If True and embeddings already exists, overwrite existing, by
         default OVERWRITE_EXISTING.
@@ -2514,7 +2522,7 @@ def embed_dset(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
         If `exp_name` does not lead to a valid training directory
     """
     # 0. Create path to save embeddings
-    embed_save_path = embed.get_save_path(exp_name, dset=dset_or_split)
+    embed_save_path = embed.get_save_path(exp_name, dset=dset, split=split)
 
     # Early return, if embeddings already made
     if os.path.isfile(embed_save_path) and not overwrite_existing:
@@ -2535,21 +2543,14 @@ def embed_dset(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
     model = model.to(DEVICE)
 
     # NOTE: For non-video datasets, ensure each image is treated independently
-    if dset_or_split in constants.DSETS_NON_SEQ:
+    if dset in constants.DSETS_NON_SEQ:
         hparams["full_seq"] = False
         hparams["batch_size"] = 1
 
     # 3. Load data
     # NOTE: Ensure data is loaded in the non-SSL mode
     dm = load_data.setup_data_module(hparams, self_supervised=False)
-
-    # 4. Create a DataLoader
-    if dset_or_split == "test":
-        dataloader = dm.test_dataloader()
-    elif dset_or_split == "val":
-        dataloader = dm.val_dataloader()
-    else:
-        dataloader = dm.train_dataloader()
+    dataloader = dm.get_filtered_dataloader(split=split, dset=dset)
 
     # 5. Extract embeddings and save them
     embed.extract_embeds(
@@ -2559,7 +2560,7 @@ def embed_dset(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
         device=DEVICE)
 
 
-def analyze_dset_preds(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
+def analyze_dset_preds(exp_name, dsets, splits,
                        log_to_comet=False,
                        **infer_kwargs):
     """
@@ -2569,9 +2570,10 @@ def analyze_dset_preds(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
     ----------
     exp_name : str
         Name of experiment
-    dset : str, optional
-        Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+    dsets : str or list, optional
+        Name of dataset
+    splits : str or list, optional
+        Specific split of dataset. One of (train/val/test)
     log_to_comet : bool, optional
         If True, log metrics and UMAPs to Comet ML.
     **infer_kwargs : Keyword arguments
@@ -2595,46 +2597,27 @@ def analyze_dset_preds(exp_name, dset_or_split=constants.DEFAULT_EVAL_DSET,
     # 2. If specified, calculate metrics
     if CALCULATE_METRICS:
         # If 2+ dsets provided, calculate metrics on each dset individually
-        dsets = [dset_or_split] if isinstance(dset_or_split, str) else dset_or_split
-        for dset_ in dsets:
+        dsets = [dsets] if isinstance(dsets, str) else dsets
+        splits = [splits] if isinstance(splits, str) else splits
+        for idx, curr_dset in enumerate(dsets):
+            curr_split = splits[idx]
             try:
                 calculate_exp_metrics(
                     exp_name=exp_name,
-                    dset=dset_,
+                    dset=curr_dset,
+                    split=curr_split,
                     hparams=hparams,
                     log_to_comet=log_to_comet,
                     **infer_kwargs,
                 )
             except KeyError:
-                # Correctly convert to dset and split
-                curr_dset = dset_or_split
-                curr_split = "test"
-                if dset_or_split in ("train", "val", "test"):
-                    curr_dset = None
-                    curr_split = dset_or_split
-
                 # Log error
                 LOGGER.error(KeyError)
-                LOGGER.error("Unable to find file, performing inference... (again)")
-
-                # 1. Perform inference
-                infer_dset(
-                    exp_name=exp_name, dset_or_split=dset_,
-                    overwrite_existing=True,
-                    **infer_kwargs,
-                    **load_data.create_eval_hparams(curr_dset, curr_split))
-                # 2. Attempt to calculate metrics again
-                calculate_exp_metrics(
-                    exp_name=exp_name,
-                    dset=dset_,
-                    hparams=hparams,
-                    log_to_comet=log_to_comet,
-                    **infer_kwargs,
-                )
+                LOGGER.error("Try to perform inference again...")
 
     # 3. If specified, create UMAP plots
     if EMBED:
-        plot_umap.main(exp_name, dset=dset_or_split,
+        plot_umap.main(exp_name, dset=dsets,
                        comet_exp_key=hparams.get("comet_exp_key") if log_to_comet else None)
 
     # Close all open figures
@@ -2647,20 +2630,26 @@ def main(args):
         1. Perform inference
         2. Analyze predictions
     """
+    exp_names = args.exp_names
+    dsets = args.dsets
+    splits = args.splits
+    # If only one of dset/split is > 1, assume it's meant to be broadcast
+    if len(dsets) == 1 and len(splits) > 1:
+        LOGGER.info("Only 1 `dset` provided! Assuming same `dset` for all `splits`...")
+        dsets = dsets * len(splits)
+    if len(splits) == 1 and len(dsets) > 1:
+        LOGGER.info("Only 1 `split` provided! Assuming same `split` for all `dsets`...")
+        splits = splits * len(dsets)
+
     # For each experiment, perform inference and analyze results
-    for exp_name in args.exp_name:
+    for exp_name in exp_names:
         # Iterate over all specified eval dsets
-        for dset in args.dset:
-            # Correctly convert to dset and split
-            curr_dset = dset
-            curr_split = "test"
-            if dset in ("train", "val", "test"):
-                curr_dset = None
-                curr_split = dset
+        for idx, curr_dset in enumerate(dsets):
+            curr_split = splits[idx]
 
             # Specify to mask bladder, if it's a hospital w/o bladder labels
             if args.mask_bladder or FORCE_MASK_BLADDER:
-                mask_bladder = dset in constants.DSETS_MISSING_BLADDER
+                mask_bladder = curr_dset in constants.DSETS_MISSING_BLADDER
             else:
                 mask_bladder = False
 
@@ -2673,25 +2662,30 @@ def main(args):
                 "test_time_aug": args.test_time_aug,
                 "da_transform_name": args.da_transform_name,
             }
-            infer_dset(exp_name=exp_name, dset_or_split=dset,
+            infer_dset(exp_name=exp_name, dset=curr_dset, split=curr_split,
                        **infer_kwargs,
                        **eval_hparams)
 
             # 4. Extract embeddings
             if EMBED:
-                embed_dset(exp_name=exp_name, dset_or_split=dset, **eval_hparams)
+                embed_dset(exp_name=exp_name, dset=curr_dset, **eval_hparams)
 
             # 5. Evaluate predictions and embeddings
-            analyze_dset_preds(exp_name=exp_name, dset_or_split=dset,
+            analyze_dset_preds(exp_name=exp_name,
+                               dsets=curr_dset,
+                               splits=curr_split,
                                log_to_comet=args.log_to_comet,
                                **infer_kwargs)
 
         # 6. Create UMAPs embeddings on all dsets together
         # NOTE: `mask_bladder` is not needed if combining all dsets
         infer_kwargs.pop("mask_bladder")
-        analyze_dset_preds(exp_name=exp_name, dset_or_split=args.dset,
+        analyze_dset_preds(exp_name=exp_name,
+                           dsets=dsets,
+                           splits=splits,
                            log_to_comet=args.log_to_comet,
                            **infer_kwargs)
+
 
 
 if __name__ == '__main__':

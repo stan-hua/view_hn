@@ -101,7 +101,7 @@ def init(parser):
     parser.add_argument("--plane_exp_name", required=True,
                         nargs='+',
                         help=arg_help["plane_exp_name"])
-    parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_DSET],
+    parser.add_argument("--dset", default=[constants.DEFAULT_EVAL_SPLIT],
                         nargs='+',
                         help=arg_help["dset"])
     parser.add_argument("--pairing_method", default="random",
@@ -459,7 +459,7 @@ def extract_surgery_predictions(df_paired_metadata):
 def load_surgery_predictions(
         side_exp_name,
         plane_exp_name,
-        dset=constants.DEFAULT_EVAL_DSET,
+        dset=constants.DEFAULT_EVAL_SPLIT,
         pairing_method="random"):
     """
     Load HN surgery model predictions.
@@ -472,7 +472,7 @@ def load_surgery_predictions(
         Name of plane experiment
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        constants.DEFAULT_EVAL_SPLIT.
     pairing_method : str, optional
         Method for selecting pairs to pass to the HN model, by default
         "random"
@@ -774,7 +774,7 @@ class HNDataset(torch.utils.data.Dataset):
 #                                  Main Flows                                  #
 ################################################################################
 def infer_hn_dset(side_exp_name, plane_exp_name,
-                  dset=constants.DEFAULT_EVAL_DSET,
+                  dset=constants.DEFAULT_EVAL_SPLIT,
                   pairing_method="random"):
     """
     Perform inference with HN model, given view label inferred on dset split.
@@ -787,7 +787,7 @@ def infer_hn_dset(side_exp_name, plane_exp_name,
         Name of plane experiment
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        constants.DEFAULT_EVAL_SPLIT.
     pairing_method : str, optional
         Method for selecting pairs to pass to the HN model, by default
         "random"
@@ -829,7 +829,7 @@ def infer_hn_dset(side_exp_name, plane_exp_name,
 
 def analyze_dset_surgery_preds(
         side_exp_name, plane_exp_name,
-        dset=constants.DEFAULT_EVAL_DSET,
+        dset=constants.DEFAULT_EVAL_SPLIT,
         pairing_method="random"):
     """
     Analyze predictions from HN model, given pairing method.
@@ -842,7 +842,7 @@ def analyze_dset_surgery_preds(
         Plane experiment name
     dset : str, optional
         Specific split of dataset. One of (train, val, test), by default
-        constants.DEFAULT_EVAL_DSET.
+        constants.DEFAULT_EVAL_SPLIT.
     pairing_method : str, optional
         Method for selecting pairs to pass to the HN model, by default
         "random"

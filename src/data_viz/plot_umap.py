@@ -655,7 +655,7 @@ def get_label_order(labels):
 #                                 Main Method                                  #
 ################################################################################
 def main(exp_name,
-         dset=constants.DEFAULT_EVAL_DSET,
+         dset=constants.DEFAULT_EVAL_SPLIT,
          split="all",
          raw=False,
          segmented=False,

@@ -96,6 +96,7 @@ def load_model(hparams):
             overwrite_model(model, src_model=pretrained_model)
         # CASE 2: SSL-pretrained model and want to load into LinearEval
         elif hparams.get("self_supervised"):
+            LOGGER.warning(DeprecationWarning("This SSL eval. flow is deprecated..."))
             pretrained_state_dict = pretrained_model.state_dict()
             # NOTE: SSL conv. backbone weights are prefixed by "conv_backbone."
             pattern = r"(conv_backbone\..*)|(temporal_backbone\..*)|(fc\..*)"
@@ -139,7 +140,8 @@ def load_model(hparams):
     return model
 
 
-def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
+def load_pretrained_from_exp_name(exp_name, ckpt_option="best",
+                                  **overwrite_hparams):
     """
     Load pretrained model from experiment name.
 
@@ -147,6 +149,9 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
     ----------
     exp_name : str
         Name of experiment
+    ckpt_option : str
+        Choice of "best" checkpoint (based on validation set) or "last"
+        checkpoint file, by default "best"
 
     Returns
     -------
@@ -174,7 +179,10 @@ def load_pretrained_from_exp_name(exp_name, **overwrite_hparams):
 
     # 2. Load existing model and send to device
     # 2.1 Get checkpoint path
-    ckpt_path = find_best_ckpt_path(model_dir)
+    if ckpt_option == "last":
+        ckpt_path = find_best_ckpt_path(model_dir)
+    else:
+        ckpt_path = find_best_ckpt_path(model_dir)
     # 2.2 Get model class and extra parameters for loading from checkpoint
     model_cls, model_cls_kwargs = get_model_cls(hparams)
     # 2.3 Load model
@@ -329,6 +337,8 @@ def find_best_ckpt_path(path_exp_dir=None, exp_name=None):
     ----------
     path_exp_dir : str
         Path to a trained model directory
+    exp_name : str
+        Experiment name
 
     Returns
     -------
@@ -363,6 +373,47 @@ def find_best_ckpt_path(path_exp_dir=None, exp_name=None):
 
     return ckpt_paths[0]
 
+
+def find_last_ckpt_path(path_exp_dir=None, exp_name=None):
+    """
+    Finds the path to the last model checkpoint.
+
+    Parameters
+    ----------
+    path_exp_dir : str
+        Path to a trained model directory
+    exp_name : str
+        Experiment name
+
+    Returns
+    -------
+    str
+        Path to PyTorch Lightning last model checkpoint
+
+    Raises
+    ------
+    RuntimeError
+        If no valid ckpt files found
+    """
+    # INPUT: Ensure at least one of `path_exp_dir` or `exp_name` is provided
+    assert path_exp_dir or exp_name
+
+    # If only `exp_name` provided, attempt to find experiment training directory
+    if not path_exp_dir and exp_name:
+        path_exp_dir = get_exp_dir(exp_name, on_error="raise")
+
+    # Look for checkpoint files
+    ckpt_paths = [str(path) for path in Path(path_exp_dir).rglob("*.ckpt")]
+
+    # Get last checkpoint
+    ckpt_paths = [path for path in ckpt_paths if "last.ckpt" in path]
+
+    # Raise error, if no ckpt paths  found
+    if not ckpt_paths:
+        raise RuntimeError("No last epoch model checkpoint (.ckpt) found! "
+                           f"\nDirectory: {path_exp_dir}")
+
+    return ckpt_paths[0]
 
 def extract_backbones_from_ssl(hparams, model_cls):
     """
@@ -713,13 +764,14 @@ def get_last_conv_layer(model):
     torch.nn.Conv2d
         Last convolutional layer
     """
-    # CASE 1: Model is a wrapper, storing a conv. backbone
-    if isinstance(model, (LinearEval, LSTMLinearEval,
-                          EnsembleLinear, EnsembleLSTMLinear)):
-        return get_last_conv_layer(model.conv_backbone)
-    # CASE 2: Model is an EfficientNetB0
-    elif isinstance(model, EfficientNet):
+    # CASE 1: Model is an EfficientNetB0
+    if isinstance(model, EfficientNet):
         return model._conv_head
+    # CASE 1: Model is a wrapper, storing a conv. backbone
+    # NOTE: Deprecated
+    # elif isinstance(model, (LinearEval, LSTMLinearEval,
+    #                       EnsembleLinear, EnsembleLSTMLinear)):
+    #     return get_last_conv_layer(model.conv_backbone)
 
     # Raise error, if not found
     raise NotImplementedError

@@ -86,7 +86,7 @@ def init(parser):
     parser.add_argument("--exp_names", help=arg_help["exp_names"],
                         nargs="+",
                         required=True)
-    parser.add_argument("--dsets", default=[constants.DEFAULT_EVAL_DSET],
+    parser.add_argument("--dsets", default=[constants.DEFAULT_EVAL_SPLIT],
                         nargs='+',
                         help=arg_help["dsets"])
 
@@ -217,7 +217,7 @@ def analyze_eval_model_preds(exp_name, dset, model_type="linear_lstm",
         Name of SSL experiment
     dset : str or list, optional
         Name of evaluation split / dataset to perform inference on, by default
-        constants.DEFAULT_EVAL_DSET
+        constants.DEFAULT_EVAL_SPLIT
     model_type : str, optional
         One of ("linear", "linear_lstm"), by default "linear_lstm"
     label_part : str, optional
@@ -255,32 +255,32 @@ def analyze_eval_model_preds(exp_name, dset, model_type="linear_lstm",
         # 1. Perform inference on dataset
         model_eval.infer_dset(
             exp_eval_name,
-            dset_or_split=dset,
+            dset=dset,
             **eval_hparams)
 
         # 2. Embed dataset
         model_eval.embed_dset(
             exp_eval_name,
-            dset_or_split=dset,
+            dset=dset,
             **eval_hparams,
         )
 
         # 3. Analyze predictions separately
         model_eval.analyze_dset_preds(
             exp_eval_name,
-            dset_or_split=dset,
+            dsets=dset,
             log_to_comet=True,
         )
 
     # 4. Create UMAP together
     model_eval.analyze_dset_preds(
         exp_eval_name,
-        dset_or_split=dsets,
+        dsets=dsets,
     )
 
 
 def analyze_preds(exp_name, augment_training=False,
-                  dset=constants.DEFAULT_EVAL_DSET):
+                  dset=constants.DEFAULT_EVAL_SPLIT):
     """
     Perform test prediction analysis from `model_eval` on trained evaluations
     models
@@ -294,7 +294,7 @@ def analyze_preds(exp_name, augment_training=False,
         default False.
     dset : str or list, optional
         Name of evaluation split / dataset to perform inference on, by default
-        constants.DEFAULT_EVAL_DSET
+        constants.DEFAULT_EVAL_SPLIT
     """
     # Evaluate each model separately
     for model_type in MODEL_TYPES:

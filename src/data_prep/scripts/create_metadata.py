@@ -742,7 +742,7 @@ def main_correct_labels(ref_path="corrected_view_labels.xlsx", label_col="plane"
                 df_metadata.loc[corrected_bladder_mask, col] = new_val
 
         # Save changes
-        df_metadata.to_csv(clean_dset_path)
+        df_metadata.to_csv(clean_dset_path, index=False)
 
 
 if __name__ == "__main__":

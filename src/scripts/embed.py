@@ -397,9 +397,13 @@ def main(args):
     """
     dsets = args.dsets
     splits = args.splits
-    # If there is only 1 dset and multiple splits, assume same dset across splits
+    # If only one of dset/split is > 1, assume it's meant to be broadcast
     if len(dsets) == 1 and len(splits) > 1:
+        LOGGER.info("Only 1 `dset` provided! Assuming same `dset` for all `splits`...")
         dsets = dsets * len(splits)
+    if len(splits) == 1 and len(dsets) > 1:
+        LOGGER.info("Only 1 `split` provided! Assuming same `split` for all `dsets`...")
+        splits = splits * len(dsets)
 
     # Ensure number of datasets match number of splits
     assert len(dsets) == len(splits), "Length of `dsets` and `splits` do not match!"
