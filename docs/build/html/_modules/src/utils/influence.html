@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.utils.influence &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.utils.influence</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.utils.influence</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">influence_function.py</span>
+
+<span class="sd">Description: This </span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">random</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Counter</span><span class="p">,</span> <span class="n">defaultdict</span>
+
+<span class="c1"># Non-standard libaries</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">matplotlib.transforms</span> <span class="k">as</span> <span class="nn">mtrans</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+<span class="kn">from</span> <span class="nn">torch_influence</span> <span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AutogradInfluenceModule</span><span class="p">,</span> <span class="n">CGInfluenceModule</span><span class="p">,</span> <span class="n">LiSSAInfluenceModule</span><span class="p">,</span>
+    <span class="n">BaseObjective</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+
+<span class="c1"># Custom libaries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># Get device</span>
+<span class="n">DEVICE</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+
+<span class="c1"># Mapping of influence modules</span>
+<span class="n">INF_MODULES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;autograd&quot;</span><span class="p">:</span> <span class="n">AutogradInfluenceModule</span><span class="p">,</span>
+    <span class="s2">&quot;cg&quot;</span><span class="p">:</span> <span class="n">CGInfluenceModule</span><span class="p">,</span>
+    <span class="s2">&quot;lissa&quot;</span><span class="p">:</span> <span class="n">LiSSAInfluenceModule</span>
+<span class="p">}</span>
+<span class="c1"># Influence module default hyperparameters</span>
+<span class="n">INF_HPARAMS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;cg&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;atol&quot;</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+        <span class="s2">&quot;maxiter&quot;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">&quot;lissa&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;repeat&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+        <span class="s2">&quot;depth&quot;</span><span class="p">:</span> <span class="mi">10000</span><span class="p">,</span>
+        <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="mi">100</span><span class="p">,</span>       <span class="c1"># NOTE: Typically treated as a hyperparameter</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Functions                                   #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="MyCrossEntropyLoss">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.MyCrossEntropyLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">MyCrossEntropyLoss</span><span class="p">(</span><span class="n">BaseObjective</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    L2-regularized cross entropy loss</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Reproducing the same loss is important </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hparams</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize MyCrossEntropyLoss object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        hparams : dict, optional</span>
+<span class="sd">            Model hyperparameters, by default None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span> <span class="o">=</span> <span class="n">hparams</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">NLLLoss</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="MyCrossEntropyLoss.train_outputs">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.MyCrossEntropyLoss.train_outputs">[docs]</a>
+    <span class="k">def</span> <span class="nf">train_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Pass data through model</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">data</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">batch</span>
+
+        <span class="c1"># Get logits</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">out</span></div>
+
+
+
+<div class="viewcode-block" id="MyCrossEntropyLoss.train_loss_on_outputs">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.MyCrossEntropyLoss.train_loss_on_outputs">[docs]</a>
+    <span class="k">def</span> <span class="nf">train_loss_on_outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outputs</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute training loss, excluding regularization terms.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">batch</span>
+
+        <span class="c1"># Get label</span>
+        <span class="n">y_true</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Get loss</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="n">outputs</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">y_true</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">loss</span></div>
+
+
+
+<div class="viewcode-block" id="MyCrossEntropyLoss.train_regularization">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.MyCrossEntropyLoss.train_regularization">[docs]</a>
+    <span class="k">def</span> <span class="nf">train_regularization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute loss regularization terms.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Compute loss regularization terms</span>
+        <span class="n">reg</span> <span class="o">=</span> <span class="mf">0.</span>
+
+        <span class="c1"># 1. Weight decay</span>
+        <span class="n">weight_decay</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;weight_decay&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weight_decay</span><span class="p">:</span>
+            <span class="n">reg</span> <span class="o">+=</span> <span class="n">weight_decay</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">norm</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="n">reg</span></div>
+
+
+
+<div class="viewcode-block" id="MyCrossEntropyLoss.test_loss">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.MyCrossEntropyLoss.test_loss">[docs]</a>
+    <span class="k">def</span> <span class="nf">test_loss</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">batch</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute test loss, excluding regularization terms.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># NOTE: No regularization in the test loss</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_outputs</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_loss_on_outputs</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="plot_most_helpful_harmful_examples">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.plot_most_helpful_harmful_examples">[docs]</a>
+<span class="k">def</span> <span class="nf">plot_most_helpful_harmful_examples</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">hparams</span><span class="p">,</span> <span class="n">train_loader</span><span class="p">,</span> <span class="n">test_loader</span><span class="p">,</span>
+                                       <span class="n">how</span><span class="o">=</span><span class="s2">&quot;cg&quot;</span><span class="p">,</span> <span class="n">num_examples</span><span class="o">=</span><span class="mi">9</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get most helpful and harmful training examples.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Arbitrary model</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Model hyperparameters</span>
+<span class="sd">    train_loader : torch.utils.data.DataLoader</span>
+<span class="sd">        Training set dataloader</span>
+<span class="sd">    test_loader : torch.utils.data.DataLoader</span>
+<span class="sd">        Validation/Test set dataloader</span>
+<span class="sd">    how : str, optional</span>
+<span class="sd">        Method to compute inverse Hessian-vector product (autograd=AutoGrad,</span>
+<span class="sd">        cg=Conjugate Gradients, lissa=Linear time Stochastic Second-Order Algo.)</span>
+<span class="sd">    num_examples : int, optional</span>
+<span class="sd">        Maximum number of examples to show for each class.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict of {kind (helpful/harmful): {label: plt.Figure}}</span>
+<span class="sd">        Contains grid plots of the most helpful/harmful images for each label.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">how</span> <span class="ow">in</span> <span class="n">INF_MODULES</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Must be in </span><span class="si">{</span><span class="nb">tuple</span><span class="p">(</span><span class="n">INF_MODULES</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="c1"># Get mapping of integer-encoded label to string label</span>
+    <span class="n">idx_to_class</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">LABEL_PART_TO_CLASSES</span><span class="p">[</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;label_part&quot;</span><span class="p">]][</span><span class="s2">&quot;idx_to_class&quot;</span><span class="p">]</span>
+
+    <span class="c1"># Get size of datasets</span>
+    <span class="n">train_set_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">train_loader</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="n">test_set_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">test_loader</span><span class="o">.</span><span class="n">dataset</span><span class="p">)</span>
+
+    <span class="c1"># Create indices for train/test set</span>
+    <span class="n">train_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">train_set_size</span><span class="p">))</span>
+    <span class="n">test_indices</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">test_set_size</span><span class="p">))</span>
+    <span class="c1"># Randomly shuffle test set indices</span>
+    <span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">test_indices</span><span class="p">)</span>
+
+    <span class="c1"># Create objective</span>
+    <span class="n">objective</span> <span class="o">=</span> <span class="n">MyCrossEntropyLoss</span><span class="p">(</span><span class="n">hparams</span><span class="p">)</span>
+
+    <span class="c1"># Send model to device</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+
+    <span class="c1"># Get the top test images from each label with the highest test loss</span>
+    <span class="n">label_to_test_sample</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">test_loader</span><span class="p">):</span>
+        <span class="c1"># Get test point data</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">test_step</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">decoded_label</span> <span class="o">=</span> <span class="n">idx_to_class</span><span class="p">[</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()]</span>
+
+        <span class="c1"># Skip, if correctly classified</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_pred&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_true&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># Store, only if test loss is worse than previous</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ret</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">loss</span> <span class="o">&gt;</span> <span class="n">label_to_test_sample</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">decoded_label</span><span class="p">,</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;loss&quot;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1000</span><span class="p">):</span>
+            <span class="n">label_to_test_sample</span><span class="p">[</span><span class="n">decoded_label</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span> 
+                <span class="s2">&quot;idx&quot;</span><span class="p">:</span> <span class="n">idx</span><span class="p">,</span>
+                <span class="s2">&quot;loss&quot;</span><span class="p">:</span> <span class="n">loss</span><span class="p">,</span>
+                <span class="s2">&quot;y_pred&quot;</span><span class="p">:</span> <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_pred&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+                <span class="s2">&quot;y_true&quot;</span><span class="p">:</span> <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_true&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">(),</span>
+            <span class="p">}</span>
+
+    <span class="c1"># Create influence module</span>
+    <span class="n">module</span> <span class="o">=</span> <span class="n">INF_MODULES</span><span class="p">[</span><span class="n">how</span><span class="p">](</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">objective</span><span class="o">=</span><span class="n">objective</span><span class="p">,</span>
+        <span class="n">train_loader</span><span class="o">=</span><span class="n">train_loader</span><span class="p">,</span>
+        <span class="n">test_loader</span><span class="o">=</span><span class="n">test_loader</span><span class="p">,</span>
+        <span class="n">device</span><span class="o">=</span><span class="n">DEVICE</span><span class="p">,</span>
+        <span class="n">damp</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">INF_HPARAMS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">how</span><span class="p">,</span> <span class="p">{}),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Get the indices of the most helpful/harmful training images for each test sample</span>
+    <span class="c1"># NOTE: Split by true label</span>
+    <span class="n">test_imgs_and_captions</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">helpful_imgs_and_captions</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">harmful_imgs_and_captions</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">label_to_test_sample</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Computing Influences&quot;</span><span class="p">):</span>
+        <span class="c1"># Store test sample</span>
+        <span class="n">test_img</span> <span class="o">=</span> <span class="n">get_image_from_index</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;idx&quot;</span><span class="p">],</span> <span class="n">test_loader</span><span class="p">)</span>
+        <span class="n">test_caption</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Pred: </span><span class="si">{</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;y_pred&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, Label: </span><span class="si">{</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;y_true&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> \
+                       <span class="sa">f</span><span class="s2">&quot;Test Loss: </span><span class="si">{</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">test_imgs_and_captions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">test_img</span><span class="p">,</span> <span class="n">test_caption</span><span class="p">))</span>
+
+        <span class="c1"># Compute influence scores</span>
+        <span class="c1"># NOTE: This may be expensive since re-computing gradients over entire</span>
+        <span class="c1">#       training set. Consider caching</span>
+        <span class="n">inf_scores</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">influences</span><span class="p">(</span><span class="n">train_idxs</span><span class="o">=</span><span class="n">train_indices</span><span class="p">,</span> <span class="n">test_idxs</span><span class="o">=</span><span class="p">[</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;idx&quot;</span><span class="p">]])</span>
+
+        <span class="c1"># Store the index of the most helpful and harmful training set image</span>
+        <span class="n">helpful_train_idx</span><span class="p">,</span> <span class="n">helpful_score</span> <span class="o">=</span> <span class="n">inf_scores</span><span class="o">.</span><span class="n">argmax</span><span class="p">(),</span> <span class="n">inf_scores</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+        <span class="n">harmful_train_idx</span><span class="p">,</span> <span class="n">harmful_score</span> <span class="o">=</span> <span class="n">inf_scores</span><span class="o">.</span><span class="n">argmin</span><span class="p">(),</span> <span class="n">inf_scores</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+
+        <span class="c1"># Predict on helpful training sample and store info</span>
+        <span class="n">helpful_ret</span> <span class="o">=</span> <span class="n">predict_single_by_index</span><span class="p">(</span><span class="n">helpful_train_idx</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">train_loader</span><span class="p">)</span>
+        <span class="n">helpful_img</span> <span class="o">=</span> <span class="n">get_image_from_index</span><span class="p">(</span><span class="n">helpful_train_idx</span><span class="p">,</span> <span class="n">train_loader</span><span class="p">)</span>
+        <span class="n">helpful_caption</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Pred: </span><span class="si">{</span><span class="n">helpful_ret</span><span class="p">[</span><span class="s1">&#39;y_pred&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, Label: </span><span class="si">{</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> \
+                          <span class="sa">f</span><span class="s2">&quot;Influence: </span><span class="si">{</span><span class="n">helpful_score</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">helpful_imgs_and_captions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">helpful_img</span><span class="p">,</span> <span class="n">helpful_caption</span><span class="p">))</span>
+
+        <span class="c1"># Predict on harmful training sample and store info</span>
+        <span class="n">harmful_ret</span> <span class="o">=</span> <span class="n">predict_single_by_index</span><span class="p">(</span><span class="n">harmful_train_idx</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">train_loader</span><span class="p">)</span>
+        <span class="n">harmful_img</span> <span class="o">=</span> <span class="n">get_image_from_index</span><span class="p">(</span><span class="n">harmful_train_idx</span><span class="p">,</span> <span class="n">train_loader</span><span class="p">)</span>
+        <span class="n">harmful_caption</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Pred: </span><span class="si">{</span><span class="n">harmful_ret</span><span class="p">[</span><span class="s1">&#39;y_pred&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, Label: </span><span class="si">{</span><span class="n">metadata</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span> \
+                          <span class="sa">f</span><span class="s2">&quot;Influence: </span><span class="si">{</span><span class="n">harmful_score</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">harmful_imgs_and_captions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">harmful_img</span><span class="p">,</span> <span class="n">harmful_caption</span><span class="p">))</span>
+
+    <span class="c1"># Create plot</span>
+    <span class="n">fig</span> <span class="o">=</span> <span class="n">plot_test_helpful_harmful</span><span class="p">(</span><span class="n">test_imgs_and_captions</span><span class="p">,</span>
+                                    <span class="n">helpful_imgs_and_captions</span><span class="p">,</span>
+                                    <span class="n">harmful_imgs_and_captions</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fig</span></div>
+
+
+
+<div class="viewcode-block" id="plot_test_helpful_harmful">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.plot_test_helpful_harmful">[docs]</a>
+<span class="k">def</span> <span class="nf">plot_test_helpful_harmful</span><span class="p">(</span><span class="n">test_imgs_and_captions</span><span class="p">,</span>
+                              <span class="n">helpful_imgs_and_captions</span><span class="p">,</span>
+                              <span class="n">harmful_imgs_and_captions</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plot test sample and the most helpful and most harmful training examples</span>
+<span class="sd">    for that test sample.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    test_imgs_and_captions : list of tuples</span>
+<span class="sd">        Each tuple contains the image and caption</span>
+<span class="sd">    helpful_imgs_and_captions : list of tuples</span>
+<span class="sd">        Each tuple contains the image and caption</span>
+<span class="sd">    harmful_imgs_and_captions : list of tuples</span>
+<span class="sd">        Each tuple contains the image and caption</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    plt.Figure</span>
+<span class="sd">        Created figure</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create figure</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span>
+          <span class="n">nrows</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">ncols</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">test_imgs_and_captions</span><span class="p">),</span>
+          <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+          <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">wspace</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+
+    <span class="c1"># Plot each image</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">([</span><span class="n">test_imgs_and_captions</span><span class="p">,</span> <span class="n">helpful_imgs_and_captions</span><span class="p">,</span> <span class="n">harmful_imgs_and_captions</span><span class="p">],</span> <span class="n">axes</span><span class="p">):</span>
+        <span class="k">for</span> <span class="p">((</span><span class="n">image</span><span class="p">,</span> <span class="n">caption</span><span class="p">),</span> <span class="n">ax</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">row</span><span class="p">):</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">caption</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set</span><span class="p">(</span><span class="n">aspect</span><span class="o">=</span><span class="s2">&quot;equal&quot;</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">([])</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">([])</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+
+    <span class="c1"># Draw vertical lines to separate each test example</span>
+    <span class="k">def</span> <span class="nf">get_bbox</span><span class="p">(</span><span class="n">ax_</span><span class="p">):</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">canvas</span><span class="o">.</span><span class="n">get_renderer</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">ax_</span><span class="o">.</span><span class="n">get_tightbbox</span><span class="p">(</span><span class="n">r</span><span class="p">)</span><span class="o">.</span><span class="n">transformed</span><span class="p">(</span><span class="n">fig</span><span class="o">.</span><span class="n">transFigure</span><span class="o">.</span><span class="n">inverted</span><span class="p">())</span>
+    <span class="n">bboxes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="n">get_bbox</span><span class="p">,</span> <span class="n">axes</span><span class="o">.</span><span class="n">flat</span><span class="p">)),</span> <span class="n">mtrans</span><span class="o">.</span><span class="n">Bbox</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">axes</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">xmax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="n">b</span><span class="o">.</span><span class="n">x1</span><span class="p">,</span> <span class="n">bboxes</span><span class="o">.</span><span class="n">flat</span><span class="p">)))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">axes</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">xmin</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">b</span><span class="p">:</span> <span class="n">b</span><span class="o">.</span><span class="n">x0</span><span class="p">,</span> <span class="n">bboxes</span><span class="o">.</span><span class="n">flat</span><span class="p">)))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">axes</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">xs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">c_</span><span class="p">[</span><span class="n">xmax</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="n">xmin</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">xs</span><span class="p">:</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Line2D</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="n">x</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.97</span><span class="p">],</span> <span class="n">transform</span><span class="o">=</span><span class="n">fig</span><span class="o">.</span><span class="n">transFigure</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">1.2</span><span class="p">)</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+
+    <span class="c1"># Create row labels</span>
+    <span class="n">row_labels</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;Test Image&quot;</span><span class="p">,</span> <span class="s2">&quot;Most Helpful&quot;</span><span class="p">,</span> <span class="s2">&quot;Most Harmful&quot;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">ax</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">axes</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">row_labels</span><span class="p">):</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">90</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="s2">&quot;x-large&quot;</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s2">&quot;bold&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fig</span></div>
+
+
+
+<div class="viewcode-block" id="predict_single_by_index">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.predict_single_by_index">[docs]</a>
+<span class="k">def</span> <span class="nf">predict_single_by_index</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dataloader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Predict on single sample, based on their dataset index.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    idx : int</span>
+<span class="sd">        Sample/image index</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Arbitrary model</span>
+<span class="sd">    dataloader : torch.utils.data.DataLoader</span>
+<span class="sd">        Arbitrary DataLoader</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Contains prediction and label for sample</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get test point data</span>
+    <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="n">dataloader</span><span class="o">.</span><span class="n">dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Send data to the right device</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">LongTensor</span><span class="p">([</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]])</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">DEVICE</span><span class="p">)</span>
+
+    <span class="c1"># Pass to model</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">test_step</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Flatten items</span>
+    <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">ret</span><span class="p">[</span><span class="s2">&quot;loss&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+    <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_true&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_true&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+    <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_pred&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;y_pred&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+    <span class="c1"># Store index</span>
+    <span class="n">ret</span><span class="p">[</span><span class="s2">&quot;idx&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">idx</span>
+
+    <span class="k">return</span> <span class="n">ret</span></div>
+
+
+
+<div class="viewcode-block" id="get_image_from_index">
+<a class="viewcode-back" href="../../../src.utils.html#src.utils.influence.get_image_from_index">[docs]</a>
+<span class="k">def</span> <span class="nf">get_image_from_index</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">dataloader</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given an image index, get their corresponding image.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    idx : int</span>
+<span class="sd">        Image index</span>
+<span class="sd">    dataloader : torch.utils.data.DataLoader</span>
+<span class="sd">        Arbitrary DataLoader</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of np.array</span>
+<span class="sd">        Each item() in the list is an image corresponding to the indices</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X_curr</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">dataloader</span><span class="o">.</span><span class="n">dataset</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+    <span class="n">img</span> <span class="o">=</span> <span class="mf">255.</span> <span class="o">*</span> <span class="n">X_curr</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">img</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

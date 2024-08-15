@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.scripts.collect_results &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.scripts.collect_results</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.scripts.collect_results</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">collect_results.py</span>
+
+<span class="sd">Description: Used to get metric results for eval. models of multiple experiments</span>
+<span class="sd">             from the `inference` directory, and place them in an ordered table.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">OrderedDict</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">from</span> <span class="nn">sklearn</span> <span class="kn">import</span> <span class="n">metrics</span> <span class="k">as</span> <span class="n">skmetrics</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.data_viz</span> <span class="kn">import</span> <span class="n">utils</span> <span class="k">as</span> <span class="n">viz_utils</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># Configure logging</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">LOGGER</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+
+<span class="c1"># Default evaluation sets to retrieve</span>
+<span class="n">DSETS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;stanford&quot;</span><span class="p">,</span> <span class="s2">&quot;uiowa&quot;</span><span class="p">,</span> <span class="s2">&quot;chop&quot;</span><span class="p">]</span>
+
+<span class="c1"># Default tasks to retrieve for</span>
+<span class="n">TASKS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;side&quot;</span><span class="p">,</span> <span class="s2">&quot;plane&quot;</span><span class="p">]</span>
+
+<span class="c1"># Default filename to save CSV as</span>
+<span class="n">DEFAULT_FNAME</span> <span class="o">=</span> <span class="s2">&quot;multiple_exp_summary.csv&quot;</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="create_eval_model_dir">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.create_eval_model_dir">[docs]</a>
+<span class="k">def</span> <span class="nf">create_eval_model_dir</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">dset</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given the experiment name and evaluation task, create the path to the</span>
+<span class="sd">    expected directory.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Name of experiment</span>
+<span class="sd">    task : str</span>
+<span class="sd">        Task (side/plane/None) to find models for</span>
+<span class="sd">    dset : str</span>
+<span class="sd">        Dataset split and/or external dataset evaluated on</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Full path to existing evaluation model directory</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Raise RuntimeError if `exp_name` does not contain (TASK)</span>
+    <span class="k">if</span> <span class="s2">&quot;(TASK)&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">exp_name</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Experiment name regex provided (</span><span class="si">%s</span><span class="s2">) does NOT &quot;</span>
+                           <span class="s2">&quot;contain expected (TASK) in name to fill-in with &quot;</span>
+                           <span class="s2">&quot;task&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">exp_name</span><span class="p">,))</span>
+
+    <span class="c1"># Fill-in with actual task name</span>
+    <span class="n">exp_name</span> <span class="o">=</span> <span class="n">exp_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;(TASK)&quot;</span><span class="p">,</span> <span class="n">task</span><span class="p">)</span>
+
+    <span class="c1"># If UIowa or CHOP, only look at predictions masking bladder</span>
+    <span class="k">if</span> <span class="n">dset</span> <span class="ow">in</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSETS_MISSING_BLADDER</span><span class="p">:</span>
+        <span class="n">exp_name</span> <span class="o">+=</span> <span class="s2">&quot;__mask_bladder&quot;</span>
+
+    <span class="c1"># Prepend `inference` directory path</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_INFERENCE</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">)</span>
+
+    <span class="c1"># Raise RuntimeError if created path does not exist</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Cannot find evaluation model inference directory! &quot;</span>
+                           <span class="s2">&quot;Failed eval. model: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">exp_name</span><span class="p">,))</span>
+
+    <span class="k">return</span> <span class="n">path</span></div>
+
+
+
+<div class="viewcode-block" id="prettify_metric">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.prettify_metric">[docs]</a>
+<span class="k">def</span> <span class="nf">prettify_metric</span><span class="p">(</span><span class="n">metric_str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given metric string of form: &quot;0.6921 (0.681, 0.791)&quot;, return the following</span>
+<span class="sd">    string: &quot;69.21 [68.1, 79.1]&quot;.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    metric_str : str</span>
+<span class="sd">        Metric string with confidence intervals</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Prettified metric string</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Replace parenthesis with brackets</span>
+    <span class="n">metric_str</span> <span class="o">=</span> <span class="n">metric_str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;(&quot;</span><span class="p">,</span> <span class="s2">&quot;[&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;)&quot;</span><span class="p">,</span> <span class="s2">&quot;]&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Early return, if metric doesn&#39;t contain confidence interval</span>
+    <span class="k">if</span> <span class="s2">&quot;[&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">metric_str</span> <span class="ow">and</span> <span class="s2">&quot;]&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">metric_str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">metric_str</span>
+
+    <span class="c1"># Extract values</span>
+    <span class="c1"># 1. Get the mean value</span>
+    <span class="n">mean</span><span class="p">,</span> <span class="n">rest</span> <span class="o">=</span> <span class="n">metric_str</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; [&quot;</span><span class="p">)</span>
+    <span class="c1"># 2. Get the lower bound</span>
+    <span class="n">lower</span><span class="p">,</span> <span class="n">rest</span> <span class="o">=</span> <span class="n">rest</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;, &quot;</span><span class="p">)</span>
+    <span class="c1"># 3. Get upper bound</span>
+    <span class="n">upper</span> <span class="o">=</span> <span class="n">rest</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;]&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">vals</span> <span class="o">=</span> <span class="p">[</span><span class="n">mean</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span><span class="p">]</span>
+
+    <span class="c1"># Convert to float values</span>
+    <span class="n">vals</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">float</span><span class="p">,</span> <span class="n">vals</span><span class="p">)</span>
+
+    <span class="c1"># Only multiply by 100 if it&#39;s less than 1</span>
+    <span class="n">cond_multiply</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="p">(</span><span class="n">x</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">x</span>
+    <span class="n">vals</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">cond_multiply</span><span class="p">,</span> <span class="n">vals</span><span class="p">)</span>
+
+    <span class="c1"># Reformat as string</span>
+    <span class="n">mean</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span> <span class="o">=</span> <span class="n">vals</span>
+    <span class="n">new_metric_str</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">mean</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> [</span><span class="si">{</span><span class="n">lower</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">upper</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">]&quot;</span>
+
+    <span class="k">return</span> <span class="n">new_metric_str</span></div>
+
+
+
+<div class="viewcode-block" id="get_eval_metrics">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.get_eval_metrics">[docs]</a>
+<span class="k">def</span> <span class="nf">get_eval_metrics</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">dsets</span><span class="o">=</span><span class="n">DSETS</span><span class="p">,</span> <span class="n">tasks</span><span class="o">=</span><span class="n">TASKS</span><span class="p">,</span> <span class="n">ignore_bladder</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get accuracy metrics for task-specific evaluation model, for the specified</span>
+<span class="sd">    experiment and evaluation datasets.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Name of experiment</span>
+<span class="sd">    dsets : list, optional</span>
+<span class="sd">        Dataset splits and/or external datasets evaluated on, by default DSETS</span>
+<span class="sd">    tasks : list, optional</span>
+<span class="sd">        List of tasks (side/plane/None) to find models for, by default TASKS</span>
+<span class="sd">    ignore_bladder : bool, optional</span>
+<span class="sd">        If True, specify to ignore the images labeled as Bladder (if possible)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Row corresponding to evaluation datasets for 1 experiment</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Accumulate metrics for each dset</span>
+    <span class="n">metrics_per_dset</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dset</span> <span class="ow">in</span> <span class="n">dsets</span><span class="p">:</span>
+        <span class="n">dset_metrics</span> <span class="o">=</span> <span class="n">OrderedDict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">:</span>
+            <span class="c1"># Get path to model eval. directory</span>
+            <span class="n">eval_model_dir</span> <span class="o">=</span> <span class="n">create_eval_model_dir</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">dset</span><span class="p">)</span>
+
+            <span class="c1"># Load metrics file for dset</span>
+            <span class="n">metrics_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">eval_model_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">_metrics.csv&quot;</span><span class="p">)</span>
+            <span class="n">df_metrics</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">metrics_path</span><span class="p">,</span> <span class="n">index_col</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="c1"># Specify column to get from</span>
+            <span class="c1"># NOTE: Column specifies subset of images to get metrics from</span>
+            <span class="n">col</span> <span class="o">=</span> <span class="s2">&quot;All&quot;</span>
+            <span class="k">if</span> <span class="n">ignore_bladder</span> <span class="ow">and</span> <span class="s2">&quot;Without Bladder&quot;</span> <span class="ow">in</span> <span class="n">df_metrics</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                <span class="n">col</span> <span class="o">=</span> <span class="s2">&quot;Without Bladder&quot;</span>
+
+            <span class="c1"># Get metric of interest</span>
+            <span class="n">metric_str</span> <span class="o">=</span> <span class="n">df_metrics</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s2">&quot;Overall Accuracy&quot;</span><span class="p">,</span> <span class="n">col</span><span class="p">]</span>
+
+            <span class="c1"># Clean up metric</span>
+            <span class="n">metric_str</span> <span class="o">=</span> <span class="n">prettify_metric</span><span class="p">(</span><span class="n">metric_str</span><span class="p">)</span>
+
+            <span class="c1"># Store data</span>
+            <span class="n">dset_metrics</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">task</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metric_str</span>
+        <span class="n">metrics_per_dset</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">dset_metrics</span><span class="p">))</span>
+
+    <span class="c1"># Add experiment name</span>
+    <span class="n">stored_exp_name</span> <span class="o">=</span> <span class="n">exp_name</span> <span class="k">if</span> <span class="n">exp_name</span> <span class="o">!=</span> <span class="s2">&quot;|&quot;</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">metrics_per_dset</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">({</span><span class="s2">&quot;exp_name&quot;</span><span class="p">:</span> <span class="n">stored_exp_name</span><span class="p">}))</span>
+
+    <span class="c1"># Concatenate results</span>
+    <span class="n">metric_ser</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">metrics_per_dset</span><span class="p">)</span>
+
+    <span class="c1"># Transpose to create dataframe row</span>
+    <span class="n">metric_row</span> <span class="o">=</span> <span class="n">metric_ser</span><span class="o">.</span><span class="n">to_frame</span><span class="p">()</span><span class="o">.</span><span class="n">T</span>
+
+    <span class="k">return</span> <span class="n">metric_row</span></div>
+
+
+
+<div class="viewcode-block" id="add_space_between_dsets">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.add_space_between_dsets">[docs]</a>
+<span class="k">def</span> <span class="nf">add_space_between_dsets</span><span class="p">(</span><span class="n">df_metrics</span><span class="p">,</span> <span class="n">dsets</span><span class="o">=</span><span class="n">DSETS</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Add column of space between metrics from different dsets</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metrics : pd.DataFrame</span>
+<span class="sd">        Each row contains evaluation metrics for multiple datasets for the same</span>
+<span class="sd">        experiment</span>
+<span class="sd">    dsets : list, optional</span>
+<span class="sd">        Evaluation datasets stored</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Metrics table with added space between columns of different datasets</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create copy to avoid overwriting</span>
+    <span class="n">df_metrics</span> <span class="o">=</span> <span class="n">df_metrics</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Expected number of columns after adding spacers</span>
+    <span class="n">future_n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_metrics</span><span class="o">.</span><span class="n">columns</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">dsets</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">col_idx</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">curr_dset</span> <span class="o">=</span> <span class="s2">&quot;NOT_EXISTS&quot;</span>
+    <span class="k">while</span> <span class="n">col_idx</span> <span class="o">&lt;</span> <span class="n">future_n</span><span class="p">:</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="n">df_metrics</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="c1"># If same dset, skip</span>
+        <span class="k">if</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="n">curr_dset</span> \
+                <span class="ow">or</span> <span class="n">col_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">col_idx</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">continue</span>
+        <span class="c1"># If last is the `exp_name`, skip</span>
+        <span class="k">if</span> <span class="n">columns</span><span class="p">[</span><span class="n">col_idx</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;exp_name&quot;</span><span class="p">:</span>
+            <span class="n">curr_dset</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">col_idx</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># Otherwise, add column spacer</span>
+        <span class="n">spacer_col</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_metrics</span><span class="p">)})</span>
+        <span class="n">df_metrics</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span>
+            <span class="n">df_metrics</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="n">col_idx</span><span class="p">],</span>
+            <span class="n">spacer_col</span><span class="p">,</span>
+            <span class="n">df_metrics</span><span class="o">.</span><span class="n">iloc</span><span class="p">[:,</span> <span class="n">col_idx</span><span class="p">:]],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># New dataset</span>
+        <span class="n">curr_dset</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="n">col_idx</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="c1"># NOTE: Need to skip added spacer column</span>
+        <span class="n">col_idx</span> <span class="o">+=</span> <span class="mi">2</span>
+
+    <span class="k">return</span> <span class="n">df_metrics</span></div>
+
+
+
+<div class="viewcode-block" id="parse_prettified_metric_col">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.parse_prettified_metric_col">[docs]</a>
+<span class="k">def</span> <span class="nf">parse_prettified_metric_col</span><span class="p">(</span><span class="n">metric_col</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a (prettified) metric column, extract the mean metric value, lower CI</span>
+<span class="sd">    and upper CI values.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    metric_col : pd.Series, np.array, list</span>
+<span class="sd">        Metric string column of the form: &quot;MEAN [LOWER, UPPER]&quot;</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (np.array, np.array, np.array)</span>
+<span class="sd">        List of MEAN, list of LOWER CI and list of UPPER CI values</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Convert to list</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">metric_col</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">):</span>
+        <span class="n">metric_col</span> <span class="o">=</span> <span class="n">metric_col</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">vals</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">metric_col</span><span class="p">)</span>
+
+    <span class="c1"># Extract values</span>
+    <span class="n">mean</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">vals</span><span class="p">:</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;(.*) \[(.*), (.*)\]&quot;</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span>
+        <span class="c1"># Raise error, if invalid formatted string found</span>
+        <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Invalid formatted string in metric column!&quot;</span><span class="p">)</span>
+
+        <span class="n">mean</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">lower</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+        <span class="n">upper</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+
+    <span class="c1"># Convert to numeric arrays</span>
+    <span class="n">mean</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">mean</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">lower</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">upper</span><span class="p">)</span>
+
+    <span class="n">mean</span> <span class="o">=</span> <span class="n">mean</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">lower</span> <span class="o">=</span> <span class="n">lower</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">upper</span> <span class="o">=</span> <span class="n">upper</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">mean</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span></div>
+
+
+
+<div class="viewcode-block" id="parse_all_prettified_metric_cols">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.parse_all_prettified_metric_cols">[docs]</a>
+<span class="k">def</span> <span class="nf">parse_all_prettified_metric_cols</span><span class="p">(</span><span class="n">df_prettified_metrics</span><span class="p">,</span> <span class="n">task</span><span class="o">=</span><span class="s2">&quot;plane&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given metrics for 1+ models on 1+ eval. datasets only for the given task,</span>
+<span class="sd">    and set index to experiment name.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_prettified_metrics : pd.DataFrame</span>
+<span class="sd">        Each row is a distinct model with a string metric column for each</span>
+<span class="sd">        dataset evaluated on.</span>
+<span class="sd">    task : str, optional</span>
+<span class="sd">        Prediction task (side/plane). Corresponding metric columns end with</span>
+<span class="sd">        &quot;_TASK&quot;, by default &quot;plane&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Each row is for a unique model and contains its performance metrics on</span>
+<span class="sd">        each eval. dataset. And the rows are indexed by experiment name.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create copy and set index to experiment name</span>
+    <span class="c1"># NOTE: Treated as model name</span>
+    <span class="n">df_prettified_metrics</span> <span class="o">=</span> <span class="n">df_prettified_metrics</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">df_prettified_metrics</span> <span class="o">=</span> <span class="n">df_prettified_metrics</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;exp_name&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Extract metric columns and eval. dataset names</span>
+    <span class="n">metric_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df_prettified_metrics</span><span class="o">.</span><span class="n">columns</span>
+                   <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;_</span><span class="si">{</span><span class="n">task</span><span class="si">}</span><span class="s2">&quot;</span> <span class="ow">in</span> <span class="n">col</span><span class="p">]</span>
+    <span class="n">dsets</span> <span class="o">=</span> <span class="p">[</span><span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">rf</span><span class="s2">&quot;(.*)_</span><span class="si">{</span><span class="n">task</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">col</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">metric_cols</span><span class="p">]</span>
+
+    <span class="c1"># Filter for metric columns and non-NA rows</span>
+    <span class="n">df_prettified_metrics</span> <span class="o">=</span> <span class="n">df_prettified_metrics</span><span class="p">[</span><span class="n">metric_cols</span><span class="p">]</span>
+    <span class="n">df_prettified_metrics</span> <span class="o">=</span> <span class="n">df_prettified_metrics</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;^\s*$&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span>
+                                                          <span class="n">regex</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">df_prettified_metrics</span> <span class="o">=</span> <span class="n">df_prettified_metrics</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">df_prettified_metrics</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                        Analysis on Collected Metrics                         #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="barplot_all_models">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.barplot_all_models">[docs]</a>
+<span class="k">def</span> <span class="nf">barplot_all_models</span><span class="p">(</span><span class="n">prettified_metrics</span><span class="p">,</span> <span class="n">ylabel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ax</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create a barplot of metrics with all models for ONE hospital.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    prettified_metrics : pd.Series</span>
+<span class="sd">        Each row is a distinct model with ONE string metric column</span>
+<span class="sd">        evaluated on one hospital for a particular label type. Indexed by model</span>
+<span class="sd">        name.</span>
+<span class="sd">    ylabel : str, optional</span>
+<span class="sd">        Label of y-axis, by default None.</span>
+<span class="sd">    ax : matplotlib.pyplot.Axis, optional</span>
+<span class="sd">        If provided, draw plot into this Axis instead of creating a new Axis, by</span>
+<span class="sd">        default None.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    matplotlib.pyplot.Axis.axis</span>
+<span class="sd">        Grouped bar plot with custom confidence intervals</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Raise error, if Series is not provided</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prettified_metrics</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Invalid input! Please provide Series to function..&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Parse out mean, lower and upper CI values</span>
+    <span class="n">mean</span><span class="p">,</span> <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span> <span class="o">=</span> <span class="n">parse_prettified_metric_col</span><span class="p">(</span><span class="n">prettified_metrics</span><span class="p">)</span>
+
+    <span class="c1"># Place back into table format</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+        <span class="s2">&quot;Accuracy&quot;</span><span class="p">:</span> <span class="n">mean</span><span class="p">,</span>
+        <span class="s2">&quot;Accuracy_5&quot;</span><span class="p">:</span> <span class="n">lower</span><span class="p">,</span>
+        <span class="s2">&quot;Accuracy_95&quot;</span><span class="p">:</span> <span class="n">upper</span><span class="p">,</span>
+    <span class="p">})</span>
+
+    <span class="c1"># Convert to decimals</span>
+    <span class="n">df</span><span class="p">[:]</span> <span class="o">*=</span> <span class="mf">0.01</span>
+
+    <span class="c1"># Calculate delta for CI</span>
+    <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Accuracy_5_delta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Accuracy_5&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Accuracy&quot;</span><span class="p">]</span>
+    <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Accuracy_95_delta&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Accuracy_95&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Accuracy&quot;</span><span class="p">]</span>
+
+    <span class="c1"># Reindex by model name</span>
+    <span class="n">df</span><span class="p">[</span><span class="s2">&quot;Model&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">prettified_metrics</span><span class="o">.</span><span class="n">index</span>
+
+    <span class="c1"># Create figure, if not provided</span>
+    <span class="k">if</span> <span class="n">ax</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">()</span>
+
+    <span class="c1"># Create bar plot with CI</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">bar</span><span class="p">(</span>
+        <span class="n">data</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+        <span class="n">x</span><span class="o">=</span><span class="s2">&quot;Model&quot;</span><span class="p">,</span>
+        <span class="n">height</span><span class="o">=</span><span class="s2">&quot;Accuracy&quot;</span><span class="p">,</span>
+        <span class="n">yerr</span><span class="o">=</span><span class="nb">abs</span><span class="p">(</span><span class="n">df</span><span class="p">[[</span><span class="s2">&quot;Accuracy_5_delta&quot;</span><span class="p">,</span> <span class="s2">&quot;Accuracy_95_delta&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">),</span>
+        <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+        <span class="n">capsize</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Set limits</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mf">0.25</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Add grid background</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">set_axisbelow</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">ax</span><span class="o">.</span><span class="n">yaxis</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">color</span><span class="o">=</span><span class="s2">&quot;gray&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">)</span>
+
+    <span class="c1"># Set y-axis label</span>
+    <span class="k">if</span> <span class="n">ylabel</span><span class="p">:</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">ylabel</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="mi">25</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ax</span></div>
+
+
+
+<div class="viewcode-block" id="plot_all_models_on_dsets">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.plot_all_models_on_dsets">[docs]</a>
+<span class="k">def</span> <span class="nf">plot_all_models_on_dsets</span><span class="p">(</span><span class="n">df_metrics</span><span class="p">,</span> <span class="n">task</span><span class="o">=</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span>
+                             <span class="n">save</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                             <span class="n">save_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                             <span class="n">fname</span><span class="o">=</span><span class="s2">&quot;barplot.png&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    For each eval. dataset, create a barplot of performance metrics for all</span>
+<span class="sd">    models.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metrics : pd.DataFrame</span>
+<span class="sd">        Each row is a distinct model with a string metric column for each</span>
+<span class="sd">        dataset evaluated on.</span>
+<span class="sd">    task : str, optional</span>
+<span class="sd">        Prediction task (side/plane). Corresponding metric columns end with</span>
+<span class="sd">        &quot;_TASK&quot;, by default &quot;plane&quot;.</span>
+<span class="sd">    save : bool, optional</span>
+<span class="sd">        If True, save plot to file, by default False.</span>
+<span class="sd">    save_dir : str, optional</span>
+<span class="sd">        Directory to save plot in, working directory by default.</span>
+<span class="sd">    fname : str, optional</span>
+<span class="sd">        Filename to save plot as, by default &#39;barplot.png&#39;</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    matplotlib.pyplot.Axis.axis</span>
+<span class="sd">        Grouped bar plot with custom confidence intervals</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">task</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="c1"># Create plots</span>
+    <span class="n">cols</span> <span class="o">=</span> <span class="n">df_metrics</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">fig</span><span class="p">,</span> <span class="n">axs</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span>
+        <span class="n">nrows</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">cols</span><span class="p">),</span> <span class="n">ncols</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">sharex</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">sharey</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+
+    <span class="c1"># Create bar plot for each eval. dataset</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">col</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cols</span><span class="p">):</span>
+        <span class="c1"># NOTE: Make dataset name the title for each plot</span>
+        <span class="n">dset</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="sa">rf</span><span class="s2">&quot;(.*)_</span><span class="si">{</span><span class="n">task</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">col</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">barplot_all_models</span><span class="p">(</span>
+            <span class="n">df_metrics</span><span class="p">[</span><span class="n">col</span><span class="p">],</span>
+            <span class="n">ylabel</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+            <span class="n">ax</span><span class="o">=</span><span class="n">axs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Configure space between subplots</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">wspace</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">hspace</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+    <span class="c1"># Rotate x and y labels</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">xticks</span><span class="p">(</span><span class="n">rotation</span><span class="o">=</span><span class="mi">90</span><span class="p">)</span>
+
+    <span class="c1"># Figure x-axis and y-axis labels</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">supxlabel</span><span class="p">(</span><span class="s2">&quot;Model&quot;</span><span class="p">)</span>
+    <span class="n">fig</span><span class="o">.</span><span class="n">supylabel</span><span class="p">(</span><span class="s2">&quot;Model Accuracies for Each Dataset&quot;</span><span class="p">)</span>
+
+    <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+
+    <span class="c1"># Save plot</span>
+    <span class="k">if</span> <span class="n">save</span><span class="p">:</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">save_dir</span><span class="p">,</span> <span class="n">fname</span><span class="p">)</span> <span class="k">if</span> <span class="n">save_dir</span> <span class="k">else</span> <span class="n">fname</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="compute_r2_scores_between_dsets">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.compute_r2_scores_between_dsets">[docs]</a>
+<span class="k">def</span> <span class="nf">compute_r2_scores_between_dsets</span><span class="p">(</span><span class="n">df_metrics</span><span class="p">,</span> <span class="n">task</span><span class="o">=</span><span class="s2">&quot;plane&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute R2 scores on model performance between evaluation datasets.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    This is to see if good model performance on 1 dataset implies good model</span>
+<span class="sd">    performance on other datasets.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metrics : pd.DataFrame</span>
+<span class="sd">        Each row is a distinct model with a string metric column for each</span>
+<span class="sd">        dataset evaluated on.</span>
+<span class="sd">    task : str, optional</span>
+<span class="sd">        Prediction task (side/plane). Corresponding metric columns end with</span>
+<span class="sd">        &quot;_TASK&quot;, by default &quot;plane&quot;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Parameters</span>
+    <span class="c1"># 1. `src_dset`: Dataset to compare against all dataset performance</span>
+    <span class="c1"># 2. `dst_dsets`: Datasets to compare against source dataset</span>
+    <span class="n">src_dset</span> <span class="o">=</span> <span class="s2">&quot;stanford&quot;</span>
+    <span class="n">dst_dsets</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;stanford_image&quot;</span><span class="p">,</span> <span class="s2">&quot;uiowa&quot;</span><span class="p">,</span> <span class="s2">&quot;chop&quot;</span><span class="p">]</span>
+
+    <span class="n">cols</span> <span class="o">=</span> <span class="n">df_metrics</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+    <span class="c1"># Compute R2 score for each distinct pair</span>
+    <span class="k">for</span> <span class="n">dst_dset</span> <span class="ow">in</span> <span class="n">dst_dsets</span><span class="p">:</span>
+        <span class="n">src_col</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">src_dset</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">task</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">dst_col</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dst_dset</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">task</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="c1"># Early continue, if eval. dsets not found</span>
+        <span class="k">if</span> <span class="n">src_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cols</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Metric column for dataset `</span><span class="si">{</span><span class="n">src_dset</span><span class="si">}</span><span class="s2">` not found!&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">dst_col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cols</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Metric column for dataset `</span><span class="si">{</span><span class="n">dst_dset</span><span class="si">}</span><span class="s2">` not found!&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># Get only mean metric value for each dataset of interest</span>
+        <span class="n">src_metrics</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">parse_prettified_metric_col</span><span class="p">(</span><span class="n">df_metrics</span><span class="p">[</span><span class="n">src_col</span><span class="p">])</span>
+        <span class="n">dst_metrics</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">parse_prettified_metric_col</span><span class="p">(</span><span class="n">df_metrics</span><span class="p">[</span><span class="n">dst_col</span><span class="p">])</span>
+
+        <span class="c1"># Compute R2 score        </span>
+        <span class="n">score</span> <span class="o">=</span> <span class="n">skmetrics</span><span class="o">.</span><span class="n">r2_score</span><span class="p">(</span><span class="n">src_metrics</span><span class="p">,</span> <span class="n">dst_metrics</span><span class="p">)</span>
+
+        <span class="c1"># Print R2 score to console</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">            ##########################################</span>
+<span class="s2">              Datasets: </span><span class="si">{</span><span class="n">src_dset</span><span class="si">}</span><span class="s2"> &amp; </span><span class="si">{</span><span class="n">dst_dset</span><span class="si">}</span>
+<span class="s2">              R2 Score on Model Metrics: </span><span class="si">{</span><span class="n">score</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span></div>
+
+<span class="s2">            ##########################################&quot;&quot;&quot;</span><span class="p">)</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                Main Functions                                #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="init">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.init">[docs]</a>
+<span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="n">parser</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialize ArgumentParser object.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parser : argparse.ArgumentParser</span>
+<span class="sd">        ArgumentParser object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Descriptions for each argument</span>
+    <span class="n">arg_help</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;exp_name&quot;</span><span class="p">:</span> <span class="s2">&quot;Experiment name to find results for, with location to &quot;</span>
+                    <span class="s2">&quot;replace task. Example: &quot;</span>
+                    <span class="s2">&quot;&#39;supervised_linear_lstm_(TASK)__from_imagenet&#39;&quot;</span>
+                    <span class="s2">&quot;Providing &#39;|&#39; symbolizes row space.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dset&quot;</span><span class="p">:</span> <span class="s2">&quot;List of dataset split or test dataset name to evaluate&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;task&quot;</span><span class="p">:</span> <span class="s2">&quot;Tasks whose evaluation models to look for (side/plane/None)&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ignore_bladder&quot;</span><span class="p">:</span> <span class="s2">&quot;If True, get metrics computed only on non-Bladder &quot;</span>
+                          <span class="s2">&quot;images.&quot;</span><span class="p">,</span>
+
+        <span class="c1"># Plotting</span>
+        <span class="s2">&quot;barplot&quot;</span><span class="p">:</span> <span class="s2">&quot;If True, create bar plot with all results&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;plotname&quot;</span><span class="p">:</span> <span class="s2">&quot;Name of plot, by default &#39;barplot.png&#39;&quot;</span><span class="p">,</span>
+
+        <span class="c1"># Saving</span>
+        <span class="s2">&quot;save_dir&quot;</span><span class="p">:</span> <span class="s2">&quot;Path to directory to save created file/s in&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;fname&quot;</span><span class="p">:</span> <span class="s2">&quot;Filename of CSV to save gathered results to&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="c1"># Add arguments</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--exp_name&quot;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;exp_name&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--dset&quot;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">default</span><span class="o">=</span><span class="n">DSETS</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--task&quot;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">default</span><span class="o">=</span><span class="n">TASKS</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;task&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--ignore_bladder&quot;</span><span class="p">,</span>
+                        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                        <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store_true&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;ignore_bladder&quot;</span><span class="p">])</span>
+
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--barplot&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;store_true&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;barplot&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--plotname&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;barplot.png&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;plotname&quot;</span><span class="p">])</span>
+
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--save_dir&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+                        <span class="n">default</span><span class="o">=</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_INFERENCE</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;save_dir&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--fname&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+                        <span class="n">default</span><span class="o">=</span><span class="n">DEFAULT_FNAME</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;fname&quot;</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.collect_results.main">[docs]</a>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Perform the following:</span>
+<span class="sd">        (1) Get results of evaluation models for each experiment, and</span>
+<span class="sd">        (2) Store them in a CSV file</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    args : argparser.Namespace</span>
+<span class="sd">        Parsed arguments</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get evaluation metrics for each experiment</span>
+    <span class="n">exp_names</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">exp_name</span>
+    <span class="n">metric_rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">exp_name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">exp_names</span><span class="p">):</span>
+        <span class="c1"># Check if row space is desired</span>
+        <span class="k">if</span> <span class="n">exp_name</span> <span class="o">==</span> <span class="s2">&quot;|&quot;</span><span class="p">:</span>
+            <span class="n">metric_row</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;exp_name&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;&quot;</span><span class="p">]})</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">metric_row</span> <span class="o">=</span> <span class="n">get_eval_metrics</span><span class="p">(</span>
+                <span class="n">exp_name</span><span class="p">,</span>
+                <span class="n">dsets</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">dset</span><span class="p">,</span>
+                <span class="n">tasks</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">task</span><span class="p">,</span>
+                <span class="n">ignore_bladder</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">ignore_bladder</span><span class="p">)</span>
+
+        <span class="c1"># Accumulate</span>
+        <span class="n">metric_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">metric_row</span><span class="p">)</span>
+
+    <span class="c1"># Concatenate results</span>
+    <span class="n">df_metrics</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">metric_rows</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Add spacer between dset metrics</span>
+    <span class="n">df_metrics</span> <span class="o">=</span> <span class="n">add_space_between_dsets</span><span class="p">(</span><span class="n">df_metrics</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dset</span><span class="p">)</span>
+
+    <span class="c1"># Fill missing with empty string</span>
+    <span class="n">df_metrics</span> <span class="o">=</span> <span class="n">df_metrics</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Save to file path</span>
+    <span class="n">save_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">save_dir</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">fname</span><span class="p">)</span>
+    <span class="n">df_metrics</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                    Analysis on Collected Metrics                         #</span>
+    <span class="c1">############################################################################</span>
+    <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">args</span><span class="o">.</span><span class="n">task</span><span class="p">:</span>
+        <span class="c1"># Extract numeric values from prettified string metric columns</span>
+        <span class="n">df_prettified_metrics</span> <span class="o">=</span> <span class="n">parse_all_prettified_metric_cols</span><span class="p">(</span>
+            <span class="n">df_metrics</span><span class="p">,</span> <span class="n">task</span><span class="p">)</span>
+
+        <span class="c1"># Look at R2 score</span>
+        <span class="c1"># NOTE: This function required manual intervention</span>
+        <span class="n">compute_r2_scores_between_dsets</span><span class="p">(</span><span class="n">df_prettified_metrics</span><span class="p">,</span> <span class="n">task</span><span class="p">)</span>
+
+        <span class="c1"># Create plot</span>
+        <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">barplot</span><span class="p">:</span>
+            <span class="n">plot_all_models_on_dsets</span><span class="p">(</span>
+                <span class="n">df_prettified_metrics</span><span class="p">,</span>
+                <span class="n">save</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">save_dir</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">save_dir</span><span class="p">,</span>
+                <span class="n">fname</span><span class="o">=</span><span class="n">args</span><span class="o">.</span><span class="n">plotname</span><span class="p">,</span>
+                <span class="n">task</span><span class="o">=</span><span class="n">task</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="c1"># 0. Initialize ArgumentParser</span>
+    <span class="n">PARSER</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">init</span><span class="p">(</span><span class="n">PARSER</span><span class="p">)</span>
+
+    <span class="c1"># 1. Get arguments</span>
+    <span class="n">ARGS</span> <span class="o">=</span> <span class="n">PARSER</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+    <span class="c1"># 2. Format results</span>
+    <span class="n">main</span><span class="p">(</span><span class="n">ARGS</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

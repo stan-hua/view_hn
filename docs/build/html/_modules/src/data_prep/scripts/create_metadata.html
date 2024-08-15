@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.data_prep.scripts.create_metadata &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.data_prep.scripts.create_metadata</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.data_prep.scripts.create_metadata</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Script to create metadata file for UIowa and CHOP for view labeling</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">fire</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.data_prep</span> <span class="kn">import</span> <span class="n">utils</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># Originating source data directory</span>
+<span class="n">SRC_DIR_UIOWA_DATA</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_DATA</span><span class="p">),</span> <span class="s2">&quot;UIowa&quot;</span><span class="p">)</span>
+
+<span class="c1"># Video/image dataset names</span>
+<span class="n">VIDEO_DSETS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;sickkids&quot;</span><span class="p">,</span> <span class="s2">&quot;stanford&quot;</span><span class="p">)</span>
+<span class="n">IMAGE_DSETS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;sickkids_silent_trial&quot;</span><span class="p">,</span> <span class="s2">&quot;stanford_image&quot;</span><span class="p">,</span> <span class="s2">&quot;uiowa&quot;</span><span class="p">,</span> <span class="s2">&quot;chop&quot;</span><span class="p">)</span>
+
+<span class="c1"># Label columns</span>
+<span class="n">LABEL_COLS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">]</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                      Creating &quot;Raw&quot; Metadata Functions                       #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="create_chop_metadata">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_chop_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">create_chop_metadata</span><span class="p">(</span><span class="n">dir_data</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Based on folder structure and image names, create metadata table with</span>
+<span class="sd">    relative image paths.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dir_data : str</span>
+<span class="sd">        Path to CHOP folder</span>
+<span class="sd">    save_path : str, optional</span>
+<span class="sd">        If provided, save metadata table to file path</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Metadata table containing `filename`, `label`, `id`, `visit` and</span>
+<span class="sd">        `seq_number`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Label mapping</span>
+    <span class="n">label_map</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;TRAN_L&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse_Left&quot;</span><span class="p">,</span> <span class="s2">&quot;SAG_L&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Left&quot;</span><span class="p">,</span>
+                 <span class="s2">&quot;TRAN_R&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse_Right&quot;</span><span class="p">,</span> <span class="s2">&quot;SAG_R&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Right&quot;</span><span class="p">}</span>
+
+    <span class="c1"># Get filenames of all viable images</span>
+    <span class="n">fname_regex</span> <span class="o">=</span> <span class="s2">&quot;(.*)_(SAG|TRAN)_(L|R)_cropped-preprocessed\.png&quot;</span>
+    <span class="n">img_fnames</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">dir_data</span><span class="p">)</span>
+                  <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">fname_regex</span><span class="p">,</span> <span class="n">path</span><span class="p">)]</span>
+
+    <span class="c1"># Since images are single-visit, all visits and sequence numbers will be 0</span>
+    <span class="n">visit</span> <span class="o">=</span> <span class="s2">&quot;0&quot;</span>
+    <span class="n">sequence_number</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># Accumulate metadata for each image</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">img_fname</span> <span class="ow">in</span> <span class="n">img_fnames</span><span class="p">:</span>
+        <span class="c1"># Split filename into parts</span>
+        <span class="n">fname_parts</span> <span class="o">=</span> <span class="n">img_fname</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Get patient ID</span>
+        <span class="n">patient_id</span> <span class="o">=</span> <span class="n">fname_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Get view label</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">fname_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">])</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">label_map</span><span class="p">[</span><span class="n">label</span><span class="p">]</span>
+
+        <span class="c1"># Create metadata row</span>
+        <span class="n">img_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+            <span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">img_fname</span><span class="p">],</span>
+            <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">label</span><span class="p">],</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">patient_id</span><span class="p">],</span>
+            <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">visit</span><span class="p">],</span>
+            <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">sequence_number</span><span class="p">],</span>
+        <span class="p">})</span>
+
+        <span class="c1"># Store metadata</span>
+        <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">img_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Combine metadata rows</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Save metadata to location</span>
+    <span class="k">if</span> <span class="n">save_path</span><span class="p">:</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="create_uiowa_metadata_from_src">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_uiowa_metadata_from_src">[docs]</a>
+<span class="k">def</span> <span class="nf">create_uiowa_metadata_from_src</span><span class="p">(</span><span class="n">dir_data</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Based on folder structure and image names, create metadata table with</span>
+<span class="sd">    relative image paths.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dir_data : str</span>
+<span class="sd">        Path to UIowa folder</span>
+<span class="sd">    save_path : str, optional</span>
+<span class="sd">        If provided, save metadata table to file path</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Metadata table containing `filename`, `label`, `id`, `visit` and</span>
+<span class="sd">        `seq_number`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># List of possible filenames for UIowa images</span>
+    <span class="n">possible_fnames</span> <span class="o">=</span> <span class="nb">set</span><span class="p">([</span><span class="s2">&quot;LT_cropped.png&quot;</span><span class="p">,</span> <span class="s2">&quot;LS_cropped.png&quot;</span><span class="p">,</span>
+                           <span class="s2">&quot;RT_cropped.png&quot;</span><span class="p">,</span> <span class="s2">&quot;RS_cropped.png&quot;</span><span class="p">])</span>
+
+    <span class="c1"># Label mapping</span>
+    <span class="n">label_map</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;LT&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse_Left&quot;</span><span class="p">,</span> <span class="s2">&quot;LS&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Left&quot;</span><span class="p">,</span>
+                 <span class="s2">&quot;RT&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse_Right&quot;</span><span class="p">,</span> <span class="s2">&quot;RS&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Right&quot;</span><span class="p">}</span>
+
+    <span class="c1"># Get folders for each patient</span>
+    <span class="n">patient_folders</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dir_data</span><span class="p">,</span> <span class="s2">&quot;C*&quot;</span><span class="p">))</span>
+    <span class="n">patient_folders</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dir_data</span><span class="p">,</span> <span class="s2">&quot;O*&quot;</span><span class="p">)))</span>
+
+    <span class="c1"># Since images are single-visit, all visits and sequence numbers will be 0</span>
+    <span class="n">visit</span> <span class="o">=</span> <span class="s2">&quot;0&quot;</span>
+    <span class="n">sequence_number</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># Accumulate metadata for each image</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="n">patient_folders</span><span class="p">:</span>
+        <span class="c1"># Get patient ID from sub-folder name</span>
+        <span class="n">patient_id</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span>
+
+        <span class="c1"># Get filenames of valid images</span>
+        <span class="n">existing_img_fnames</span> <span class="o">=</span> <span class="p">[</span><span class="n">fname</span> <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span>
+                              <span class="k">if</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">possible_fnames</span><span class="p">]</span>
+
+        <span class="c1"># Store metadata for each image</span>
+        <span class="k">for</span> <span class="n">img_fname</span> <span class="ow">in</span> <span class="n">existing_img_fnames</span><span class="p">:</span>
+            <span class="c1"># Get view label from filename</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">img_fname</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">label_map</span><span class="p">[</span><span class="n">label</span><span class="p">]</span>
+
+            <span class="c1"># Create relative path to image</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="n">patient_id</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">img_fname</span>
+
+            <span class="c1"># Create metadata row</span>
+            <span class="n">img_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+                <span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">filename</span><span class="p">],</span>
+                <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">label</span><span class="p">],</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">patient_id</span><span class="p">],</span>
+                <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">visit</span><span class="p">],</span>
+                <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">sequence_number</span><span class="p">],</span>
+            <span class="p">})</span>
+
+            <span class="c1"># Store metadata</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">img_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Combine metadata rows</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Save metadata to location</span>
+    <span class="k">if</span> <span class="n">save_path</span><span class="p">:</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="preprocess_uiowa_data">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.preprocess_uiowa_data">[docs]</a>
+<span class="k">def</span> <span class="nf">preprocess_uiowa_data</span><span class="p">(</span><span class="n">src_dir</span><span class="o">=</span><span class="n">SRC_DIR_UIOWA_DATA</span><span class="p">,</span>
+                          <span class="n">dst_dir</span><span class="o">=</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_IMG_SUBDIR_FULL</span><span class="p">[</span><span class="s2">&quot;uiowa&quot;</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Preprocesses UIowa Data and places it into the ViewLabeling data directory.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    src_dir : str, optional</span>
+<span class="sd">        Source directory containined nested data, by default</span>
+<span class="sd">        SRC_DIR_UIOWA_DATA</span>
+<span class="sd">    dst_dir : str, optional</span>
+<span class="sd">        Destination directory to store preprocessed images, where patient ID</span>
+<span class="sd">        is prepended to the original filename, by default</span>
+<span class="sd">        constants.DSET_TO_IMG_SUBDIR_FULL[&quot;uiowa&quot;]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create metadata for src directory</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">create_uiowa_metadata_from_src</span><span class="p">(</span><span class="n">src_dir</span><span class="p">)</span>
+
+    <span class="c1"># Create new filename</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;old_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Make full path to source images</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;old_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;old_path&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">src_dir</span><span class="p">,</span> <span class="n">x</span><span class="p">))</span>
+
+    <span class="k">for</span> <span class="n">old_path</span><span class="p">,</span> <span class="n">new_fname</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">[[</span><span class="s2">&quot;old_path&quot;</span><span class="p">,</span> <span class="s2">&quot;filename&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">itertuples</span><span class="p">(</span>
+            <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">)):</span>
+        <span class="c1"># Preprocess image</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">old_path</span><span class="p">)</span>
+        <span class="n">processed_img</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">preprocess_image</span><span class="p">(</span>
+            <span class="n">img</span><span class="p">,</span>
+            <span class="n">resize_dims</span><span class="o">=</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+            <span class="n">ignore_crop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Save image to specified directory</span>
+        <span class="n">new_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dst_dir</span><span class="p">,</span> <span class="n">new_fname</span><span class="p">)</span>
+        <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">new_path</span><span class="p">,</span> <span class="n">processed_img</span><span class="p">)</span>
+
+    <span class="c1"># Drop old filename</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;old_path&quot;</span><span class="p">])</span>
+
+    <span class="c1"># Save metadata</span>
+    <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;uiowa&quot;</span><span class="p">],</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="create_stanford_image_metadata">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_stanford_image_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">create_stanford_image_metadata</span><span class="p">(</span><span class="n">dir_data</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Based on folder structure and image names, create metadata table with</span>
+<span class="sd">    relative image paths.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dir_data : str</span>
+<span class="sd">        Path to Stanford Non-Sequence folder</span>
+<span class="sd">    save_path : str, optional</span>
+<span class="sd">        If provided, save metadata table to file path</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Metadata table containing `filename`, `label`, `id`, `visit` and</span>
+<span class="sd">        `seq_number`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Label mapping</span>
+    <span class="n">label_map</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;LT&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse_Left&quot;</span><span class="p">,</span> <span class="s2">&quot;LS&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Left&quot;</span><span class="p">,</span>
+                 <span class="s2">&quot;RT&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse_Right&quot;</span><span class="p">,</span> <span class="s2">&quot;RS&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Right&quot;</span><span class="p">}</span>
+
+    <span class="c1"># Get filenames of all viable images</span>
+    <span class="n">fname_regex</span> <span class="o">=</span> <span class="s2">&quot;batch_dicom_([^_]+)-([^_]+)(LS|LT|RS|RT)&quot;</span> <span class="o">+</span> \
+                  <span class="s2">&quot;_cropped-preprocessed\.png&quot;</span>
+    <span class="n">img_fnames</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">dir_data</span><span class="p">)</span>
+                  <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">fname_regex</span><span class="p">,</span> <span class="n">path</span><span class="p">)]</span>
+
+    <span class="c1"># Since no videos, all sequence numbers will be 0</span>
+    <span class="n">sequence_number</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># Accumulate metadata for each image</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">img_fname</span> <span class="ow">in</span> <span class="n">img_fnames</span><span class="p">:</span>
+        <span class="c1"># Search regex matches again</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">fname_regex</span><span class="p">,</span> <span class="n">img_fname</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">match</span><span class="p">,</span> <span class="s2">&quot;Filtered filenames MUST match regex at this point!&quot;</span>
+
+        <span class="c1"># Get patient ID</span>
+        <span class="n">patient_id</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Get patient visit</span>
+        <span class="n">visit</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># Get view label</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">label_map</span><span class="p">[</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">3</span><span class="p">)]</span>
+
+        <span class="c1"># Create metadata row</span>
+        <span class="n">img_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+            <span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">img_fname</span><span class="p">],</span>
+            <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">label</span><span class="p">],</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">patient_id</span><span class="p">],</span>
+            <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">visit</span><span class="p">],</span>
+            <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">sequence_number</span><span class="p">],</span>
+        <span class="p">})</span>
+
+        <span class="c1"># Store metadata</span>
+        <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">img_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Combine metadata rows</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Save metadata to location</span>
+    <span class="k">if</span> <span class="n">save_path</span><span class="p">:</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="create_sickkids_silent_trial_metadata">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_sickkids_silent_trial_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">create_sickkids_silent_trial_metadata</span><span class="p">(</span><span class="n">dir_data</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Based on folder structure and image names, create metadata table with</span>
+<span class="sd">    relative image paths.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dir_data : str</span>
+<span class="sd">        Path to SickKids Silent Trial folder</span>
+<span class="sd">    save_path : str, optional</span>
+<span class="sd">        If provided, save metadata table to file path</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Metadata table containing `filename`, `label`, `id`, `visit` and</span>
+<span class="sd">        `seq_number`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Regex that matches filenames for SickKids Silent Trial images</span>
+    <span class="n">fname_regex</span> <span class="o">=</span> <span class="s2">&quot;.*(Sag|SAG|Trv|TRV)(\s?)(\d+)(\w)-preprocessed\.png&quot;</span>
+
+    <span class="c1"># Label mappings</span>
+    <span class="n">plane_label_map</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;Sag&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;SAG&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;Trv&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;TRV&quot;</span><span class="p">:</span> <span class="s2">&quot;Transverse&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">side_label_map</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;L&quot;</span><span class="p">:</span> <span class="s2">&quot;Left&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;R&quot;</span><span class="p">:</span> <span class="s2">&quot;Right&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="c1"># Get folders for each patient</span>
+    <span class="n">patient_folders</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dir_data</span><span class="p">,</span> <span class="s2">&quot;Study ID *&quot;</span><span class="p">))</span>
+
+    <span class="c1"># Since data is not image sequences, all sequence numbers will be 0</span>
+    <span class="n">sequence_number</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># Accumulate metadata for each image</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">folder</span> <span class="ow">in</span> <span class="n">patient_folders</span><span class="p">:</span>
+        <span class="c1"># Get patient ID from sub-folder name</span>
+        <span class="n">patient_id</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="c1"># Get filenames of all viable images</span>
+        <span class="n">img_fnames</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">fname_regex</span><span class="p">,</span> <span class="n">path</span><span class="p">)]</span>
+
+        <span class="c1"># Store metadata for each image</span>
+        <span class="k">for</span> <span class="n">img_fname</span> <span class="ow">in</span> <span class="n">img_fnames</span><span class="p">:</span>
+            <span class="c1"># Perform regex search again</span>
+            <span class="c1"># NOTE: All filenames must be filtered at this point</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">fname_regex</span><span class="p">,</span> <span class="n">img_fname</span><span class="p">)</span>
+
+            <span class="c1"># Get view label from filename</span>
+            <span class="n">plane</span> <span class="o">=</span> <span class="n">plane_label_map</span><span class="p">[</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)]</span>
+            <span class="n">side</span> <span class="o">=</span> <span class="n">side_label_map</span><span class="p">[</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">4</span><span class="p">)]</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">plane</span><span class="p">,</span> <span class="n">side</span><span class="p">])</span>
+
+            <span class="c1"># Get visit number</span>
+            <span class="n">visit</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+
+            <span class="c1"># Create relative path to image</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">folder</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">img_fname</span>
+
+            <span class="c1"># Create metadata row</span>
+            <span class="n">img_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+                <span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">filename</span><span class="p">],</span>
+                <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">label</span><span class="p">],</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">patient_id</span><span class="p">],</span>
+                <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">visit</span><span class="p">],</span>
+                <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">sequence_number</span><span class="p">],</span>
+            <span class="p">})</span>
+
+            <span class="c1"># Store metadata</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">img_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Combine metadata rows</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Save metadata to location</span>
+    <span class="k">if</span> <span class="n">save_path</span><span class="p">:</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                            Cleaning Raw Metadata                             #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="clean_sickkids_video_metadata">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.clean_sickkids_video_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">clean_sickkids_video_metadata</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Preprocesses raw SickKids (video) to:</span>
+<span class="sd">        a) extract view label and its sub-parts plane and side,</span>
+<span class="sd">        b) add unlabeled data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cleaning SickKids Video metadata...&quot;</span><span class="p">)</span>
+    <span class="c1"># Load the original metadata file and the originally test metadata file</span>
+    <span class="c1"># NOTE: Even though it&#39;s called &quot;test&quot;, we&#39;re ignoring that and merging it</span>
+    <span class="n">raw_dset_to_metadata</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">]</span>
+    <span class="n">csv_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">raw_dset_to_metadata</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;sickkids&quot;</span><span class="p">,</span> <span class="s2">&quot;sickkids_test&quot;</span><span class="p">)]</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">csv_paths</span><span class="p">],</span>
+                            <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Rename columns</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;IMG_FILE&quot;</span><span class="p">:</span> <span class="s2">&quot;filename&quot;</span><span class="p">,</span>
+                                              <span class="s2">&quot;revised_labels&quot;</span><span class="p">:</span> <span class="s2">&quot;label&quot;</span><span class="p">})</span>
+
+    <span class="c1"># Fix mislabel saggital --&gt; sagittal</span>
+    <span class="n">fix_label_map</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Saggital_Left&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Left&quot;</span><span class="p">,</span>
+                     <span class="s2">&quot;Saggital_Right&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Right&quot;</span><span class="p">}</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">fix_label_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">x</span><span class="p">))</span>
+
+    <span class="c1"># Extract side/plane from label</span>
+    <span class="k">for</span> <span class="n">curr_label_part</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">):</span>
+        <span class="n">df_metadata</span><span class="p">[</span><span class="n">curr_label_part</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_from_label</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">extract</span><span class="o">=</span><span class="n">curr_label_part</span><span class="p">))</span>
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                          Get unlabeled data                              #</span>
+    <span class="c1">############################################################################</span>
+    <span class="c1"># Get all image paths</span>
+    <span class="n">img_dir</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_IMG_SUBDIR_FULL</span><span class="p">[</span><span class="s2">&quot;sickkids&quot;</span><span class="p">]</span>
+    <span class="n">all_img_paths</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="s2">&quot;*.*&quot;</span><span class="p">))</span>
+    <span class="n">df_others</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="n">all_img_paths</span><span class="p">})</span>
+    <span class="c1"># Only keep filename</span>
+    <span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">)</span>
+
+    <span class="c1"># Remove found paths to already labeled images</span>
+    <span class="n">labeled_img_paths</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+    <span class="n">df_others</span> <span class="o">=</span> <span class="n">df_others</span><span class="p">[</span><span class="o">~</span><span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">labeled_img_paths</span><span class="p">)]</span>
+
+    <span class="c1"># Exclude Stanford data</span>
+    <span class="n">df_others</span> <span class="o">=</span> <span class="n">df_others</span><span class="p">[</span><span class="o">~</span><span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;SU2&quot;</span><span class="p">)]</span>
+
+    <span class="c1"># NOTE: Unlabeled images have label &quot;Other&quot;</span>
+    <span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Merge labeled and unlabeled data</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">df_others</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#     Extract other important metadata (patient/visit ID, HN, surgery)     #</span>
+    <span class="c1">############################################################################</span>
+    <span class="c1"># Extract patient/visit ID and sequence number</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_data_from_filename</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Get all available surgery labels</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_hn_labels</span><span class="p">(</span>
+        <span class="n">df_metadata</span><span class="p">,</span> <span class="n">sickkids</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stanford</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># Get machines for each image</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;machine&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_machine_for_filenames</span><span class="p">(</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">filename</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="n">sickkids</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Assign data split</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="n">utils</span><span class="o">.</span><span class="n">assign_split_row</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="s2">&quot;sickkids&quot;</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Assign hospital/dataset</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;sickkids&quot;</span>
+
+    <span class="c1"># Reorder columns</span>
+    <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">,</span> <span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">cols</span><span class="p">]</span>
+
+    <span class="c1"># Print and store basic data statistics</span>
+    <span class="n">print_basic_data_stats</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Save metadata file</span>
+    <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;clean&quot;</span><span class="p">][</span><span class="s2">&quot;sickkids&quot;</span><span class="p">],</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cleaning SickKids Video metadata...DONE&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="clean_stanford_video_metadata">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.clean_stanford_video_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">clean_stanford_video_metadata</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Preprocess raw Stanford (video) metadata</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cleaning Stanford Video metadata...&quot;</span><span class="p">)</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;stanford&quot;</span><span class="p">])</span>
+
+    <span class="c1"># Fix mislabel saggital --&gt; sagittal</span>
+    <span class="n">fix_label_map</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Saggital_Left&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Left&quot;</span><span class="p">,</span>
+                     <span class="s2">&quot;Saggital_Right&quot;</span><span class="p">:</span> <span class="s2">&quot;Sagittal_Right&quot;</span><span class="p">}</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">fix_label_map</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">x</span><span class="p">))</span>
+
+    <span class="c1"># Extract side/plane from label</span>
+    <span class="k">for</span> <span class="n">curr_label_part</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">):</span>
+        <span class="n">df_metadata</span><span class="p">[</span><span class="n">curr_label_part</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_from_label</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">extract</span><span class="o">=</span><span class="n">curr_label_part</span><span class="p">))</span>
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                          Get unlabeled data                              #</span>
+    <span class="c1">############################################################################</span>
+    <span class="c1"># Get all image paths</span>
+    <span class="n">img_dir</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_IMG_SUBDIR_FULL</span><span class="p">[</span><span class="s2">&quot;stanford&quot;</span><span class="p">]</span>
+    <span class="n">all_img_paths</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="s2">&quot;*.*&quot;</span><span class="p">))</span>
+    <span class="n">df_others</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="n">all_img_paths</span><span class="p">})</span>
+    <span class="c1"># Only keep filename</span>
+    <span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">)</span>
+
+    <span class="c1"># Remove found paths to already labeled images</span>
+    <span class="n">labeled_img_paths</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+    <span class="n">df_others</span> <span class="o">=</span> <span class="n">df_others</span><span class="p">[</span><span class="o">~</span><span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">labeled_img_paths</span><span class="p">)]</span>
+
+    <span class="c1"># Include only Stanford data</span>
+    <span class="n">df_others</span> <span class="o">=</span> <span class="n">df_others</span><span class="p">[</span><span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;SU2&quot;</span><span class="p">)]</span>
+
+    <span class="c1"># NOTE: Unlabeled images have label &quot;Other&quot;</span>
+    <span class="n">df_others</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Merge labeled and unlabeled data</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">df_others</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Drop duplicates</span>
+    <span class="c1"># NOTE: Metadata table contains duplicate rows</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">()</span>
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#     Extract other important metadata (patient/visit ID, HN, surgery)     #</span>
+    <span class="c1">############################################################################</span>
+    <span class="c1"># Extract patient/visit ID and sequence number</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_data_from_filename</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Get all available surgery labels</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_hn_labels</span><span class="p">(</span>
+        <span class="n">df_metadata</span><span class="p">,</span> <span class="n">sickkids</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">stanford</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Assign data split</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">assign_split_table</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">train_split</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+
+    <span class="c1"># Assign hospital/dataset</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;stanford&quot;</span>
+
+    <span class="c1"># Reorder columns</span>
+    <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">,</span> <span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">cols</span><span class="p">]</span>
+
+    <span class="c1"># Print and store basic data statistics</span>
+    <span class="n">print_basic_data_stats</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">)</span>
+
+    <span class="c1"># Save metadata file</span>
+    <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;clean&quot;</span><span class="p">][</span><span class="s2">&quot;stanford&quot;</span><span class="p">],</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cleaning Stanford Video metadata...DONE&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="clean_image_dsets_metadata">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.clean_image_dsets_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">clean_image_dsets_metadata</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Preprocess metadata for image datasets:</span>
+<span class="sd">        1. SickKids Silent Trial</span>
+<span class="sd">        2. Stanford (image)</span>
+<span class="sd">        3. UIowa</span>
+<span class="sd">        4. CHOP</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Not a lot to be done because they were created through this script as well.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Load metadata</span>
+    <span class="k">for</span> <span class="n">dset</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;sickkids_silent_trial&quot;</span><span class="p">,</span> <span class="s2">&quot;stanford_image&quot;</span><span class="p">,</span> <span class="s2">&quot;uiowa&quot;</span><span class="p">,</span> <span class="s2">&quot;chop&quot;</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cleaning `</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">` metadata...&quot;</span><span class="p">)</span>
+        <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="n">dset</span><span class="p">])</span>
+
+        <span class="c1"># Extract side/plane from label</span>
+        <span class="k">for</span> <span class="n">curr_label_part</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">):</span>
+            <span class="n">df_metadata</span><span class="p">[</span><span class="n">curr_label_part</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+                <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_from_label</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">extract</span><span class="o">=</span><span class="n">curr_label_part</span><span class="p">))</span>
+
+        <span class="c1"># Drop duplicates</span>
+        <span class="c1"># NOTE: Metadata table contains duplicate rows</span>
+        <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">()</span>
+
+        <span class="c1"># Assign data split</span>
+        <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">assign_split_table</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">train_split</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+
+        <span class="c1"># Assign hospital/dataset</span>
+        <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dset</span>
+
+        <span class="c1"># Reorder columns</span>
+        <span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">,</span> <span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">cols</span><span class="p">]</span>
+
+        <span class="c1"># Print and store basic data statistics</span>
+        <span class="n">print_basic_data_stats</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">)</span>
+
+        <span class="c1"># Save metadata file</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;clean&quot;</span><span class="p">][</span><span class="n">dset</span><span class="p">],</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cleaning `</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">` metadata...DONE&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="print_basic_data_stats">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.print_basic_data_stats">[docs]</a>
+<span class="k">def</span> <span class="nf">print_basic_data_stats</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Print basic stats about the data</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pd.DataFrame</span>
+<span class="sd">        Each row is metadata for an US image</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">df_labeled</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="o">~</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()]</span>
+    <span class="n">split_to_df</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">split</span><span class="p">:</span> <span class="n">df_labeled</span><span class="p">[</span><span class="n">df_labeled</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">split</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="n">df_unlabeled</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()]</span>
+
+    <span class="c1"># Compute stats</span>
+    <span class="n">stats</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;all&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;num_patients&quot;</span><span class="p">:</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">nunique</span><span class="p">(),</span>
+            <span class="s2">&quot;num_videos&quot;</span><span class="p">:</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">ngroups</span><span class="p">,</span>
+            <span class="s2">&quot;num_images&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">)</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;labeled&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;num_patients&quot;</span><span class="p">:</span> <span class="n">df_labeled</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">nunique</span><span class="p">(),</span>
+            <span class="s2">&quot;num_videos&quot;</span><span class="p">:</span> <span class="n">df_labeled</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">ngroups</span><span class="p">,</span>
+            <span class="s2">&quot;num_images&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_labeled</span><span class="p">),</span>
+            <span class="s2">&quot;label_distribution&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">df_labeled</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_labeled</span><span class="p">))</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span>
+        <span class="p">},</span>
+        <span class="o">**</span><span class="p">{</span>
+            <span class="sa">f</span><span class="s2">&quot;labeled_</span><span class="si">{</span><span class="n">split</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;num_patients&quot;</span><span class="p">:</span> <span class="n">split_to_df</span><span class="p">[</span><span class="n">split</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">nunique</span><span class="p">(),</span>
+                <span class="s2">&quot;num_videos&quot;</span><span class="p">:</span> <span class="n">split_to_df</span><span class="p">[</span><span class="n">split</span><span class="p">]</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">ngroups</span><span class="p">,</span>
+                <span class="s2">&quot;num_images&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">split_to_df</span><span class="p">[</span><span class="n">split</span><span class="p">]),</span>
+                <span class="s2">&quot;label_distribution&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">split_to_df</span><span class="p">[</span><span class="n">split</span><span class="p">][</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">split_to_df</span><span class="p">[</span><span class="n">split</span><span class="p">]))</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span>
+            <span class="p">}</span>
+            <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">split_to_df</span><span class="p">[</span><span class="n">split</span><span class="p">]</span><span class="o">.</span><span class="n">empty</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;unlabeled&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;num_patients&quot;</span><span class="p">:</span> <span class="n">df_unlabeled</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">nunique</span><span class="p">(),</span>
+            <span class="s2">&quot;num_videos&quot;</span><span class="p">:</span> <span class="n">df_unlabeled</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">ngroups</span><span class="p">,</span>
+            <span class="s2">&quot;num_images&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">df_unlabeled</span><span class="p">)</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="c1"># Print stats</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">stats</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">))</span>
+
+    <span class="c1"># Get dataset</span>
+    <span class="k">assert</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">nunique</span><span class="p">()</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Should only be one dataset!&quot;</span>
+    <span class="n">dset</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Create folder to store it in (under EDA)</span>
+    <span class="n">dir_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_FIGURES_EDA</span><span class="p">,</span> <span class="s2">&quot;metadata_stats&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">dir_path</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">dir_path</span><span class="p">)</span>
+    <span class="n">file_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dir_path</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">_stats.json&quot;</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">handler</span><span class="p">:</span>
+        <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">stats</span><span class="p">,</span> <span class="n">handler</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Main Flows                                  #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="main_prepare_image_datasets">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.main_prepare_image_datasets">[docs]</a>
+<span class="k">def</span> <span class="nf">main_prepare_image_datasets</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare image datasets, specifically:</span>
+<span class="sd">        1. Create CHOP metadata</span>
+<span class="sd">        2. Prepare UIowa data and create metadata</span>
+<span class="sd">        3. Create Stanford (image) metadata</span>
+<span class="sd">        4. Create SickKids Silent Trial metadata</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create CHOP metadata</span>
+    <span class="n">create_chop_metadata</span><span class="p">(</span>
+        <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_IMG_SUBDIR_FULL</span><span class="p">[</span><span class="s2">&quot;chop&quot;</span><span class="p">],</span>
+        <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;chop&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Preprocess UIowa data &amp; Create metadata</span>
+    <span class="n">preprocess_uiowa_data</span><span class="p">(</span><span class="n">src_dir</span><span class="o">=</span><span class="n">SRC_DIR_UIOWA_DATA</span><span class="p">)</span>
+
+    <span class="c1"># Create Stanford (Non-Seq) Metadata</span>
+    <span class="n">create_stanford_image_metadata</span><span class="p">(</span>
+        <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_IMG_SUBDIR_FULL</span><span class="p">[</span><span class="s2">&quot;stanford_image&quot;</span><span class="p">],</span>
+        <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;stanford_image&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Create SickKids Silent Trial Metadata</span>
+    <span class="n">create_sickkids_silent_trial_metadata</span><span class="p">(</span>
+        <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_IMG_SUBDIR_FULL</span><span class="p">[</span><span class="s2">&quot;sickkids_silent_trial&quot;</span><span class="p">],</span>
+        <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;sickkids_silent_trial&quot;</span><span class="p">],</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="main_clean_metadata">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.main_clean_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">main_clean_metadata</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create clean metadata files for video and image datasets.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">clean_sickkids_video_metadata</span><span class="p">()</span>
+    <span class="n">clean_stanford_video_metadata</span><span class="p">()</span>
+    <span class="n">clean_image_dsets_metadata</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="main_correct_labels">
+<a class="viewcode-back" href="../../../../src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.main_correct_labels">[docs]</a>
+<span class="k">def</span> <span class="nf">main_correct_labels</span><span class="p">(</span><span class="n">ref_path</span><span class="o">=</span><span class="s2">&quot;corrected_view_labels.xlsx&quot;</span><span class="p">,</span> <span class="n">label_col</span><span class="o">=</span><span class="s2">&quot;plane&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Correct labels for each dataset based on a reference file</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ref_path : str</span>
+<span class="sd">        Path to XLSX file containing modified labels and</span>
+<span class="sd">        (dset, id, visit, seq_number) for every image that needs correction</span>
+<span class="sd">    label_col : str</span>
+<span class="sd">        Name of column whose label is corrected</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">label_col</span> <span class="ow">in</span> <span class="n">LABEL_COLS</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;`label_col` must be one of </span><span class="si">{</span><span class="n">LABEL_COLS</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="c1"># Load file with label corrections</span>
+    <span class="n">df_correct</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_excel</span><span class="p">(</span><span class="n">ref_path</span><span class="p">)</span>
+    <span class="c1"># Convert to dictionary, mapping to new label</span>
+    <span class="n">index_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">,</span> <span class="s2">&quot;seq_number&quot;</span><span class="p">]</span>
+    <span class="n">df_correct</span><span class="p">[</span><span class="n">index_cols</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_correct</span><span class="p">[</span><span class="n">index_cols</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="n">idx_to_label</span> <span class="o">=</span> <span class="n">df_correct</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">index_cols</span><span class="p">)[</span><span class="s2">&quot;new_label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+
+    <span class="c1"># For each metadata, check if any of the labels overlap</span>
+    <span class="k">for</span> <span class="n">dset</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">VIDEO_DSETS</span><span class="p">)</span> <span class="o">+</span> <span class="nb">list</span><span class="p">(</span><span class="n">IMAGE_DSETS</span><span class="p">):</span>
+        <span class="n">clean_dset_path</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;clean&quot;</span><span class="p">][</span><span class="n">dset</span><span class="p">]</span>
+        <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">clean_dset_path</span><span class="p">)</span>
+        <span class="n">df_metadata</span><span class="p">[</span><span class="n">index_cols</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">index_cols</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+        <span class="c1"># Check if any rows will be modififed</span>
+        <span class="n">corrected_mask</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">index_cols</span><span class="p">)</span> <span class="ow">in</span> <span class="n">idx_to_label</span><span class="p">,</span>
+            <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Skip, if no labels corrected</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">corrected_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># Modify labels</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset: `</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">` | Modifying </span><span class="si">{</span><span class="n">corrected_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="si">}</span><span class="s2"> labels!&quot;</span><span class="p">)</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">corrected_mask</span><span class="p">,</span> <span class="n">label_col</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">corrected_mask</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">row</span><span class="p">:</span> <span class="n">idx_to_label</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">index_cols</span><span class="p">)],</span>
+            <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># For rows whose new label is Bladder, set other label columns</span>
+        <span class="c1"># NOTE: In case old side/plane label contains kidney information</span>
+        <span class="n">bladder_mask</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">label_col</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s2">&quot;Bladder&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">])</span>
+        <span class="n">corrected_bladder_mask</span> <span class="o">=</span> <span class="n">corrected_mask</span> <span class="o">&amp;</span> <span class="n">bladder_mask</span>
+        <span class="k">if</span> <span class="n">corrected_bladder_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
+            <span class="n">other_label_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">LABEL_COLS</span> <span class="k">if</span> <span class="n">col</span> <span class="o">!=</span> <span class="n">label_col</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">other_label_cols</span><span class="p">:</span>
+                <span class="n">new_val</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">col</span> <span class="o">==</span> <span class="s2">&quot;side&quot;</span> <span class="k">else</span> <span class="s2">&quot;Bladder&quot;</span>
+                <span class="n">df_metadata</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">corrected_bladder_mask</span><span class="p">,</span> <span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_val</span>
+
+        <span class="c1"># Save changes</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">clean_dset_path</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="c1"># Add command-line interface</span>
+    <span class="n">fire</span><span class="o">.</span><span class="n">Fire</span><span class="p">({</span>
+        <span class="s2">&quot;prep_img_dsets&quot;</span><span class="p">:</span> <span class="n">main_prepare_image_datasets</span><span class="p">,</span>
+        <span class="s2">&quot;clean_metadata&quot;</span><span class="p">:</span> <span class="n">main_clean_metadata</span><span class="p">,</span>
+        <span class="s2">&quot;correct_labels&quot;</span><span class="p">:</span> <span class="n">main_correct_labels</span><span class="p">,</span>
+    <span class="p">})</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

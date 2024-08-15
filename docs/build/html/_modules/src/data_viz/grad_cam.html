@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.data_viz.grad_cam &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.data_viz.grad_cam</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.data_viz.grad_cam</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">grad_cam.py</span>
+
+<span class="sd">Description: Creates images for model explainability, where GradCAM is layered.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">pytorch_grad_cam</span> <span class="kn">import</span> <span class="n">GradCAM</span>
+<span class="kn">from</span> <span class="nn">pytorch_grad_cam.utils.image</span> <span class="kn">import</span> <span class="n">show_cam_on_image</span>
+<span class="kn">from</span> <span class="nn">pytorch_grad_cam.utils.model_targets</span> <span class="kn">import</span> <span class="n">ClassifierOutputTarget</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.data_viz</span> <span class="kn">import</span> <span class="n">utils</span> <span class="k">as</span> <span class="n">viz_utils</span>
+<span class="kn">from</span> <span class="nn">src.scripts</span> <span class="kn">import</span> <span class="n">load_data</span><span class="p">,</span> <span class="n">load_model</span><span class="p">,</span> <span class="n">model_eval</span>
+
+
+<span class="c1"># Set theme</span>
+<span class="n">viz_utils</span><span class="o">.</span><span class="n">set_theme</span><span class="p">(</span><span class="s2">&quot;dark&quot;</span><span class="p">)</span>
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># Configure logging</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># Mapping of original label to simplified name</span>
+<span class="n">LABEL_TO_SHORTHAND</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;Sagittal_Left&quot;</span><span class="p">:</span> <span class="s2">&quot;left_sag&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Sagittal_Right&quot;</span><span class="p">:</span> <span class="s2">&quot;right_sag&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Transverse_Left&quot;</span><span class="p">:</span> <span class="s2">&quot;left_trans&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Transverse_Right&quot;</span><span class="p">:</span> <span class="s2">&quot;right_trans&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Bladder&quot;</span><span class="p">:</span> <span class="s2">&quot;bladder&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># Labels to show GradCAMs for</span>
+<span class="n">SHOW_LABELS</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;Sagittal_Left&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Sagittal_Right&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Transverse_Left&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Transverse_Right&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Bladder&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                Main Functions                                #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="explain_model_on_dset">
+<a class="viewcode-back" href="../../../src.data_viz.html#src.data_viz.grad_cam.explain_model_on_dset">[docs]</a>
+<span class="k">def</span> <span class="nf">explain_model_on_dset</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">dset</span><span class="p">,</span> <span class="n">label_whitelist</span><span class="o">=</span><span class="n">SHOW_LABELS</span><span class="p">,</span>
+                          <span class="n">save_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given an experiment name and dataset, extract grad-cam heatmaps for real</span>
+<span class="sd">    examples and save to directory specified</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Experiment name</span>
+<span class="sd">    dset : str</span>
+<span class="sd">        Name of data split or evaluation dataset</span>
+<span class="sd">    label_whitelist : list, optional</span>
+<span class="sd">        Whitelist of labels to create images, by default SHOW_LABELS</span>
+<span class="sd">    save_dir : str, optional</span>
+<span class="sd">        Directory to save images to, by default creates `exp_name/dset`</span>
+<span class="sd">        subdirectory under `grad_cam` directory</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># INPUT: If save directory not provided, create default subdirectory</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">save_dir</span><span class="p">:</span>
+        <span class="n">save_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_FIGURES_CAM</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">,</span> <span class="n">dset</span><span class="p">)</span>
+
+    <span class="c1"># Get model hyperparameters</span>
+    <span class="n">hparams</span> <span class="o">=</span> <span class="n">load_model</span><span class="o">.</span><span class="n">get_hyperparameters</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">)</span>
+
+    <span class="c1"># Get label part</span>
+    <span class="n">label_part</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;label_part&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Load model</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">load_model</span><span class="o">.</span><span class="n">load_pretrained_from_exp_name</span><span class="p">(</span><span class="n">exp_name</span><span class="p">)</span>
+    <span class="c1"># Get last convolutional layer for model</span>
+    <span class="n">target_layers</span> <span class="o">=</span> <span class="p">[</span><span class="n">load_model</span><span class="o">.</span><span class="n">get_last_conv_layer</span><span class="p">(</span><span class="n">model</span><span class="p">)]</span>
+    <span class="c1"># Set model to train</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;temporal_backbone&quot;</span><span class="p">):</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">temporal_backbone</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+
+    <span class="c1"># Create GradCAM object</span>
+    <span class="n">cam</span> <span class="o">=</span> <span class="n">GradCAM</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">target_layers</span><span class="o">=</span><span class="n">target_layers</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Load predictions</span>
+    <span class="n">pred_path</span> <span class="o">=</span> <span class="n">model_eval</span><span class="o">.</span><span class="n">create_save_path</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">df_preds</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">pred_path</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error_msg</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Missing predictions file!&quot;</span>
+                     <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\t</span><span class="s2">exp_name: </span><span class="si">{</span><span class="n">exp_name</span><span class="si">}</span><span class="se">\n\t</span><span class="s2">dset: </span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="n">error_msg</span>
+
+    <span class="c1"># Make GradCAMs for correctly AND incorrectly predicted images</span>
+    <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;==&quot;</span><span class="p">,</span> <span class="s2">&quot;!=&quot;</span><span class="p">):</span>
+        <span class="c1"># Get filenames of images whose split labels were classified right/wrong</span>
+        <span class="n">df_temp</span> <span class="o">=</span> <span class="n">df_preds</span><span class="p">[</span><span class="n">df_preds</span><span class="o">.</span><span class="n">eval</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;label </span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2"> pred&quot;</span><span class="p">)]</span>
+        <span class="n">filenames</span> <span class="o">=</span> <span class="n">df_temp</span><span class="o">.</span><span class="n">filename</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+        <span class="c1"># Create folder prefix based on result of classification</span>
+        <span class="n">prefix</span> <span class="o">=</span> <span class="s2">&quot;classified_&quot;</span> <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;==&quot;</span> <span class="k">else</span> <span class="s2">&quot;misclassified_&quot;</span>
+
+        <span class="c1"># Make GradCAMs separately for each label</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">label_whitelist</span><span class="p">:</span>
+            <span class="c1"># Get label shorthand</span>
+            <span class="n">label_shorthand</span> <span class="o">=</span> <span class="n">LABEL_TO_SHORTHAND</span><span class="p">[</span><span class="n">label</span><span class="p">]</span>
+            <span class="c1"># Create subfolder name</span>
+            <span class="n">subfolder_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">prefix</span><span class="si">}{</span><span class="n">label_shorthand</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="c1"># Create full path to subfolder</span>
+            <span class="n">temp_save_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">save_dir</span><span class="p">,</span> <span class="n">subfolder_name</span><span class="p">)</span>
+
+            <span class="c1"># Create GradCAMs</span>
+            <span class="n">explain_model_for_images_with_label</span><span class="p">(</span>
+                <span class="n">cam</span><span class="o">=</span><span class="n">cam</span><span class="p">,</span>
+                <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+                <span class="n">label</span><span class="o">=</span><span class="n">label</span><span class="p">,</span>
+                <span class="n">label_part</span><span class="o">=</span><span class="n">label_part</span><span class="p">,</span>
+                <span class="n">filenames</span><span class="o">=</span><span class="n">filenames</span><span class="p">,</span>
+                <span class="n">save_dir</span><span class="o">=</span><span class="n">temp_save_dir</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="explain_model_for_images_with_label">
+<a class="viewcode-back" href="../../../src.data_viz.html#src.data_viz.grad_cam.explain_model_for_images_with_label">[docs]</a>
+<span class="k">def</span> <span class="nf">explain_model_for_images_with_label</span><span class="p">(</span><span class="n">cam</span><span class="p">,</span> <span class="n">dset</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">label_part</span><span class="p">,</span>
+                                        <span class="n">filenames</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                        <span class="n">save_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                                        <span class="n">n</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create GradCAM explanations for label-specific images from a dataset.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cam : pytorch_grad_cam.GradCAM</span>
+<span class="sd">        GradCAM object loaded with a model</span>
+<span class="sd">    dset : str</span>
+<span class="sd">        Name of evaluation split/dataset</span>
+<span class="sd">    label : str</span>
+<span class="sd">        ORIGINAL (unsplit) label to filter for.</span>
+<span class="sd">    label_part : str</span>
+<span class="sd">        Type of label split from original, that the model was trained on. One of</span>
+<span class="sd">        (&quot;side&quot;, &quot;plane&quot;)</span>
+<span class="sd">    filenames : list, optional</span>
+<span class="sd">        List of filenames to filter for, by default None</span>
+<span class="sd">    save_dir : str, optional</span>
+<span class="sd">        Directory to save GradCAM images to, by default None</span>
+<span class="sd">    n : int, optional</span>
+<span class="sd">        Number of images to plot in GradCAM, by default 4</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create filters on:</span>
+    <span class="c1">#   a) ORIGINAL labels</span>
+    <span class="n">filters</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;orig_label&quot;</span><span class="p">:</span> <span class="nb">set</span><span class="p">([</span><span class="n">label</span><span class="p">]),</span>
+    <span class="p">}</span>
+    <span class="c1"># If provided, filter on b) specific files</span>
+    <span class="k">if</span> <span class="n">filenames</span><span class="p">:</span>
+        <span class="n">filters</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">filenames</span><span class="p">)</span>
+
+    <span class="c1"># Create image dataloader, filtering for the right labels</span>
+    <span class="n">img_dataloader</span> <span class="o">=</span> <span class="n">load_data</span><span class="o">.</span><span class="n">setup_default_dataloader_for_dset</span><span class="p">(</span>
+        <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+        <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
+        <span class="n">label_part</span><span class="o">=</span><span class="n">label_part</span><span class="p">,</span>
+        <span class="n">full_seq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">full_path</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">num_workers</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Get image tensors (with N images) for each label</span>
+    <span class="n">idx_to_imgs</span> <span class="o">=</span> <span class="n">get_n_images_per_label</span><span class="p">(</span><span class="n">img_dataloader</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">)</span>
+
+    <span class="c1"># Extract GradCAM-overlayed images</span>
+    <span class="n">idx_to_orig_imgs</span><span class="p">,</span> <span class="n">idx_to_overlayed_imgs</span> <span class="o">=</span> <span class="n">extract_gradcams</span><span class="p">(</span><span class="n">cam</span><span class="p">,</span> <span class="n">idx_to_imgs</span><span class="p">)</span>
+    <span class="c1"># Skip, if no images found</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">idx_to_overlayed_imgs</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No correct/incorrectly classified images found for &quot;</span>
+                       <span class="s2">&quot;label: </span><span class="si">{label}</span><span class="s2">! Skipping...&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Get all original and overlayed images</span>
+    <span class="n">orig_imgs_lst</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">overlayed_imgs_lst</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">label_idx</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">idx_to_overlayed_imgs</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+        <span class="c1"># Get original images</span>
+        <span class="n">curr_orig_imgs</span> <span class="o">=</span> <span class="n">idx_to_orig_imgs</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span>
+        <span class="c1"># Get overlayed imgaes</span>
+        <span class="n">curr_overlayed_imgs</span> <span class="o">=</span> <span class="n">idx_to_overlayed_imgs</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">curr_orig_imgs</span> <span class="ow">and</span> <span class="n">curr_overlayed_imgs</span><span class="p">:</span>
+            <span class="n">orig_imgs_lst</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">curr_orig_imgs</span><span class="p">)</span>
+            <span class="n">overlayed_imgs_lst</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">curr_overlayed_imgs</span><span class="p">)</span>
+
+    <span class="c1"># Concatenate</span>
+    <span class="n">orig_imgs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">orig_imgs_lst</span><span class="p">)</span>
+    <span class="n">overlayed_imgs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">overlayed_imgs_lst</span><span class="p">)</span>
+
+    <span class="c1"># Create grid plot with original images</span>
+    <span class="n">viz_utils</span><span class="o">.</span><span class="n">gridplot_images</span><span class="p">(</span>
+        <span class="n">orig_imgs</span><span class="p">,</span>
+        <span class="n">filename</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;orig_gridplot.png&quot;</span><span class="p">,</span>
+        <span class="n">save_dir</span><span class="o">=</span><span class="n">save_dir</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;(Original) Full Label: </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> | Label Part: </span><span class="si">{</span><span class="n">label_part</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Create grid plot with GradCAM</span>
+    <span class="n">viz_utils</span><span class="o">.</span><span class="n">gridplot_images</span><span class="p">(</span>
+        <span class="n">overlayed_imgs</span><span class="p">,</span>
+        <span class="n">filename</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;cam_gridplot.png&quot;</span><span class="p">,</span>
+        <span class="n">save_dir</span><span class="o">=</span><span class="n">save_dir</span><span class="p">,</span>
+        <span class="n">title</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;(GradCAM) Full Label: </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> | Label Part: </span><span class="si">{</span><span class="n">label_part</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Close open figures</span>
+    <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="get_n_images_per_label">
+<a class="viewcode-back" href="../../../src.data_viz.html#src.data_viz.grad_cam.get_n_images_per_label">[docs]</a>
+<span class="k">def</span> <span class="nf">get_n_images_per_label</span><span class="p">(</span><span class="n">img_dataloader</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">4</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get N images per label.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    img_dataloader : torch.DataLoader</span>
+<span class="sd">        Used to load images and metadata</span>
+<span class="sd">    n : int, optional</span>
+<span class="sd">        Number of images to get GradCAMs for per label, by default 4</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict of (int : torch.FloatTensor)</span>
+<span class="sd">        Mapping of prediction index to image tensor of examples</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Store number of images for each label</span>
+    <span class="n">idx_to_num_imgs</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+
+    <span class="c1"># Accumulate images for each label</span>
+    <span class="n">idx_to_example_imgs</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+
+    <span class="c1"># Extract embeddings in batches</span>
+    <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">img_dataloader</span><span class="p">:</span>
+        <span class="c1"># If shape is (1, seq_len, C, H, W), flatten first dimension</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">size</span><span class="p">())</span> <span class="o">==</span> <span class="mi">5</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Filter for data in list</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Store image tensors for each label</span>
+        <span class="k">for</span> <span class="n">label_idx</span> <span class="ow">in</span> <span class="n">labels</span><span class="o">.</span><span class="n">unique</span><span class="p">():</span>
+            <span class="n">label_idx</span> <span class="o">=</span> <span class="n">label_idx</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+
+            <span class="c1"># Early continue, if stored enough example images for that label</span>
+            <span class="k">if</span> <span class="n">idx_to_num_imgs</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">n</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Filter for label-specific images</span>
+            <span class="n">label_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">labels</span> <span class="o">==</span> <span class="n">label_idx</span><span class="p">)</span>
+            <span class="n">label_data</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">label_mask</span><span class="p">]</span>
+
+            <span class="c1"># Store and update count</span>
+            <span class="n">idx_to_example_imgs</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label_data</span><span class="p">)</span>
+            <span class="n">idx_to_num_imgs</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">label_data</span><span class="p">)</span>
+
+    <span class="c1"># Combine each accumulated lists of image tensors</span>
+    <span class="k">for</span> <span class="n">label_idx</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">idx_to_example_imgs</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+        <span class="c1"># Concatenate image tensors</span>
+        <span class="n">img_tensors</span> <span class="o">=</span> <span class="n">idx_to_example_imgs</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span>
+        <span class="n">img_tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">img_tensors</span><span class="p">)</span>
+
+        <span class="c1"># Ensure within limit of number of images</span>
+        <span class="n">img_tensor</span> <span class="o">=</span> <span class="n">img_tensor</span><span class="p">[:</span><span class="n">n</span><span class="p">]</span>
+
+        <span class="n">idx_to_example_imgs</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span> <span class="o">=</span> <span class="n">img_tensor</span>
+
+    <span class="k">return</span> <span class="n">idx_to_example_imgs</span></div>
+
+
+
+<div class="viewcode-block" id="extract_gradcams">
+<a class="viewcode-back" href="../../../src.data_viz.html#src.data_viz.grad_cam.extract_gradcams">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_gradcams</span><span class="p">(</span><span class="n">cam</span><span class="p">,</span> <span class="n">idx_to_imgs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract class activation maps (CAM) and overlay over images provided.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cam : pytorch_grad_cam.GradCAM</span>
+<span class="sd">        GradCAM object loaded with a model</span>
+<span class="sd">    idx_to_imgs : dict of (int, torch.FloatTensor)</span>
+<span class="sd">        Mapping of prediction index to example images</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (dict of (int, np.ndarray))</span>
+<span class="sd">        First tuple: Mapping of prediction index to original images</span>
+<span class="sd">        Second tuple: Mapping of prediction index to GradCAM overlayed image</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Accumulate original and overlayed images</span>
+    <span class="n">idx_to_orig_img</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">idx_to_overlayed_img</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+
+    <span class="c1"># For each label, create overlayed images</span>
+    <span class="k">for</span> <span class="n">label_idx</span><span class="p">,</span> <span class="n">imgs</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">idx_to_imgs</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+        <span class="c1"># Specify target (label) of interest</span>
+        <span class="n">targets</span> <span class="o">=</span> <span class="p">[</span><span class="n">ClassifierOutputTarget</span><span class="p">(</span><span class="n">label_idx</span><span class="p">)]</span>
+
+        <span class="c1"># POST-PROCESSING: For each image, create GradCAM-overlayed image</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">imgs</span><span class="p">)):</span>
+            <span class="n">curr_img</span> <span class="o">=</span> <span class="n">imgs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+            <span class="c1"># Extract GradCAM</span>
+            <span class="n">cam_mask</span> <span class="o">=</span> <span class="n">cam</span><span class="p">(</span>
+                <span class="n">input_tensor</span><span class="o">=</span><span class="n">curr_img</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+                <span class="n">targets</span><span class="o">=</span><span class="n">targets</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Convert to RGB numpy array</span>
+            <span class="n">img_arr</span> <span class="o">=</span> <span class="n">curr_img</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+            <span class="c1"># Move channel dimension</span>
+            <span class="k">if</span> <span class="n">img_arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="n">img_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">img_arr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+
+            <span class="c1"># Store original image</span>
+            <span class="n">idx_to_orig_img</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">(</span><span class="n">img_arr</span> <span class="o">*</span> <span class="mi">255</span><span class="p">))</span>
+
+            <span class="c1"># Create overlayed image</span>
+            <span class="n">overlayed_img</span> <span class="o">=</span> <span class="n">show_cam_on_image</span><span class="p">(</span><span class="n">img_arr</span><span class="p">,</span> <span class="n">cam_mask</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                              <span class="n">use_rgb</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="n">idx_to_overlayed_img</span><span class="p">[</span><span class="n">label_idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">overlayed_img</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">idx_to_orig_img</span><span class="p">,</span> <span class="n">idx_to_overlayed_img</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="init">
+<a class="viewcode-back" href="../../../src.data_viz.html#src.data_viz.grad_cam.init">[docs]</a>
+<span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="n">parser</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialize ArgumentParser arguments.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parser : argparse.ArgumentParser</span>
+<span class="sd">        ArgumentParser object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">arg_help</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;exp_name&quot;</span><span class="p">:</span> <span class="s2">&quot;Name of experiment&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dset&quot;</span><span class="p">:</span> <span class="s2">&quot;Name of evaluation splits or datasets&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;label_whitelist&quot;</span><span class="p">:</span> <span class="s2">&quot;Whitelist of labels to get GradCAMs for&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--exp_name&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;exp_name&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--dset&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--label_whitelist&quot;</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">default</span><span class="o">=</span><span class="n">SHOW_LABELS</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;label_whitelist&quot;</span><span class="p">])</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="c1"># 0. Initialize ArgumentParser</span>
+    <span class="n">PARSER</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">init</span><span class="p">(</span><span class="n">PARSER</span><span class="p">)</span>
+
+    <span class="c1"># 1. Get arguments</span>
+    <span class="n">ARGS</span> <span class="o">=</span> <span class="n">PARSER</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+    <span class="c1"># 2. Extract GradCAM for all specified experiments and datasets</span>
+    <span class="k">for</span> <span class="n">EXP_NAME</span> <span class="ow">in</span> <span class="n">ARGS</span><span class="o">.</span><span class="n">exp_name</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">DSET</span> <span class="ow">in</span> <span class="n">ARGS</span><span class="o">.</span><span class="n">dset</span><span class="p">:</span>
+            <span class="n">explain_model_on_dset</span><span class="p">(</span>
+                <span class="n">exp_name</span><span class="o">=</span><span class="n">EXP_NAME</span><span class="p">,</span>
+                <span class="n">dset</span><span class="o">=</span><span class="n">DSET</span><span class="p">,</span>
+                <span class="n">label_whitelist</span><span class="o">=</span><span class="n">ARGS</span><span class="o">.</span><span class="n">label_whitelist</span><span class="p">,</span>
+            <span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

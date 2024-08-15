@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.data_prep.dataset &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.data_prep.dataset</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.data_prep.dataset</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">dataset.py</span>
+
+<span class="sd">Description: Contains functions/classes to load dataset in PyTorch.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">abc</span> <span class="kn">import</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">lightning</span> <span class="k">as</span> <span class="nn">L</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torchvision.transforms.v2</span> <span class="k">as</span> <span class="nn">T</span>
+<span class="kn">from</span> <span class="nn">torch.utils.data</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span> <span class="nn">torchvision.io</span> <span class="kn">import</span> <span class="n">read_image</span><span class="p">,</span> <span class="n">ImageReadMode</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.data_prep</span> <span class="kn">import</span> <span class="n">utils</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">LOGGER</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+
+<span class="c1"># Torchvision Grayscale/RGB constants</span>
+<span class="n">IMAGE_MODES</span> <span class="o">=</span> <span class="p">{</span><span class="mi">1</span><span class="p">:</span> <span class="n">ImageReadMode</span><span class="o">.</span><span class="n">GRAY</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="n">ImageReadMode</span><span class="o">.</span><span class="n">RGB</span><span class="p">}</span>
+
+<span class="c1"># Default parameters for data loader</span>
+<span class="n">DEFAULT_DATALOADER_PARAMS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;batch_size&quot;</span><span class="p">:</span> <span class="mi">16</span><span class="p">,</span>
+    <span class="s2">&quot;shuffle&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">&quot;num_workers&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="s2">&quot;pin_memory&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># Pre-Computed Mean &amp; Std for SickKids Training Set</span>
+<span class="n">SK_TRAIN_MEAN</span> <span class="o">=</span> <span class="mf">123.</span> <span class="o">/</span> <span class="mf">255.</span>
+<span class="n">SK_TRAIN_STD</span> <span class="o">=</span> <span class="mf">74.</span> <span class="o">/</span> <span class="mf">255.</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                Main Functions                                #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="load_dataset_from_dir">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.load_dataset_from_dir">[docs]</a>
+<span class="k">def</span> <span class="nf">load_dataset_from_dir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">full_seq</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loads image dataset from directory of images.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    img_dir : str</span>
+<span class="sd">        Path to directory containing ultrasound images.</span>
+<span class="sd">    full_seq : str</span>
+<span class="sd">        If True, groups ultrasound images by unique patient-visits, by default</span>
+<span class="sd">        False.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.utils.data.Dataset</span>
+<span class="sd">        Contains images and metadata from filename</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">UltrasoundDatasetDir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">img_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">full_seq</span><span class="o">=</span><span class="n">full_seq</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="load_dataset_from_dataframe">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.load_dataset_from_dataframe">[docs]</a>
+<span class="k">def</span> <span class="nf">load_dataset_from_dataframe</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">img_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">full_seq</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loads image dataset from dataframe of image paths and labels.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df : pd.DataFrame</span>
+<span class="sd">        Contains column with absolute/relative path to images, and labels</span>
+<span class="sd">    img_dir : str, optional</span>
+<span class="sd">        Path to directory containing ultrasound images, by default None.</span>
+<span class="sd">    full_seq : str</span>
+<span class="sd">        If True, groups ultrasound images by unique patient-visits, by default</span>
+<span class="sd">        False.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.utils.data.Dataset</span>
+<span class="sd">        Contains images, metadata from filename, and labels from dataframe</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">UltrasoundDatasetDataFrame</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">img_dir</span><span class="o">=</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">full_seq</span><span class="o">=</span><span class="n">full_seq</span><span class="p">)</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                             Data Module Classes                              #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># TODO: Allow filtering training set for proportion of images with masks</span>
+<div class="viewcode-block" id="UltrasoundDataModule">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule">[docs]</a>
+<span class="k">class</span> <span class="nc">UltrasoundDataModule</span><span class="p">(</span><span class="n">L</span><span class="o">.</span><span class="n">LightningDataModule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Top-level object used to access all data preparation and loading</span>
+<span class="sd">    functionalities.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataloader_params</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">df</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">img_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">full_seq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                 <span class="n">full_path</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="n">augment_training</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize UltrasoundDataModule object.</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        Either df or img_dir must be exclusively specified to load in data.</span>
+
+<span class="sd">        By default, does not split data.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dataloader_params : dict, optional</span>
+<span class="sd">            Used to override default parameters for DataLoaders, by default None</span>
+<span class="sd">        df : pd.DataFrame, optional</span>
+<span class="sd">            Contains paths to image files and labels for each image, by default</span>
+<span class="sd">            None</span>
+<span class="sd">        img_dir : str, optional</span>
+<span class="sd">            Path to directory containing ultrasound images, by default None</span>
+<span class="sd">        full_seq : bool, optional</span>
+<span class="sd">            If True, each item has all ordered images for one full</span>
+<span class="sd">            ultrasound sequence (determined by patient ID and visit). If False,</span>
+<span class="sd">            treats each image under a patient as independent, by default False.</span>
+<span class="sd">        mode : int, optional</span>
+<span class="sd">            Number of channels (mode) to read images into (1=grayscale, 3=RGB),</span>
+<span class="sd">            by default 3.</span>
+<span class="sd">        full_path : bool, optional</span>
+<span class="sd">            If True, &quot;filename&quot; metadata contains full path to the image/s.</span>
+<span class="sd">            Otherwise, contains path basename, by default False.</span>
+<span class="sd">        augment_training : bool, optional</span>
+<span class="sd">            If True, add random augmentations during training, by default False.</span>
+<span class="sd">        **kwargs : dict</span>
+<span class="sd">            Optional keyword arguments:</span>
+<span class="sd">                img_size : int or tuple of ints, optional</span>
+<span class="sd">                    If int provided, resizes found images to</span>
+<span class="sd">                    (img_size x img_size), by default None.</span>
+<span class="sd">                train_test_split : float</span>
+<span class="sd">                    Percentage of data to leave for training. The rest will be</span>
+<span class="sd">                    used for testing</span>
+<span class="sd">                train_val_split : float</span>
+<span class="sd">                    Percentage of training set (test set removed) to leave for</span>
+<span class="sd">                    validation</span>
+<span class="sd">                cross_val_folds : int</span>
+<span class="sd">                    Number of folds to use for cross-validation</span>
+<span class="sd">                force_train_ids : list</span>
+<span class="sd">                    List of patient IDs to place into training set</span>
+<span class="sd">                crop_scale : float</span>
+<span class="sd">                    If augmenting training samples, lower bound on proportion of</span>
+<span class="sd">                    area cropped relative to the full image.</span>
+<span class="sd">                ensure_seg_mask : bool</span>
+<span class="sd">                    If True, filter training set (post-split) for those with</span>
+<span class="sd">                    segmentation masks (likely for use in GradCAM loss)</span>
+<span class="sd">                exclude_filename_json : str</span>
+<span class="sd">                    Path to JSON file containing image files to intentionally</span>
+<span class="sd">                    exclude from training/val/test set (post-split), by default</span>
+<span class="sd">                    None.</span>
+<span class="sd">                include_unlabeled : bool</span>
+<span class="sd">                    If True, include unlabeled as part of training set, by</span>
+<span class="sd">                    default False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">dataloader_params</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dataloader_params</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+
+        <span class="c1"># General arguments, used to instantiate UltrasoundDataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">df</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_size</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;img_size&quot;</span><span class="p">,</span> <span class="n">constants</span><span class="o">.</span><span class="n">IMG_SIZE</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">us_dataset_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;img_dir&quot;</span><span class="p">:</span> <span class="n">img_dir</span><span class="p">,</span>
+            <span class="s2">&quot;full_seq&quot;</span><span class="p">:</span> <span class="n">full_seq</span><span class="p">,</span>
+            <span class="s2">&quot;mode&quot;</span><span class="p">:</span> <span class="n">mode</span><span class="p">,</span>
+            <span class="s2">&quot;img_size&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">img_size</span><span class="p">,</span>
+            <span class="s2">&quot;label_part&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;label_part&quot;</span><span class="p">),</span>
+            <span class="s2">&quot;split_label&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;multi_output&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+            <span class="s2">&quot;full_path&quot;</span><span class="p">:</span> <span class="n">full_path</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="c1"># Process (or create) metadata table</span>
+        <span class="c1"># CASE 1: Metadata table is provided with file paths in each row</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">exists_mask</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">)</span>
+
+            <span class="c1"># Raise error, if none exist</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">exists_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;None of `</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="si">}</span><span class="s2">` paths exist! Please inspect `df`...&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Filter for existing images</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">exists_mask</span><span class="p">):</span>
+                <span class="n">num_missing</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="o">~</span><span class="n">exists_mask</span><span class="p">[</span><span class="o">~</span><span class="n">exists_mask</span><span class="p">])</span>
+                <span class="n">missing_paths</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n\t</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="o">~</span><span class="n">exists_mask</span><span class="p">][</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">num_missing</span><span class="si">}</span><span class="s2"> image files in table don&#39;t exist &quot;</span>
+                               <span class="sa">f</span><span class="s2">&quot;at path! Skipping...</span><span class="se">\n\t</span><span class="si">{</span><span class="n">missing_paths</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">exists_mask</span><span class="p">]</span>
+        <span class="c1"># CASE 2: Only image directory is provided</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Get images in directory</span>
+            <span class="n">img_paths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="s2">&quot;*&quot;</span><span class="p">)))</span>
+
+            <span class="c1"># Create dataframe</span>
+            <span class="c1"># NOTE: Assume all training for now, can be split later</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+                <span class="s2">&quot;dset&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;unknown&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">img_paths</span><span class="p">),</span>
+                <span class="s2">&quot;split&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;train&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">img_paths</span><span class="p">),</span>
+                <span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="n">img_paths</span><span class="p">,</span>
+                <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">img_paths</span><span class="p">),</span>
+                <span class="c1"># NOTE: Following may not work for newer hospital data</span>
+                <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_from_paths</span><span class="p">(</span><span class="n">img_paths</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">),</span>
+            <span class="p">})</span>
+        
+        <span class="c1"># NOTE: Store static (original) version of dataframe</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df_orig</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                        DataLoader Parameters                         #</span>
+        <span class="c1">########################################################################</span>
+        <span class="c1"># Parameters for training/validation DataLoaders</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">train_dataloader_params</span> <span class="o">=</span> <span class="n">DEFAULT_DATALOADER_PARAMS</span>
+        <span class="k">if</span> <span class="n">dataloader_params</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">train_dataloader_params</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">dataloader_params</span><span class="p">)</span>
+
+        <span class="c1"># NOTE: Shuffle is turned off during validation/test</span>
+        <span class="c1"># NOTE: Batch size is set to 1 during validation/test</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">val_dataloader_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_dataloader_params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">val_dataloader_params</span><span class="p">[</span><span class="s2">&quot;shuffle&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                          Dataset Splitting                           #</span>
+        <span class="c1">########################################################################</span>
+        <span class="c1"># Get list of patient IDs specifically to put in training set</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">force_train_ids</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;force_train_ids&quot;</span><span class="p">)</span>
+
+        <span class="c1"># (1) To split dataset into training and test sets</span>
+        <span class="k">if</span> <span class="s2">&quot;train_test_split&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">train_test_split</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;train_test_split&quot;</span><span class="p">)</span>
+
+        <span class="c1"># (2) To further split training set into train-val set</span>
+        <span class="k">if</span> <span class="s2">&quot;train_val_split&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;train_val_split&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">train_val_split</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;train_val_split&quot;</span><span class="p">)</span>
+
+        <span class="c1"># (3) To further split training set into cross-validation sets</span>
+        <span class="k">if</span> <span class="s2">&quot;cross_val_folds&quot;</span> <span class="ow">in</span> <span class="n">kwargs</span> <span class="ow">and</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;cross_val_folds&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cross_val_folds</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;cross_val_folds&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fold</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="c1"># Store total training metadata split during cross validation</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_cross_val_train_dict</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="c1"># Stores list of (train_idx, val_idx) for each fold</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cross_fold_indices</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                            Augmentations                             #</span>
+        <span class="c1">########################################################################</span>
+        <span class="c1"># Standard augmentations used for all training</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">augmentations</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">prep_augmentations</span><span class="p">(</span>
+            <span class="n">img_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">img_size</span><span class="p">,</span>
+            <span class="n">crop_scale</span><span class="o">=</span><span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;crop_scale&quot;</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">))</span>
+
+        <span class="c1"># HACK: If SSL dataset, it should use `self.augmentations` directly</span>
+        <span class="c1">#       and set `augment_training` to False in super().__init()</span>
+        <span class="c1"># NOTE: This is to avoid using augmentations twice:</span>
+        <span class="c1">#       i) During data loading</span>
+        <span class="c1">#       ii) In SSL collate function</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">augment_training</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">augmentations</span>
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.setup">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.setup">[docs]</a>
+    <span class="k">def</span> <span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stage</span><span class="o">=</span><span class="s2">&quot;fit&quot;</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prepares data for model training/validation/testing</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># (1) Split into training and test sets</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;train_test_split&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_test_split</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Split into train/test by each dataset</span>
+            <span class="c1"># NOTE: Do not overwrite train/test split if they already exist</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">assign_split_table</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">,</span> <span class="n">other_split</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">,</span>
+                <span class="n">train_split</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">train_test_split</span><span class="p">,</span>
+                <span class="n">force_train_ids</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">force_train_ids</span><span class="p">,</span>
+                <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># (2) Further split training set into train-val or cross-val sets</span>
+        <span class="c1"># (2.1) Train-Val Split</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;train_val_split&quot;</span><span class="p">):</span>
+            <span class="c1"># Split data into training split and rest</span>
+            <span class="n">train_val_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">([</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">])</span>
+            <span class="n">df_train_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="n">train_val_mask</span><span class="p">]</span>
+            <span class="n">df_rest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="o">~</span><span class="n">train_val_mask</span><span class="p">]</span>
+
+            <span class="c1"># Split training set into train/val by each dataset</span>
+            <span class="c1"># NOTE: Do not overwrite train/val split if they already exist</span>
+            <span class="n">df_train_val</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">assign_split_table</span><span class="p">(</span>
+                <span class="n">df_train_val</span><span class="p">,</span> <span class="n">other_split</span><span class="o">=</span><span class="s2">&quot;val&quot;</span><span class="p">,</span>
+                <span class="n">train_split</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">train_val_split</span><span class="p">,</span>
+                <span class="n">force_train_ids</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">force_train_ids</span><span class="p">,</span>
+                <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="c1"># Recombine</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_train_val</span><span class="p">,</span> <span class="n">df_rest</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># (2.2) K-Fold Cross Validation</span>
+        <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;cross_val_folds&quot;</span><span class="p">):</span>
+            <span class="c1"># TODO: Re-implement when needed</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Not currently implemented!&quot;</span><span class="p">)</span>
+            <span class="n">train_ids</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;train&quot;</span><span class="p">][</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cross_fold_indices</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">cross_validation_by_patient</span><span class="p">(</span>
+                <span class="n">train_ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_val_folds</span><span class="p">)</span>
+            <span class="c1"># By default, set to first kfold</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_kfold_index</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Assign data split for unlabeled data</span>
+        <span class="n">unlabeled_split</span> <span class="o">=</span> <span class="s2">&quot;train&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">us_dataset_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;include_unlabeled&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">assign_unlabeled_split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">,</span> <span class="n">unlabeled_split</span><span class="p">)</span>
+
+        <span class="c1"># If specified, filter training data for those with segmentation masks</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">us_dataset_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ensure_seg_mask&quot;</span><span class="p">):</span>
+            <span class="c1"># Split data into training split and rest</span>
+            <span class="n">df_train</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;train&quot;</span><span class="p">]</span>
+            <span class="n">df_rest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;train&quot;</span><span class="p">]</span>
+
+            <span class="c1"># Remove images in the training set that DONT have a seg. mask</span>
+            <span class="n">has_seg_mask</span> <span class="o">=</span> <span class="n">df_train</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">has_seg_mask</span><span class="p">)</span>
+            <span class="n">df_train</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">has_seg_mask</span><span class="p">,</span> <span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+            <span class="c1"># Recombine</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_train</span><span class="p">,</span> <span class="n">df_rest</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># If specified, remove explicitly listed images from the training set</span>
+        <span class="n">exclude_filename_json</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">us_dataset_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;exclude_filename_json&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">exclude_filename_json</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">exclude_from_any_split</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">,</span> <span class="n">exclude_filename_json</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.train_dataloader">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.train_dataloader">[docs]</a>
+    <span class="k">def</span> <span class="nf">train_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns DataLoader for training set.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.utils.data.DataLoader</span>
+<span class="sd">            Data loader for training data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Instantiate UltrasoundDatasetDataFrame</span>
+        <span class="n">train_dataset</span> <span class="o">=</span> <span class="n">UltrasoundDatasetDataFrame</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;train&quot;</span><span class="p">],</span>
+            <span class="n">transforms</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">us_dataset_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create DataLoader with parameters specified</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">train_dataset</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">train_dataloader_params</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.val_dataloader">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.val_dataloader">[docs]</a>
+    <span class="k">def</span> <span class="nf">val_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns DataLoader for validation set.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.utils.data.DataLoader</span>
+<span class="sd">            Data loader for validation data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Instantiate UltrasoundDatasetDataFrame</span>
+        <span class="n">val_dataset</span> <span class="o">=</span> <span class="n">UltrasoundDatasetDataFrame</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;val&quot;</span><span class="p">],</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">us_dataset_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create DataLoader with parameters specified</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">val_dataset</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">val_dataloader_params</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.test_dataloader">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.test_dataloader">[docs]</a>
+    <span class="k">def</span> <span class="nf">test_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns DataLoader for test set.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.utils.data.DataLoader</span>
+<span class="sd">            Data loader for test data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Instantiate UltrasoundDatasetDataFrame</span>
+        <span class="n">test_dataset</span> <span class="o">=</span> <span class="n">UltrasoundDatasetDataFrame</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;test&quot;</span><span class="p">],</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">us_dataset_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create DataLoader with parameters specified</span>
+        <span class="k">return</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">test_dataset</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">val_dataloader_params</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.get_dataloader">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.get_dataloader">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">split</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get specific data loader</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        split : str</span>
+<span class="sd">            Split must be one of train/val/test</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.utils.data.DataLoader</span>
+<span class="sd">            DataLoader</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">split</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">)</span>
+        <span class="n">split_to_func</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;train&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">train_dataloader</span><span class="p">,</span>
+            <span class="s2">&quot;val&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">val_dataloader</span><span class="p">,</span>
+            <span class="s2">&quot;test&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">test_dataloader</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">split_to_func</span><span class="p">[</span><span class="n">split</span><span class="p">]()</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.get_filtered_dataloader">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.get_filtered_dataloader">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_filtered_dataloader</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="o">**</span><span class="n">filters</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get data loader for a specific split with option to filter for specific</span>
+<span class="sd">        dataset.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        split : str</span>
+<span class="sd">            Name of data split to load. One of (train/val/test)</span>
+<span class="sd">        filters : Any</span>
+<span class="sd">            Keyword arguments, containing row filters.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.utils.data.DataLoader</span>
+<span class="sd">            DataLoader with filtered data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create copy of data to restore later</span>
+        <span class="n">df_orig</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Split data into specific split and rest</span>
+        <span class="n">split_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">split</span>
+        <span class="n">df_split</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="n">split_mask</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">df_rest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="p">[</span><span class="o">~</span><span class="n">split_mask</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># If provided, filter out rows in the specific split</span>
+        <span class="n">df_split</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">filter_metadata</span><span class="p">(</span><span class="n">split</span><span class="o">=</span><span class="n">split</span><span class="p">,</span> <span class="o">**</span><span class="n">filters</span><span class="p">)</span>
+
+        <span class="c1"># Modify stored metadata table</span>
+        <span class="c1"># NOTE: So that created dataloader would use applied filters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_split</span><span class="p">,</span> <span class="n">df_rest</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Construct dataloader</span>
+        <span class="n">dataloader</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_dataloader</span><span class="p">(</span><span class="n">split</span><span class="p">)</span>
+
+        <span class="c1"># Restore original table</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">df</span> <span class="o">=</span> <span class="n">df_orig</span>
+
+        <span class="k">return</span> <span class="n">dataloader</span></div>
+
+
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                           Helper Functions                               #</span>
+    <span class="c1">############################################################################</span>
+<div class="viewcode-block" id="UltrasoundDataModule.set_kfold_index">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.set_kfold_index">[docs]</a>
+    <span class="k">def</span> <span class="nf">set_kfold_index</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fold</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        If performing cross-validation, sets fold index.</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        Fold index can range between [0, num_folds - 1]</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fold : int</span>
+<span class="sd">            Fold index</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Not currently implemented!&quot;</span><span class="p">)</span>
+
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;cross_val_folds&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">fold</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cross_val_folds</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">fold</span> <span class="o">=</span> <span class="n">fold</span>
+
+        <span class="c1"># Set training and validation data for fold</span>
+        <span class="n">train_idx</span><span class="p">,</span> <span class="n">val_idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_fold_indices</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">fold</span><span class="p">]</span>
+        <span class="c1"># self.split_to_ids[&quot;train&quot;] = self._cross_val_train_dict[&quot;ids&quot;]</span>
+        <span class="c1"># self.split_to_paths[&quot;train&quot;] = self._cross_val_train_dict[&quot;paths&quot;]</span>
+        <span class="c1"># self.split_to_labels[&quot;train&quot;] = self._cross_val_train_dict[&quot;labels&quot;]</span>
+        <span class="c1"># self._assign_dset_idx(&quot;train&quot;, &quot;val&quot;, train_idx, val_idx)</span>
+
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;==Fold </span><span class="si">{</span><span class="n">fold</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">cross_val_folds</span><span class="si">}</span><span class="s2">==:&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.filter_metadata">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.filter_metadata">[docs]</a>
+    <span class="k">def</span> <span class="nf">filter_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dset</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">**</span><span class="n">filters</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get metadata filtered for dataset or split.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dset : str, optional</span>
+<span class="sd">            Dataset to filter for</span>
+<span class="sd">        split : str, optional</span>
+<span class="sd">            Data split to filter for, by default None</span>
+<span class="sd">        **filters : Any</span>
+<span class="sd">            Column to value keyword arguments to filter</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Filter on dataset and data split</span>
+        <span class="k">if</span> <span class="n">dset</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">dset</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">split</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">df</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">split</span><span class="p">]</span>
+
+        <span class="c1"># If provided, perform other filters</span>
+        <span class="k">if</span> <span class="n">filters</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">filters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="c1"># Raise errors, if column not present</span>
+                <span class="k">if</span> <span class="n">col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">df</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Column </span><span class="si">{</span><span class="n">col</span><span class="si">}</span><span class="s2"> not in table provided!&quot;</span><span class="p">)</span>
+
+                <span class="c1"># CASE 1: Value is a list/tuple</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">,</span> <span class="nb">set</span><span class="p">)):</span>
+                    <span class="n">mask</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+                    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="c1"># CASE 2: Value is a single item</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">==</span> <span class="n">val</span><span class="p">)</span>
+                    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">df</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.get_patient_ids">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.get_patient_ids">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_patient_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get unique patient IDs for dataset or a specific data split</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        split : str, optional</span>
+<span class="sd">            Data split (train/val/test)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            List of patient IDs</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filter_metadata</span><span class="p">(</span><span class="n">split</span><span class="o">=</span><span class="n">split</span><span class="p">)[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDataModule.size">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.size">[docs]</a>
+    <span class="k">def</span> <span class="nf">size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get size of dataset or specific data split</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        split : str, optional</span>
+<span class="sd">            Data split (train/val/test)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            List of patient IDs</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">filter_metadata</span><span class="p">(</span><span class="n">split</span><span class="o">=</span><span class="n">split</span><span class="p">))</span></div>
+</div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Dataset Classes                                #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="UltrasoundDataset">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDataset">[docs]</a>
+<span class="k">class</span> <span class="nc">UltrasoundDataset</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">Dataset</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Abstract Dataset class to load images.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Do not instantiate this class directly!&quot;</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads an image with metadata.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Integer index to paths.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            Contains torch.Tensor and dict (containing metadata). Metadata may</span>
+<span class="sd">            include path to image, patient ID, and hospital.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">img_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">img_path</span><span class="p">),</span> <span class="s2">&quot;No image at path specified!&quot;</span>
+
+        <span class="c1"># Load image</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">read_image</span><span class="p">(</span><span class="n">img_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">)</span>
+
+        <span class="c1"># Transforms 1. Apply texture transforms</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;texture&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">[</span><span class="s2">&quot;texture&quot;</span><span class="p">](</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="c1"># Transforms 2. Apply geometric transforms</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;geometric&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># CASE 1: Segmentation mask was stored, and will be transformed with image</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_seg_masks&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seg_masks</span><span class="p">:</span>
+                <span class="n">seg_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seg_masks</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+                <span class="c1"># Add channel dimension</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">seg_mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="n">seg_mask</span> <span class="o">=</span> <span class="n">seg_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+                <span class="c1"># Append to X as last channel</span>
+                <span class="n">X_and_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">X</span><span class="p">,</span> <span class="n">seg_mask</span><span class="o">.</span><span class="n">float</span><span class="p">()])</span>
+
+                <span class="c1"># Apply geometric transform</span>
+                <span class="n">X_and_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">[</span><span class="s2">&quot;geometric&quot;</span><span class="p">](</span><span class="n">X_and_mask</span><span class="p">)</span>
+
+                <span class="c1"># Separate and store</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_seg_masks</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_and_mask</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">round</span><span class="p">()</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span>
+                <span class="n">X</span> <span class="o">=</span> <span class="n">X_and_mask</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="c1"># CASE 2: Just the image</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">[</span><span class="s2">&quot;geometric&quot;</span><span class="p">](</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="c1"># Transforms 3. Apply post-processing transforms, if specified</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;post-processing&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span><span class="p">[</span><span class="s2">&quot;post-processing&quot;</span><span class="p">](</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="c1"># If image values not between 0 and 1, divide by 255</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">X</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">X</span> <span class="o">/</span> <span class="mf">255.</span>
+
+        <span class="c1"># Get metadata</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">img_path</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_path</span> <span class="k">else</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">img_path</span><span class="p">)</span>
+        <span class="n">patient_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ids</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">visit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">visits</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">seq_number</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_numbers</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">dset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dsets</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+
+        <span class="c1"># Prepare metadata</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="n">filename</span><span class="p">,</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">patient_id</span><span class="p">,</span>
+            <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="n">visit</span><span class="p">,</span>
+            <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="n">seq_number</span><span class="p">,</span>
+            <span class="s2">&quot;dset&quot;</span><span class="p">:</span> <span class="n">dset</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span>
+
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDatasetDir">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDir">[docs]</a>
+<span class="k">class</span> <span class="nc">UltrasoundDatasetDir</span><span class="p">(</span><span class="n">UltrasoundDataset</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Dataset to load images from a directory.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img_dir</span><span class="p">,</span> <span class="n">full_seq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">img_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                 <span class="n">transforms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">full_path</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize UltrasoundDatasetDir object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        img_dir : str</span>
+<span class="sd">            Path to flat directory containing ultrasound images.</span>
+<span class="sd">        full_seq : bool, optional</span>
+<span class="sd">            If True, each item returned is a full ultrasound sequence with shape</span>
+<span class="sd">            (sequence_length, num_channels, img_height, img_width). Otherwise,</span>
+<span class="sd">            each item is an ultrasound image of shape of</span>
+<span class="sd">            (num_channels, img_height, img_width).</span>
+<span class="sd">        img_size : int or tuple of ints, optional</span>
+<span class="sd">            If int provided, resizes found images to (img_size x img_size), by</span>
+<span class="sd">            default None.</span>
+<span class="sd">        mode : int</span>
+<span class="sd">            Number of channels (mode) to read images into (1=grayscale, 3=RGB),</span>
+<span class="sd">            by default 3.</span>
+<span class="sd">        transforms : dict, optional</span>
+<span class="sd">            Maps from type of transform to composed transform</span>
+<span class="sd">        full_path : bool, optional</span>
+<span class="sd">            If True, &quot;filename&quot; metadata contains full path to the image/s.</span>
+<span class="sd">            Otherwise, contains path basename, by default False.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">IMAGE_MODES</span><span class="p">[</span><span class="n">mode</span><span class="p">]</span>
+
+        <span class="c1"># Get all images in flat directory</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="s2">&quot;*&quot;</span><span class="p">)))</span>
+
+        <span class="c1"># Get all patient IDs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">utils</span><span class="o">.</span><span class="n">get_from_paths</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">))</span>
+
+        <span class="c1"># Get hospital visit number</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visits</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_from_paths</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Get number in US sequence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seq_numbers</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">get_from_paths</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">,</span> <span class="s2">&quot;seq_number&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Add placeholder for dataset</span>
+        <span class="c1"># NOTE: This is done for compatibility</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">))</span>
+
+        <span class="c1"># Flag if `filename` should be the full path (or the basename)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_path</span> <span class="o">=</span> <span class="n">full_path</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                  For Full US Sequence Data Loading                   #</span>
+        <span class="c1">########################################################################</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_seq</span> <span class="o">=</span> <span class="n">full_seq</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Get unique patient ID and visits, corresponding to unique US seqs</span>
+        <span class="k">if</span> <span class="n">full_seq</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">visits</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                           Image Transforms                           #</span>
+        <span class="c1">########################################################################</span>
+        <span class="n">transforms</span> <span class="o">=</span> <span class="n">transforms</span> <span class="k">if</span> <span class="n">transforms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">img_size</span><span class="p">:</span>
+            <span class="n">transform_type</span> <span class="o">=</span> <span class="s2">&quot;geometric&quot;</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]]</span> <span class="k">if</span> <span class="n">transform_type</span> <span class="ow">in</span> <span class="n">transforms</span> <span class="k">else</span> <span class="p">[]</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">T</span><span class="o">.</span><span class="n">Resize</span><span class="p">(</span><span class="n">img_size</span><span class="p">))</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">Compose</span><span class="p">(</span><span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span> <span class="o">=</span> <span class="n">transforms</span>
+
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads an image with metadata, or a group of images from the same US</span>
+<span class="sd">        sequence.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Integer index to paths.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            Contains torch.Tensor and dict (containing metadata). Metadata may</span>
+<span class="sd">            include path to image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># If returning all images from full US sequences, override logic</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_seq</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_sequence</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
+        <span class="c1"># If returning an image</span>
+        <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span>
+
+
+<div class="viewcode-block" id="UltrasoundDatasetDir.get_sequence">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDir.get_sequence">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Used to override __getitem__ when loading ultrasound sequences as each</span>
+<span class="sd">        item.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Integer index to a list of unique (patient id, visit number)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            Contains torch.Tensor and dict (containing metadata). Metadata may</span>
+<span class="sd">            include paths to images.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># 1. Create boolean mask for the right US sequence</span>
+        <span class="n">patient_id</span><span class="p">,</span> <span class="n">visit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">id_mask</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span> <span class="o">==</span> <span class="n">patient_id</span><span class="p">)</span>
+        <span class="n">visit_mask</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">visits</span> <span class="o">==</span> <span class="n">visit</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">id_mask</span> <span class="o">&amp;</span> <span class="n">visit_mask</span><span class="p">)</span>
+
+        <span class="c1"># 2. Filter for the image paths and metadata</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+        <span class="n">seq_numbers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_numbers</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+        <span class="c1"># 3. Order by sequence number</span>
+        <span class="n">sort_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">seq_numbers</span><span class="p">)</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="n">paths</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+        <span class="n">seq_numbers</span> <span class="o">=</span> <span class="n">seq_numbers</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+
+        <span class="c1"># 4. Load images</span>
+        <span class="n">imgs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+            <span class="n">imgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">load_image</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">imgs</span><span class="p">)</span>
+
+        <span class="c1"># 4.1 If only 1 image for a sequence, pad first dimension</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">imgs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># 5. Metadata</span>
+        <span class="n">filenames</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_path</span> <span class="k">else</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                     <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
+        <span class="n">dset</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="n">filenames</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">patient_id</span><span class="p">,</span>
+                    <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="n">visit</span><span class="p">,</span> <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="n">seq_numbers</span><span class="p">,</span>
+                    <span class="s2">&quot;dset&quot;</span><span class="p">:</span> <span class="n">dset</span><span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span></div>
+
+
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return number of items in the dataset. If returning full sequences,</span>
+<span class="sd">        groups images under the same specific patient ID and hospital visit.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            Number of items in dataset</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_seq</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__len__</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="UltrasoundDatasetDataFrame">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFrame">[docs]</a>
+<span class="k">class</span> <span class="nc">UltrasoundDatasetDataFrame</span><span class="p">(</span><span class="n">UltrasoundDataset</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Dataset to load images and labels from a DataFrame.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">img_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">full_seq</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">img_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                 <span class="n">label_part</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">split_label</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="n">load_seg_mask</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">include_liver_seg</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="n">standardize_images</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">transforms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">full_path</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">ignore_kwargs</span><span class="p">,</span>
+                <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize UltrasoundDatasetDataFrame object.</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        Expects path column to be &quot;filename&quot;, and label column to be &quot;label&quot;.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        df : pd.DataFrame</span>
+<span class="sd">            Contains path to images and labels.</span>
+<span class="sd">        img_dir : str, optional</span>
+<span class="sd">            If provided, uses paths in dataframe as relative paths find</span>
+<span class="sd">            ultrasound images, by default None.</span>
+<span class="sd">        full_seq : bool, optional</span>
+<span class="sd">            If True, each item returned is a full ultrasound sequence with shape</span>
+<span class="sd">            (sequence_length, num_channels, img_height, img_width). Otherwise,</span>
+<span class="sd">            each item is an ultrasound image of shape of</span>
+<span class="sd">            (num_channels, img_height, img_width).</span>
+<span class="sd">        img_size : int or tuple of ints, optional</span>
+<span class="sd">            If int provided, resizes found images to (img_size x img_size). If</span>
+<span class="sd">            tuple provided, resizes images to (img_height, img_width), by</span>
+<span class="sd">            default None.</span>
+<span class="sd">        mode : int, optional</span>
+<span class="sd">            Number of channels (mode) to read images into (1=grayscale, 3=RGB),</span>
+<span class="sd">            by default 3.</span>
+<span class="sd">        label_part : str, optional</span>
+<span class="sd">            Label type. One of (&quot;side&quot;, &quot;plane&quot;, None). Used to get the correct</span>
+<span class="sd">            classes and indices, by default None.</span>
+<span class="sd">        split_label : bool, optional</span>
+<span class="sd">            If True, additionally provide both side/plane separately in metadata</span>
+<span class="sd">            dict, by default False.</span>
+<span class="sd">        load_seg_mask : bool, optional</span>
+<span class="sd">            If True, load (available) segmentation masks for each image into</span>
+<span class="sd">            one mask and store in the metadata, by default False</span>
+<span class="sd">        include_liver_seg : bool, optional</span>
+<span class="sd">            If True, include liver segmentation, if available. Otherwise, only</span>
+<span class="sd">            use kidney/bladder segmentations, by default False.</span>
+<span class="sd">        standardize_images : bool, optional</span>
+<span class="sd">            If True, standardize images by the training set pre-computed stats.</span>
+<span class="sd">        transforms : dict, optional</span>
+<span class="sd">            Maps from type of transform to composed transform</span>
+<span class="sd">        full_path : bool, optional</span>
+<span class="sd">            If True, &quot;filename&quot; metadata contains full path to the image/s.</span>
+<span class="sd">            Otherwise, contains path basename, by default False.</span>
+<span class="sd">        **ignore_kwargs : dict, optional</span>
+<span class="sd">            Misc. keyword arguments are ignored.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="n">IMAGE_MODES</span><span class="p">[</span><span class="n">mode</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_size</span> <span class="o">=</span> <span class="n">img_size</span>
+
+        <span class="c1"># Hidden variable to retrieve masks during data loading</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_seg_masks</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># Set to load available masks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_seg_mask</span> <span class="o">=</span> <span class="n">load_seg_mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">include_liver_seg</span> <span class="o">=</span> <span class="n">include_liver_seg</span>
+
+        <span class="c1"># Get paths to images. Add directory to path, if not already in.</span>
+        <span class="k">if</span> <span class="n">img_dir</span><span class="p">:</span>
+            <span class="n">has_path</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">img_dir</span> <span class="ow">in</span> <span class="n">x</span><span class="p">)</span>
+            <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="o">~</span><span class="n">has_path</span><span class="p">,</span> <span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="o">~</span><span class="n">has_path</span><span class="p">,</span> <span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+                <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">x</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">paths</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+
+        <span class="c1"># Get labels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_part</span> <span class="o">=</span> <span class="n">label_part</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">split_label</span> <span class="o">=</span> <span class="n">split_label</span>
+
+        <span class="c1"># Get all patient IDs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ids</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+
+        <span class="c1"># Get hospital visit number</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">visits</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;visit&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+
+        <span class="c1"># Get number in US sequence</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seq_numbers</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;seq_number&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+
+        <span class="c1"># Get dset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dsets</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+
+        <span class="c1"># Flag if `filename` should be the full path (or the basename)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_path</span> <span class="o">=</span> <span class="n">full_path</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                  For Full US Sequence Data Loading                   #</span>
+        <span class="c1">########################################################################</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">full_seq</span> <span class="o">=</span> <span class="n">full_seq</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Get unique patient ID and visits, corresponding to unique US seqs</span>
+        <span class="k">if</span> <span class="n">full_seq</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">visits</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                           Image Transforms                           #</span>
+        <span class="c1">########################################################################</span>
+        <span class="n">transforms</span> <span class="o">=</span> <span class="n">transforms</span> <span class="k">if</span> <span class="n">transforms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="c1"># If image size specified, at Resize transform</span>
+        <span class="k">if</span> <span class="n">img_size</span><span class="p">:</span>
+            <span class="n">transform_type</span> <span class="o">=</span> <span class="s2">&quot;geometric&quot;</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]]</span> <span class="k">if</span> <span class="n">transform_type</span> <span class="ow">in</span> <span class="n">transforms</span> <span class="k">else</span> <span class="p">[]</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">T</span><span class="o">.</span><span class="n">Resize</span><span class="p">(</span><span class="n">img_size</span><span class="p">))</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">Compose</span><span class="p">(</span><span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">])</span>
+        <span class="c1"># If specified, standardize images by pre-computed channel means/stds</span>
+        <span class="k">if</span> <span class="n">standardize_images</span><span class="p">:</span>
+            <span class="n">transform_type</span> <span class="o">=</span> <span class="s2">&quot;post-processing&quot;</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]]</span> <span class="k">if</span> <span class="n">transform_type</span> <span class="ow">in</span> <span class="n">transforms</span> <span class="k">else</span> <span class="p">[]</span>
+            <span class="n">transforms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">ToDtype</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+            <span class="n">transforms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">T</span><span class="o">.</span><span class="n">Normalize</span><span class="p">(</span><span class="n">mean</span><span class="o">=</span><span class="p">[</span><span class="n">SK_TRAIN_MEAN</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">,</span>
+                                          <span class="n">std</span><span class="o">=</span><span class="p">[</span><span class="n">SK_TRAIN_STD</span><span class="p">]</span> <span class="o">*</span> <span class="mi">3</span><span class="p">))</span>
+            <span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">]</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">Compose</span><span class="p">(</span><span class="n">transforms</span><span class="p">[</span><span class="n">transform_type</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transforms</span> <span class="o">=</span> <span class="n">transforms</span>
+
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads an image with metadata, or a group of images from the same US</span>
+<span class="sd">        sequence.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Integer index to paths.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            Contains torch.Tensor and dict (containing metadata). Metadata may</span>
+<span class="sd">            include path to image and label.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># If returning all images from full US sequences, override logic</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_seq</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_sequence</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
+        <span class="c1"># HACK: Load segmentation mask before image to group in transform</span>
+        <span class="c1"># NOTE: See __getitem__ in UltrasoundDataset</span>
+        <span class="n">seg_metadata</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_seg_mask</span><span class="p">:</span>
+            <span class="n">seg_metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_segmentation_mask</span><span class="p">(</span><span class="n">index</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">seg_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;has_seg_mask&quot;</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_seg_masks</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">seg_metadata</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span>
+
+        <span class="c1"># If returning an image</span>
+        <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+
+        <span class="c1"># If segmentation mask was transformed, update</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_seg_mask</span> <span class="ow">and</span> <span class="n">seg_metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;has_seg_mask&quot;</span><span class="p">):</span>
+            <span class="n">seg_metadata</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seg_masks</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_seg_masks</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+        <span class="c1"># Encode label to integer (-1, if not found)</span>
+        <span class="n">class_to_idx</span> <span class="o">=</span> \
+            <span class="n">constants</span><span class="o">.</span><span class="n">LABEL_PART_TO_CLASSES</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">label_part</span><span class="p">][</span><span class="s2">&quot;class_to_idx&quot;</span><span class="p">]</span>
+        <span class="c1"># NOTE: This assumes that label part was extracted prior to this</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_to_idx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># If specified, split label into side/plane, and store separately</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_label</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_part</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">label_part</span> <span class="ow">in</span> <span class="n">constants</span><span class="o">.</span><span class="n">LABEL_PARTS</span><span class="p">:</span>
+                <span class="n">metadata</span><span class="p">[</span><span class="n">label_part</span><span class="p">]</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">extract_from_label</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">label_part</span><span class="p">)</span>
+
+        <span class="c1"># Record if has segmentation mask or not</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;has_seg_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Early return, if not loading segmentation masks</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_seg_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span>
+
+        <span class="c1"># Load and store segmentation masks</span>
+        <span class="n">metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">seg_metadata</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span>
+
+
+<div class="viewcode-block" id="UltrasoundDatasetDataFrame.get_segmentation_mask">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFrame.get_segmentation_mask">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_segmentation_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get segmentation masks for image at index.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Integer index to paths.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Contains flag if segmentation mask exists and segmentation mask</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">metadata_overwrite</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">metadata_overwrite</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># CASE 1: Bladder image</span>
+        <span class="n">seg_fname_suffixes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">index</span><span class="p">])</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;bladder&quot;</span><span class="p">,</span> <span class="s2">&quot;none&quot;</span><span class="p">):</span>
+            <span class="n">seg_fname_suffixes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;_bseg&quot;</span><span class="p">)</span>
+        <span class="c1"># CASE 2: Kidney image</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">seg_fname_suffixes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;_kseg&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Add flag to include liver</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">include_liver_seg</span><span class="p">:</span>
+            <span class="n">seg_fname_suffixes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;_lseg&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Load kidney/bladder/liver segmentations</span>
+        <span class="c1"># NOTE: If 2+ exist, they&#39;re combined into 1 mask</span>
+        <span class="n">has_mask</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">img_path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">suffix</span> <span class="ow">in</span> <span class="n">seg_fname_suffixes</span><span class="p">:</span>
+            <span class="c1"># Create potential name of mask image (located in the same directory)</span>
+            <span class="n">fname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">img_path</span><span class="p">)</span>
+            <span class="n">split_fname</span> <span class="o">=</span> <span class="n">fname</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+            <span class="n">mask_fname</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">split_fname</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="n">suffix</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">split_fname</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">mask_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">img_path</span><span class="p">),</span> <span class="n">mask_fname</span><span class="p">)</span>
+
+            <span class="c1"># Skip, if mask doesn&#39;t exist</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">mask_path</span><span class="p">):</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Load segmentation mask</span>
+            <span class="n">has_mask</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">curr_mask</span> <span class="o">=</span> <span class="n">read_image</span><span class="p">(</span><span class="n">mask_path</span><span class="p">,</span> <span class="n">IMAGE_MODES</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+            <span class="c1"># Extract mask by getting red pixels (236, 28, 36)</span>
+            <span class="n">curr_mask</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">curr_mask</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">200</span><span class="p">,</span> <span class="mi">250</span><span class="p">)),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">*</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">curr_mask</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">35</span><span class="p">)),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">*</span>
+                <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">curr_mask</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">26</span><span class="p">,</span> <span class="mi">46</span><span class="p">)),</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">curr_mask</span> <span class="o">=</span> <span class="n">curr_mask</span><span class="o">.</span><span class="n">bool</span><span class="p">()</span>
+
+            <span class="c1"># CASE 1: No previous segmentation mask</span>
+            <span class="k">if</span> <span class="n">metadata_overwrite</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">metadata_overwrite</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">curr_mask</span>
+            <span class="c1"># CASE 2: 2+ masks found for image</span>
+            <span class="c1"># NOTE: Used if liver segmentation is added</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">metadata_overwrite</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">metadata_overwrite</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span> <span class="o">|</span> <span class="n">curr_mask</span>
+
+        <span class="c1"># If no mask loaded, make placeholder mask</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_mask</span><span class="p">:</span>
+            <span class="n">img_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">img_size</span> <span class="ow">or</span> <span class="n">constants</span><span class="o">.</span><span class="n">IMG_SIZE</span>
+            <span class="n">metadata_overwrite</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">img_size</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span>
+                                                        <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+
+        <span class="c1"># Record if has mask or not</span>
+        <span class="n">metadata_overwrite</span><span class="p">[</span><span class="s2">&quot;has_seg_mask&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">has_mask</span>
+        <span class="k">return</span> <span class="n">metadata_overwrite</span></div>
+
+
+
+    <span class="c1"># TODO: Implement getting masks</span>
+<div class="viewcode-block" id="UltrasoundDatasetDataFrame.get_sequence">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFrame.get_sequence">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Used to override __getitem__ when loading ultrasound sequences as each</span>
+<span class="sd">        item.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Integer index to a list of unique (patient id, visit number)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            Contains torch.Tensor and dict (containing metadata). Metadata may</span>
+<span class="sd">            include paths to images and labels.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">index</span> <span class="o">=</span> <span class="n">index</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># 1. Create boolean mask for the right US sequence</span>
+        <span class="n">patient_id</span><span class="p">,</span> <span class="n">visit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span><span class="p">[</span><span class="n">index</span><span class="p">]</span>
+        <span class="n">id_mask</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span> <span class="o">==</span> <span class="n">patient_id</span><span class="p">)</span>
+        <span class="n">visit_mask</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">visits</span> <span class="o">==</span> <span class="n">visit</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">id_mask</span> <span class="o">&amp;</span> <span class="n">visit_mask</span><span class="p">)</span>
+
+        <span class="c1"># 2. Filter for the image paths and metadata</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">paths</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+        <span class="n">seq_numbers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">seq_numbers</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+        <span class="n">dset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dsets</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+        <span class="c1"># 3. Order by sequence number</span>
+        <span class="n">sort_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">seq_numbers</span><span class="p">)</span>
+        <span class="n">paths</span> <span class="o">=</span> <span class="n">paths</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+        <span class="n">seq_numbers</span> <span class="o">=</span> <span class="n">seq_numbers</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+
+        <span class="c1"># 4. Load images</span>
+        <span class="n">imgs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">filenames</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+            <span class="n">imgs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">load_image</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+            <span class="n">filename</span> <span class="o">=</span> <span class="n">path</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_path</span> <span class="k">else</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">filenames</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+
+        <span class="n">X</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">imgs</span><span class="p">)</span>
+
+        <span class="c1"># 5. Encode labels to integers (-1, if not found)</span>
+        <span class="n">class_to_idx</span> <span class="o">=</span> \
+            <span class="n">constants</span><span class="o">.</span><span class="n">LABEL_PART_TO_CLASSES</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">label_part</span><span class="p">][</span><span class="s2">&quot;class_to_idx&quot;</span><span class="p">]</span>
+        <span class="n">encoded_labels</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">LongTensor</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">class_to_idx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">])</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="n">filenames</span><span class="p">,</span>
+            <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="n">encoded_labels</span><span class="p">,</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">patient_id</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)),</span>
+            <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">visit</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)),</span>
+            <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">seq_numbers</span><span class="p">),</span>
+            <span class="s2">&quot;dset&quot;</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">dset</span><span class="p">),</span>
+        <span class="p">}</span>
+
+        <span class="c1"># 6.1 If specified, split label into side/plane, and store separately</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">split_label</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_part</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">label_part</span> <span class="ow">in</span> <span class="n">constants</span><span class="o">.</span><span class="n">LABEL_PARTS</span><span class="p">:</span>
+                <span class="c1"># Extract side/plane from label</span>
+                <span class="n">extracted_labels</span> <span class="o">=</span> <span class="p">[</span><span class="n">utils</span><span class="o">.</span><span class="n">extract_from_label</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">label_part</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">]</span>
+                <span class="c1"># Encode as an integer</span>
+                <span class="n">class_to_idx</span> <span class="o">=</span> \
+                    <span class="n">constants</span><span class="o">.</span><span class="n">LABEL_PART_TO_CLASSES</span><span class="p">[</span><span class="n">label_part</span><span class="p">][</span><span class="s2">&quot;class_to_idx&quot;</span><span class="p">]</span>
+                <span class="n">encoded_labels</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">LongTensor</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">class_to_idx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">extracted_labels</span><span class="p">])</span>
+                <span class="n">metadata</span><span class="p">[</span><span class="n">label_part</span><span class="p">]</span> <span class="o">=</span> <span class="n">encoded_labels</span>
+
+        <span class="c1"># Early return, if not loading segmentation masks</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">load_seg_mask</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span>
+
+        <span class="c1"># Get segmentation mask for each image and concatenate them</span>
+        <span class="n">img_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
+        <span class="n">accum_seg_metadata</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">img_index</span> <span class="ow">in</span> <span class="n">img_indices</span><span class="p">:</span>
+            <span class="n">curr_seg_metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_segmentation_mask</span><span class="p">(</span><span class="n">img_index</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">curr_seg_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">accum_seg_metadata</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="n">accum_seg_metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">accum_seg_metadata</span><span class="p">)</span>
+
+        <span class="c1"># Get image size</span>
+        <span class="n">img_size</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">mask</span> <span class="ow">in</span> <span class="n">accum_seg_metadata</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">img_size</span> <span class="o">=</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span>
+                <span class="k">break</span>
+
+        <span class="c1"># TODO: Consider adding 1-only mask for missing masks</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Getting segmentation masks is not yet implemented for videos!&quot;</span><span class="p">)</span>
+
+        <span class="n">metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">accum_seg_metadata</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span></div>
+
+
+
+    <span class="k">def</span> <span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return number of items in the dataset. If returning full sequences,</span>
+<span class="sd">        groups images under the same specific patient ID and hospital visit.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            Number of items in dataset</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">full_seq</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">id_visit</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__len__</span><span class="p">()</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                        Dataset Classes (Paired Data)                         #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="UltrasoundDatasetDataFramePair">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFramePair">[docs]</a>
+<span class="k">class</span> <span class="nc">UltrasoundDatasetDataFramePair</span><span class="p">(</span><span class="n">UltrasoundDatasetDataFrame</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Dataset to load images and labels from a DataFrame in item pairs.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">random_pair</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize UltrasoundDatasetDataFramePair object.</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        Expects path column to be &quot;filename&quot;, and label column to be &quot;label&quot;.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        df : pd.DataFrame</span>
+<span class="sd">            Contains path to images and labels.</span>
+<span class="sd">        random_pair : bool, optional</span>
+<span class="sd">            If True, second item can be any item in the dataset randomly.</span>
+<span class="sd">            Otherwise, second item is the next item in the index, by default</span>
+<span class="sd">            False.</span>
+<span class="sd">        kwargs : keyword arguments for UltrasoundDatasetDataFrame</span>
+<span class="sd">            img_dir : str, optional</span>
+<span class="sd">            full_seq : bool, optional</span>
+<span class="sd">            img_size : int or tuple of ints, optional</span>
+<span class="sd">            mode : int, optional</span>
+<span class="sd">            label_part : str, optional</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">random_pair</span> <span class="o">=</span> <span class="n">random_pair</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads a pair of ultrasound images, or ultrasound image sequences.</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        Second item in pair is either deterministic (next item) or random.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index : int</span>
+<span class="sd">            Integer index to paths.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple of tuple of (torch.Tensor, dict)</span>
+<span class="sd">            Pair of items to return</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Choose index of next pair</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">random_pair</span><span class="p">:</span>
+            <span class="n">second_index</span> <span class="o">=</span> <span class="n">index</span>
+            <span class="k">while</span> <span class="n">second_index</span> <span class="o">==</span> <span class="n">index</span><span class="p">:</span>
+                <span class="n">second_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="fm">__len__</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">second_index</span> <span class="o">=</span> <span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="fm">__len__</span><span class="p">()</span>
+        
+        <span class="c1"># If returning all images from full US sequences, override logic</span>
+        <span class="n">first_item</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+        <span class="n">second_item</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">second_index</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">first_item</span><span class="p">,</span> <span class="n">second_item</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

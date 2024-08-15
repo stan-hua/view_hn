@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.models.byol &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.models.byol</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.models.byol</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">byol.py</span>
+
+<span class="sd">Description: Implementation of BYOL with an EfficientNet convolutional backbone,</span>
+<span class="sd">             using Lightly.AI and PyTorch Lightning.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">copy</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">lightning</span> <span class="k">as</span> <span class="nn">L</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">efficientnet_pytorch</span> <span class="kn">import</span> <span class="n">EfficientNet</span>
+<span class="kn">from</span> <span class="nn">lightly.loss</span> <span class="kn">import</span> <span class="n">NegativeCosineSimilarity</span>
+<span class="kn">from</span> <span class="nn">lightly.models.modules.heads</span> <span class="kn">import</span> <span class="n">BYOLProjectionHead</span><span class="p">,</span> <span class="n">BYOLPredictionHead</span>
+<span class="kn">from</span> <span class="nn">lightly.models.utils</span> <span class="kn">import</span> <span class="n">deactivate_requires_grad</span><span class="p">,</span> <span class="n">update_momentum</span>
+<span class="kn">from</span> <span class="nn">lightly.utils.scheduler</span> <span class="kn">import</span> <span class="n">cosine_schedule</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.utils</span> <span class="kn">import</span> <span class="n">efficientnet_pytorch_utils</span> <span class="k">as</span> <span class="n">effnet_utils</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               BYOL Model Class                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="BYOL">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL">[docs]</a>
+<span class="k">class</span> <span class="nc">BYOL</span><span class="p">(</span><span class="n">L</span><span class="o">.</span><span class="n">LightningModule</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    BYOL for self-supervised learning.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img_size</span><span class="o">=</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+                 <span class="n">optimizer</span><span class="o">=</span><span class="s2">&quot;adamw&quot;</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+                 <span class="n">momentum</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">weight_decay</span><span class="o">=</span><span class="mf">0.0005</span><span class="p">,</span>
+                 <span class="n">effnet_name</span><span class="o">=</span><span class="s2">&quot;efficientnet-b0&quot;</span><span class="p">,</span>
+                 <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize BYOL object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        img_size : tuple, optional</span>
+<span class="sd">            Expected image&#39;s (height, width), by default (256, 256)</span>
+<span class="sd">        optimizer : str, optional</span>
+<span class="sd">            Choice of optimizer, by default &quot;adamw&quot;</span>
+<span class="sd">        lr : float, optional</span>
+<span class="sd">            Optimizer learning rate, by default 0.0001</span>
+<span class="sd">        momentum : float, optional</span>
+<span class="sd">            If SGD optimizer, value to use for momentum during SGD, by</span>
+<span class="sd">            default 0.9</span>
+<span class="sd">        weight_decay : float, optional</span>
+<span class="sd">            Weight decay value to slow gradient updates when performance</span>
+<span class="sd">            worsens, by default 0.0005</span>
+<span class="sd">        effnet_name : str, optional</span>
+<span class="sd">            Name of EfficientNet backbone to use</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># Instantiate EfficientNet</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span> <span class="o">=</span> <span class="n">effnet_name</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone</span> <span class="o">=</span> <span class="n">EfficientNet</span><span class="o">.</span><span class="n">from_name</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="n">img_size</span><span class="p">,</span> <span class="n">include_top</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">feature_dim</span> <span class="o">=</span> <span class="mi">1280</span>      <span class="c1"># expected feature size from EfficientNetB0</span>
+
+        <span class="c1"># Save hyperparameters (now in self.hparams)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">save_hyperparameters</span><span class="p">()</span>
+
+        <span class="c1"># Create BYOL model with EfficientNet backbone</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">projection_head</span> <span class="o">=</span> <span class="n">BYOLProjectionHead</span><span class="p">(</span>
+            <span class="n">input_dim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dim</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="o">=</span><span class="mi">2</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">feature_dim</span><span class="p">,</span>
+            <span class="n">output_dim</span><span class="o">=</span><span class="mi">256</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prediction_head</span> <span class="o">=</span> <span class="n">BYOLPredictionHead</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">4096</span><span class="p">,</span> <span class="mi">256</span><span class="p">)</span>
+
+        <span class="c1"># Momentum Encoders</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone_momentum</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">projection_head_momentum</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">projection_head</span><span class="p">)</span>
+
+        <span class="c1"># Set all parameters to disable gradient computation for momentum</span>
+        <span class="n">deactivate_requires_grad</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone_momentum</span><span class="p">)</span>
+        <span class="n">deactivate_requires_grad</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">projection_head_momentum</span><span class="p">)</span>
+
+        <span class="c1"># Define loss (NT-Xent Loss with memory bank)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loss</span> <span class="o">=</span> <span class="n">NegativeCosineSimilarity</span><span class="p">()</span>
+
+        <span class="c1"># Store outputs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dset_to_outputs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;train&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;val&quot;</span><span class="p">:</span> <span class="p">[],</span> <span class="s2">&quot;test&quot;</span><span class="p">:</span> <span class="p">[]}</span>
+
+
+<div class="viewcode-block" id="BYOL.load_imagenet_weights">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL.load_imagenet_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">load_imagenet_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Load imagenet weights for convolutional backbone.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># NOTE: Modified utility function to ignore missing keys</span>
+        <span class="n">effnet_utils</span><span class="o">.</span><span class="n">load_pretrained_weights</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model_name</span><span class="p">,</span>
+            <span class="n">load_fc</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">advprop</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="BYOL.configure_optimizers">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL.configure_optimizers">[docs]</a>
+    <span class="k">def</span> <span class="nf">configure_optimizers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize and return optimizer (AdamW or SGD).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.optim.Optimizer</span>
+<span class="sd">            Initialized optimizer.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">==</span> <span class="s2">&quot;adamw&quot;</span><span class="p">:</span>
+            <span class="n">optimizer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">AdamW</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span>
+                                          <span class="n">lr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">lr</span><span class="p">,</span>
+                                          <span class="n">weight_decay</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">weight_decay</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">optimizer</span> <span class="o">==</span> <span class="s2">&quot;sgd&quot;</span><span class="p">:</span>
+            <span class="n">optimizer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">optim</span><span class="o">.</span><span class="n">SGD</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameters</span><span class="p">(),</span>
+                                        <span class="n">lr</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">lr</span><span class="p">,</span>
+                                        <span class="n">momentum</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">momentum</span><span class="p">,</span>
+                                        <span class="n">weight_decay</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">weight_decay</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">optimizer</span></div>
+
+
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                       Custom BYOL Forward Pass                           #</span>
+    <span class="c1">############################################################################</span>
+<div class="viewcode-block" id="BYOL.byol_forward">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL.byol_forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">byol_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform and return forward pass with online network</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        x : torch.Tensor</span>
+<span class="sd">            Batch of images</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Embed and project image</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">start_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">projection_head</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+
+        <span class="c1"># Predict features of EMA target network</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prediction_head</span><span class="p">(</span><span class="n">z</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">p</span></div>
+
+
+
+<div class="viewcode-block" id="BYOL.byol_forward_momentum">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL.byol_forward_momentum">[docs]</a>
+    <span class="k">def</span> <span class="nf">byol_forward_momentum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform and return forward pass with target network</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        x : torch.Tensor</span>
+<span class="sd">            Batch of images</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Embed and project image</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone</span><span class="p">(</span><span class="n">x</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">(</span><span class="n">start_dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">projection_head</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+
+        <span class="c1"># Return detached features of EMA target network</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">z</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">z</span></div>
+
+
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                          Per-Batch Metrics                               #</span>
+    <span class="c1">############################################################################</span>
+<div class="viewcode-block" id="BYOL.training_step">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL.training_step">[docs]</a>
+    <span class="k">def</span> <span class="nf">training_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">train_batch</span><span class="p">,</span> <span class="n">batch_idx</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Training step</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        train_batch : tuple of ((torch.Tensor, torch.Tensor), dict)</span>
+<span class="sd">            Contains paired (augmented) images and metadata dict.</span>
+<span class="sd">            Each image tensor is of the shape:</span>
+<span class="sd">            - (B, 3, H, W)</span>
+<span class="sd">        batch_idx : int</span>
+<span class="sd">            Training batch index</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.FloatTensor</span>
+<span class="sd">            Loss for training batch</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="p">(</span><span class="n">x_q</span><span class="p">,</span> <span class="n">x_k</span><span class="p">),</span> <span class="n">_</span> <span class="o">=</span> <span class="n">train_batch</span>
+
+        <span class="c1"># Get momentum</span>
+        <span class="n">momentum</span> <span class="o">=</span> <span class="n">cosine_schedule</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">current_epoch</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;stop_epoch&quot;</span><span class="p">,</span> <span class="mi">600</span><span class="p">),</span> <span class="mf">0.996</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Update target network parameters</span>
+        <span class="n">update_momentum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone_momentum</span><span class="p">,</span>
+                        <span class="n">m</span><span class="o">=</span><span class="n">momentum</span><span class="p">)</span>
+        <span class="n">update_momentum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">projection_head</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">projection_head_momentum</span><span class="p">,</span>
+                        <span class="n">m</span><span class="o">=</span><span class="n">momentum</span><span class="p">)</span>
+
+        <span class="c1"># Pass through online network</span>
+        <span class="n">p0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">byol_forward</span><span class="p">(</span><span class="n">x_q</span><span class="p">)</span>
+        <span class="n">p1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">byol_forward</span><span class="p">(</span><span class="n">x_k</span><span class="p">)</span>
+
+        <span class="c1"># Pass through target network</span>
+        <span class="n">z0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">byol_forward_momentum</span><span class="p">(</span><span class="n">x_q</span><span class="p">)</span>
+        <span class="n">z1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">byol_forward_momentum</span><span class="p">(</span><span class="n">x_k</span><span class="p">)</span>
+
+        <span class="c1"># Compute loss</span>
+        <span class="c1"># NOTE: Goal is to minimize the difference between online/target network</span>
+        <span class="c1">#       representations for the same image</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">p0</span><span class="p">,</span> <span class="n">z1</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">(</span><span class="n">p1</span><span class="p">,</span> <span class="n">z0</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;train_loss&quot;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span>
+
+        <span class="c1"># Compute L2 norm of online embeddings</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">embeds</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">p0</span><span class="p">,</span> <span class="n">p1</span><span class="p">])</span>
+            <span class="n">norm</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">matrix_norm</span><span class="p">(</span><span class="n">embeds</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+            <span class="n">norm</span> <span class="o">=</span> <span class="n">norm</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeds</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s2">&quot;proj_l2_norm&quot;</span><span class="p">,</span> <span class="n">norm</span><span class="p">)</span>
+
+        <span class="c1"># Prepare result</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dset_to_outputs</span><span class="p">[</span><span class="s2">&quot;train&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;loss&quot;</span><span class="p">:</span> <span class="n">loss</span><span class="p">})</span>
+
+        <span class="k">return</span> <span class="n">loss</span></div>
+
+
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                            Epoch Metrics                                 #</span>
+    <span class="c1">############################################################################</span>
+<div class="viewcode-block" id="BYOL.on_train_epoch_end">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL.on_train_epoch_end">[docs]</a>
+    <span class="k">def</span> <span class="nf">on_train_epoch_end</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute and log evaluation metrics for training epoch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">outputs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dset_to_outputs</span><span class="p">[</span><span class="s2">&quot;train&quot;</span><span class="p">]</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">d</span><span class="p">[</span><span class="s1">&#39;loss&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">outputs</span><span class="p">])</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="s1">&#39;epoch_train_loss&#39;</span><span class="p">,</span> <span class="n">loss</span><span class="p">)</span></div>
+
+
+
+    <span class="c1">############################################################################</span>
+    <span class="c1">#                          Extract Embeddings                              #</span>
+    <span class="c1">############################################################################</span>
+<div class="viewcode-block" id="BYOL.extract_embeds">
+<a class="viewcode-back" href="../../../src.models.html#src.models.byol.BYOL.extract_embeds">[docs]</a>
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">extract_embeds</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Extracts embeddings from input images.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        inputs : torch.Tensor</span>
+<span class="sd">            Ultrasound images. Expected size is (B, C, H, W)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.array</span>
+<span class="sd">            Deep embeddings before final linear layer</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conv_backbone</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+
+        <span class="c1"># Flatten</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">z</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">inputs</span><span class="o">.</span><span class="n">size</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">z</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

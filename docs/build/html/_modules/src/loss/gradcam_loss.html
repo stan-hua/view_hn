@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.loss.gradcam_loss &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.loss.gradcam_loss</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.loss.gradcam_loss</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">gradcam_loss.py</span>
+
+<span class="sd">Description: Implementation of segmentation-guided GradCAM loss. This loss</span>
+<span class="sd">             penalizes gradients that fall outside of given segmentations.</span>
+<span class="sd">             Code adapted from original repository linked below.</span>
+
+<span class="sd">Warning: GradCAMLoss currently is not compatible with the following:</span>
+<span class="sd">    1. Gradient accumulation; gradient zero-ing is needed,</span>
+<span class="sd">    2. Freezing weights; the gradient need to be computed across weights,</span>
+<span class="sd">    3. Video models; </span>
+
+<span class="sd">Source Repo: https://github.com/MeriDK/segmentation-guided-attention/tree/master</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">efficientnet_pytorch</span> <span class="kn">import</span> <span class="n">EfficientNet</span>
+<span class="kn">from</span> <span class="nn">torchvision.transforms.v2.functional</span> <span class="kn">import</span> <span class="n">resize</span>
+<span class="kn">from</span> <span class="nn">pytorch_grad_cam</span> <span class="kn">import</span> <span class="n">GradCAM</span>
+<span class="kn">from</span> <span class="nn">pytorch_grad_cam.activations_and_gradients</span> <span class="kn">import</span> <span class="n">ActivationsAndGradients</span>
+<span class="kn">from</span> <span class="nn">pytorch_grad_cam.utils.model_targets</span> <span class="kn">import</span> <span class="n">ClassifierOutputTarget</span>
+
+
+<span class="c1"># TODO: Consider modifying ActivationsAndGradients to use last conv. layer</span>
+<span class="c1">#       output instead of after AveragePool</span>
+<span class="c1">################################################################################</span>
+<span class="c1">#                                   Classes                                    #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="ViewGradCAMLoss">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.ViewGradCAMLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">ViewGradCAMLoss</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    View label - specific GradCAM loss</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">hparams</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Instantiate ViewGradCAMLoss object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : torch.nn.Module</span>
+<span class="sd">            Arbitrary model</span>
+<span class="sd">        hparams : dict</span>
+<span class="sd">            Contains model hyperparameters</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="c1"># Store hyperparameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hparams</span> <span class="o">=</span> <span class="n">hparams</span>
+
+        <span class="c1"># Flag to penalize ALL classes for having gradients OUTSIDE the positive class mask</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_all_class_gradcam_loss</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;use_all_class_gradcam_loss&quot;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Flag to penalize negative class for having gradients in true class segmentation masks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_neg_class_gradcam_loss</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;add_neg_class_gradcam_loss&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="c1"># NOTE: The two flags conflict</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_all_class_gradcam_loss</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add_neg_class_gradcam_loss</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="c1"># Flag to use original implementation</span>
+        <span class="c1"># NOTE: Original implementation was only for binary. Penalize all classes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_orig_implement</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;use_orig_implement&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_orig_implement</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">use_all_class_gradcam_loss</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="c1"># Create GradCAM</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cam</span> <span class="o">=</span> <span class="n">create_cam</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ViewGradCAMLoss.forward">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.ViewGradCAMLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">metadata</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute GradCAM loss.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X : torch.Tensor</span>
+<span class="sd">            Input image/s</span>
+<span class="sd">        metadata : dict</span>
+<span class="sd">            Contains labels and masks</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            GradCAM loss</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">N</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">H</span><span class="p">,</span> <span class="n">W</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="c1"># Early return, if no segmentation masks in batch</span>
+        <span class="n">has_seg_mask</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;has_seg_mask&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">has_seg_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
+                                <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Filter out items without segmentation masks</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">has_seg_mask</span><span class="p">]</span>
+        <span class="n">seg_masks</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;seg_mask&quot;</span><span class="p">][</span><span class="n">has_seg_mask</span><span class="p">]</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">][</span><span class="n">has_seg_mask</span><span class="p">]</span>
+
+        <span class="c1"># Add channel dimension to segmentation mask for broadcasting</span>
+        <span class="n">seg_masks</span> <span class="o">=</span> <span class="n">seg_masks</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Prepare targets from labels</span>
+        <span class="c1"># NOTE: Used to index class-specific gradients</span>
+        <span class="n">target_categories</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">target_cls</span> <span class="o">=</span> <span class="n">ClassifierOutputAllTargets</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_all_class_gradcam_loss</span> <span class="k">else</span> <span class="n">ClassifierOutputTarget</span>
+        <span class="n">pos_targets</span> <span class="o">=</span> <span class="p">[</span><span class="n">target_cls</span><span class="p">(</span><span class="n">category</span><span class="p">)</span> <span class="k">for</span> <span class="n">category</span> <span class="ow">in</span> <span class="n">target_categories</span><span class="p">]</span>
+
+        <span class="c1"># Create GradCAM for positive class</span>
+        <span class="n">pos_cam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">pos_targets</span><span class="p">)</span>
+
+        <span class="c1"># [ORIGINAL IMPLEMENTATION]</span>
+        <span class="c1"># 1. Compute MSE between segmentation mask and GradCAM</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_orig_implement</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="p">(</span><span class="n">seg_masks</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mf">1.0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Max seg mask exceeds 1! Max: `</span><span class="si">{</span><span class="n">seg_masks</span><span class="o">.</span><span class="n">float</span><span class="p">()</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">`&quot;</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="p">((</span><span class="n">pos_cam</span> <span class="o">-</span> <span class="n">seg_masks</span><span class="o">.</span><span class="n">float</span><span class="p">())</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">loss</span> <span class="o">/</span> <span class="p">(</span><span class="n">N</span> <span class="o">*</span> <span class="n">H</span> <span class="o">*</span> <span class="n">W</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">loss</span>
+
+        <span class="c1"># Compute mean-squared error loss</span>
+        <span class="c1"># NOTE: Penalize activations outside of segmentation mask</span>
+        <span class="n">pos_loss</span> <span class="o">=</span> <span class="p">(</span><span class="n">pos_cam</span><span class="p">[</span><span class="o">~</span><span class="n">seg_masks</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="c1"># Normalize to pixel-level loss (across channels)</span>
+        <span class="n">pos_loss</span> <span class="o">=</span> <span class="n">pos_loss</span> <span class="o">/</span> <span class="p">(</span><span class="n">N</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">seg_masks</span><span class="p">[</span><span class="o">~</span><span class="n">seg_masks</span><span class="p">])))</span>
+
+        <span class="c1"># NEW: Scale loss by inverse proportion of samples with mask</span>
+        <span class="n">inverse_prop</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">has_seg_mask</span><span class="p">)</span> <span class="o">/</span> <span class="nb">sum</span><span class="p">(</span><span class="n">has_seg_mask</span><span class="p">)</span>
+        <span class="n">pos_loss</span> <span class="o">=</span> <span class="n">inverse_prop</span> <span class="o">*</span> <span class="n">pos_loss</span>
+
+        <span class="c1"># Early exit, if not penalizing negative classes</span>
+        <span class="c1"># NOTE: Don&#39;t penalize negative class if already penalizing all classes</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_neg_class_gradcam_loss</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_all_class_gradcam_loss</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">pos_loss</span>
+
+        <span class="c1"># NEW: Below can be used if classes strictly do not overlap in the image</span>
+        <span class="c1"># Index negative class specific gradients</span>
+        <span class="n">neg_targets</span> <span class="o">=</span> <span class="p">[</span><span class="n">ClassifierOutputNegativeTarget</span><span class="p">(</span><span class="n">category</span><span class="p">)</span> <span class="k">for</span> <span class="n">category</span> <span class="ow">in</span> <span class="n">target_categories</span><span class="p">]</span>
+        <span class="c1"># Create GradCAMs for negative (all other) classes</span>
+        <span class="n">neg_cam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cam</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">neg_targets</span><span class="p">)</span>
+
+        <span class="c1"># Compute mean-squared error loss</span>
+        <span class="c1"># NOTE: Penalize activations inside of segmentation mask</span>
+        <span class="n">neg_loss</span> <span class="o">=</span> <span class="p">(</span><span class="n">neg_cam</span><span class="p">[</span><span class="n">seg_masks</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="c1"># Normalize to pixel-level loss (across channels)</span>
+        <span class="n">neg_loss</span> <span class="o">=</span> <span class="n">neg_loss</span> <span class="o">/</span> <span class="p">(</span><span class="n">N</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">seg_masks</span><span class="p">[</span><span class="n">seg_masks</span><span class="p">])))</span>
+
+        <span class="c1"># Compute GradCAM loss as their weighted sum</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">pos_loss</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">neg_loss</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+
+<span class="c1"># Adapted from `pytorch_grad_cam`</span>
+<span class="c1"># Inspired by https://github.com/MeriDK/segmentation-guided-attention/</span>
+<div class="viewcode-block" id="ClassifierOutputAllTargets">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.ClassifierOutputAllTargets">[docs]</a>
+<span class="k">class</span> <span class="nc">ClassifierOutputAllTargets</span><span class="p">(</span><span class="n">ClassifierOutputTarget</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A sub-class of ClassifierOutputTarget to extract gradients related to</span>
+<span class="sd">    all the classes.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    This means that the GradCAM will be for all classes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">):</span>
+        <span class="c1"># NOTE: Need to sum up activations across classes</span>
+        <span class="k">return</span> <span class="n">model_output</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ClassifierOutputNegativeTarget">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.ClassifierOutputNegativeTarget">[docs]</a>
+<span class="k">class</span> <span class="nc">ClassifierOutputNegativeTarget</span><span class="p">(</span><span class="n">ClassifierOutputTarget</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A sub-class of ClassifierOutputTarget to extract gradients related to</span>
+<span class="sd">    all the negative classes.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    This may be useful if the positive and negative classes shouldn&#39;t have</span>
+<span class="sd">    gradients that overlap their segmented regions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model_output</span><span class="p">):</span>
+        <span class="c1"># Filter for output for all of the negative classes</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">model_output</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">model_output</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+            <span class="n">mask</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">category</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">return</span> <span class="n">model_output</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">model_output</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">model_output</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">mask</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">category</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">model_output</span><span class="p">[:,</span> <span class="n">mask</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="DifferentiableActivationsAndGradients">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableActivationsAndGradients">[docs]</a>
+<span class="k">class</span> <span class="nc">DifferentiableActivationsAndGradients</span><span class="p">(</span><span class="n">ActivationsAndGradients</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Sub-class of ActivationsAndGradients that can be back-propagated.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="DifferentiableActivationsAndGradients.save_activation">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_activation">[docs]</a>
+    <span class="k">def</span> <span class="nf">save_activation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">output</span><span class="p">):</span>
+        <span class="n">activation</span> <span class="o">=</span> <span class="n">output</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshape_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">activation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshape_transform</span><span class="p">(</span><span class="n">activation</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">activations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">activation</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DifferentiableActivationsAndGradients.save_gradient">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_gradient">[docs]</a>
+    <span class="k">def</span> <span class="nf">save_gradient</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="nb">input</span><span class="p">,</span> <span class="n">output</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="s2">&quot;requires_grad&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">output</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">def</span> <span class="nf">_store_grad</span><span class="p">(</span><span class="n">grad</span><span class="p">):</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshape_transform</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">grad</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reshape_transform</span><span class="p">(</span><span class="n">grad</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradients</span> <span class="o">=</span> <span class="p">[</span><span class="n">grad</span><span class="p">]</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradients</span>
+
+        <span class="n">output</span><span class="o">.</span><span class="n">register_hook</span><span class="p">(</span><span class="n">_store_grad</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="DifferentiableGradCAM">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM">[docs]</a>
+<span class="k">class</span> <span class="nc">DifferentiableGradCAM</span><span class="p">(</span><span class="n">GradCAM</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Sub-class of GradCAM that can be back-propagated.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">target_layers</span><span class="p">,</span> <span class="n">reshape_transform</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Overwrite `__init__` to avoid setting `model.eval()`</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_layers</span> <span class="o">=</span> <span class="n">target_layers</span>
+
+        <span class="c1"># NOTE: Ignore model call to `eval()` in BaseCAM</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+        <span class="c1"># Default parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reshape_transform</span> <span class="o">=</span> <span class="n">reshape_transform</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compute_input_gradient</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">uses_gradients</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="c1"># Following is not used by GradCAM specifically</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tta_transforms</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># NOTE: Replaced ActivationsAndGradients with differentiable version</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">activations_and_grads</span> <span class="o">=</span> <span class="n">DifferentiableActivationsAndGradients</span><span class="p">(</span>
+            <span class="n">model</span><span class="p">,</span> <span class="n">target_layers</span><span class="p">,</span> <span class="n">reshape_transform</span>
+        <span class="p">)</span>
+
+
+<div class="viewcode-block" id="DifferentiableGradCAM.get_cam_weights">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.get_cam_weights">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_cam_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_tensor</span><span class="p">,</span> <span class="n">target_layer</span><span class="p">,</span> <span class="n">target_category</span><span class="p">,</span>
+                        <span class="n">activations</span><span class="p">,</span> <span class="n">grads</span><span class="p">):</span>
+        <span class="c1"># 2D image</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">grads</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+
+        <span class="c1"># 3D image</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">grads</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">5</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">grads</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid grads shape.&quot;</span> 
+                             <span class="s2">&quot;Shape of grads should be 4 (2D image) or 5 (3D image).&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DifferentiableGradCAM.compute_cam_per_layer">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.compute_cam_per_layer">[docs]</a>
+    <span class="k">def</span> <span class="nf">compute_cam_per_layer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_tensor</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span> <span class="n">eigen_smooth</span><span class="p">):</span>
+        <span class="n">activations_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">activations_and_grads</span><span class="o">.</span><span class="n">activations</span>
+        <span class="n">grads_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">activations_and_grads</span><span class="o">.</span><span class="n">gradients</span>
+        <span class="n">target_size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_target_width_height</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">)</span>
+
+        <span class="n">cam_per_target_layer</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># Loop over the saliency image from every layer</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">target_layer</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target_layers</span><span class="p">):</span>
+            <span class="n">layer_activations</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">layer_grads</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">activations_list</span><span class="p">):</span>
+                <span class="n">layer_activations</span> <span class="o">=</span> <span class="n">activations_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">grads_list</span><span class="p">):</span>
+                <span class="n">layer_grads</span> <span class="o">=</span> <span class="n">grads_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+            <span class="n">cam</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_cam_image</span><span class="p">(</span><span class="n">input_tensor</span><span class="p">,</span> <span class="n">target_layer</span><span class="p">,</span> <span class="n">targets</span><span class="p">,</span>
+                                     <span class="n">layer_activations</span><span class="p">,</span> <span class="n">layer_grads</span><span class="p">,</span>
+                                     <span class="n">eigen_smooth</span><span class="p">)</span>
+            <span class="n">cam</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">cam</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">scaled</span> <span class="o">=</span> <span class="n">scale_cam_image</span><span class="p">(</span><span class="n">cam</span><span class="p">,</span> <span class="n">target_size</span><span class="p">)</span>
+            <span class="n">cam_per_target_layer</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">scaled</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:])</span>
+
+        <span class="k">return</span> <span class="n">cam_per_target_layer</span></div>
+
+
+
+<div class="viewcode-block" id="DifferentiableGradCAM.aggregate_multi_layers">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.aggregate_multi_layers">[docs]</a>
+    <span class="k">def</span> <span class="nf">aggregate_multi_layers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cam_per_target_layer</span><span class="p">):</span>
+        <span class="c1"># Early return, if there&#39;s only one</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cam_per_target_layer</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">cam_per_target_layer</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">cam_per_target_layer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">cam_per_target_layer</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">cam_per_target_layer</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">cam_per_target_layer</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">cam_per_target_layer</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># Normalize CAM</span>
+        <span class="k">return</span> <span class="n">scale_cam_image</span><span class="p">(</span><span class="n">result</span><span class="p">)</span></div>
+
+
+
+    <span class="c1"># HACK: Handle case where model device changed since this object was made.</span>
+    <span class="c1"># HACK: Ensure gradients from computing GradCAM aren&#39;t kept</span>
+<div class="viewcode-block" id="DifferentiableGradCAM.forward">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="c1"># Ensure device is correct (in case model device changed)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span><span class="o">.</span><span class="n">device</span>
+
+        <span class="c1"># Compute GradCAM</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="c1"># Zero out gradients from computing GradCAM</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">zero_grad</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">out</span></div>
+</div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="create_cam">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.create_cam">[docs]</a>
+<span class="k">def</span> <span class="nf">create_cam</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">target_layers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create GradCAM instance</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Arbitrary model</span>
+<span class="sd">    target_layers : list of torch.nn.Module, optional</span>
+<span class="sd">        Specifies layers in model to use, by default None</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pytorch_grad_cam.GradCAM</span>
+<span class="sd">        GradCAM instance</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># CASE 1: EfficientNet model</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">EfficientNet</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">target_layers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">target_layers</span> <span class="o">=</span> <span class="p">[</span><span class="n">model</span><span class="o">.</span><span class="n">_avg_pooling</span><span class="p">]</span>
+        <span class="n">cam</span> <span class="o">=</span> <span class="n">DifferentiableGradCAM</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">target_layers</span><span class="o">=</span><span class="n">target_layers</span><span class="p">)</span>
+    <span class="c1"># CASE 2: Unknown model, but target layer is provided</span>
+    <span class="k">elif</span> <span class="n">target_layers</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">cam</span> <span class="o">=</span> <span class="n">DifferentiableGradCAM</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">target_layers</span><span class="o">=</span><span class="n">target_layers</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Model `</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2">` does not have GradCAM logic implemented!&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">cam</span></div>
+
+
+
+<div class="viewcode-block" id="scale_cam_image">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.gradcam_loss.scale_cam_image">[docs]</a>
+<span class="k">def</span> <span class="nf">scale_cam_image</span><span class="p">(</span><span class="n">cam</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Differentiable re-implementation of scaling CAM</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cam : torch.Tensor</span>
+<span class="sd">        Computed GradCAM</span>
+<span class="sd">    target_size : tuple, optional</span>
+<span class="sd">        Desired size of GradCAM, by default None</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.Tensor</span>
+<span class="sd">        Resized CAM</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Normalize between 1-0</span>
+    <span class="n">cam</span> <span class="o">=</span> <span class="n">cam</span> <span class="o">-</span> <span class="n">cam</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+    <span class="n">cam</span> <span class="o">=</span> <span class="n">cam</span> <span class="o">/</span> <span class="p">(</span><span class="mf">1e-7</span> <span class="o">+</span> <span class="n">cam</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">target_size</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># NOTE: Perform bilinear interpolation to resize CAM</span>
+        <span class="n">cam</span> <span class="o">=</span> <span class="n">resize</span><span class="p">(</span><span class="n">cam</span><span class="p">,</span> <span class="n">target_size</span><span class="p">,</span> <span class="n">antialias</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">cam</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

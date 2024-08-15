@@ -98,8 +98,22 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="src.data_prep.scripts.html">src.data_prep.scripts package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="src.data_prep.scripts.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.scripts.html#src-data-prep-scripts-create-metadata-module">src.data_prep.scripts.create_metadata module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.scripts.html#module-contents">Module contents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.scripts.html#module-src.data_prep.scripts.create_metadata">src.data_prep.scripts.create_metadata module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.clean_image_dsets_metadata"><code class="docutils literal notranslate"><span class="pre">clean_image_dsets_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.clean_sickkids_video_metadata"><code class="docutils literal notranslate"><span class="pre">clean_sickkids_video_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.clean_stanford_video_metadata"><code class="docutils literal notranslate"><span class="pre">clean_stanford_video_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_chop_metadata"><code class="docutils literal notranslate"><span class="pre">create_chop_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_sickkids_silent_trial_metadata"><code class="docutils literal notranslate"><span class="pre">create_sickkids_silent_trial_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_stanford_image_metadata"><code class="docutils literal notranslate"><span class="pre">create_stanford_image_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.create_uiowa_metadata_from_src"><code class="docutils literal notranslate"><span class="pre">create_uiowa_metadata_from_src()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.main_clean_metadata"><code class="docutils literal notranslate"><span class="pre">main_clean_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.main_correct_labels"><code class="docutils literal notranslate"><span class="pre">main_correct_labels()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.main_prepare_image_datasets"><code class="docutils literal notranslate"><span class="pre">main_prepare_image_datasets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.preprocess_uiowa_data"><code class="docutils literal notranslate"><span class="pre">preprocess_uiowa_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html#src.data_prep.scripts.create_metadata.print_basic_data_stats"><code class="docutils literal notranslate"><span class="pre">print_basic_data_stats()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.scripts.html#module-src.data_prep.scripts">Module contents</a></li>
 </ul>
 </li>
 </ul>
@@ -108,32 +122,1470 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 </section>
-<section id="src-data-prep-byol-dataset-module">
-<h2>src.data_prep.byol_dataset module<a class="headerlink" href="#src-data-prep-byol-dataset-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.byol_dataset">
+<span id="src-data-prep-byol-dataset-module"></span><h2>src.data_prep.byol_dataset module<a class="headerlink" href="#module-src.data_prep.byol_dataset" title="Link to this heading"></a></h2>
+<p>byol_dataset.py</p>
+<dl class="simple">
+<dt>Description: Contains module to load data for Bootstrap Your Own Latent (BYOL)</dt><dd><p>self-supervised pretraining.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.byol_dataset.BYOLDataModule">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.byol_dataset.</span></span><span class="sig-name descname"><span class="pre">BYOLDataModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">same_label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">custom_collate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">augment_training</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/byol_dataset.html#BYOLDataModule"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.byol_dataset.BYOLDataModule" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#src.data_prep.dataset.UltrasoundDataModule" title="src.data_prep.dataset.UltrasoundDataModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">UltrasoundDataModule</span></code></a></p>
+<p>Top-level object used to access all data preparation and loading
+functionalities in the self-supervised setting.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.byol_dataset.BYOLDataModule.test_dataloader">
+<span class="sig-name descname"><span class="pre">test_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/byol_dataset.html#BYOLDataModule.test_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.byol_dataset.BYOLDataModule.test_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for test set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for test data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.byol_dataset.BYOLDataModule.train_dataloader">
+<span class="sig-name descname"><span class="pre">train_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/byol_dataset.html#BYOLDataModule.train_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.byol_dataset.BYOLDataModule.train_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for training set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for training data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.byol_dataset.BYOLDataModule.val_dataloader">
+<span class="sig-name descname"><span class="pre">val_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/byol_dataset.html#BYOLDataModule.val_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.byol_dataset.BYOLDataModule.val_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for validation set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for validation data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
-<section id="src-data-prep-dataset-module">
-<h2>src.data_prep.dataset module<a class="headerlink" href="#src-data-prep-dataset-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.dataset">
+<span id="src-data-prep-dataset-module"></span><h2>src.data_prep.dataset module<a class="headerlink" href="#module-src.data_prep.dataset" title="Link to this heading"></a></h2>
+<p>dataset.py</p>
+<p>Description: Contains functions/classes to load dataset in PyTorch.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.dataset.</span></span><span class="sig-name descname"><span class="pre">UltrasoundDataModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">augment_training</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">LightningDataModule</span></code></p>
+<p>Top-level object used to access all data preparation and loading
+functionalities.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.filter_metadata">
+<span class="sig-name descname"><span class="pre">filter_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">filters</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.filter_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.filter_metadata" title="Link to this definition"></a></dt>
+<dd><p>Get metadata filtered for dataset or split.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dset</strong> (<em>str</em><em>, </em><em>optional</em>) – Dataset to filter for</p></li>
+<li><p><strong>split</strong> (<em>str</em><em>, </em><em>optional</em>) – Data split to filter for, by default None</p></li>
+<li><p><strong>**filters</strong> (<em>Any</em>) – Column to value keyword arguments to filter</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.get_dataloader">
+<span class="sig-name descname"><span class="pre">get_dataloader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">split</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.get_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.get_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Get specific data loader</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>split</strong> (<em>str</em>) – Split must be one of train/val/test</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>DataLoader</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.get_filtered_dataloader">
+<span class="sig-name descname"><span class="pre">get_filtered_dataloader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">split</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">filters</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.get_filtered_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.get_filtered_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Get data loader for a specific split with option to filter for specific
+dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>split</strong> (<em>str</em>) – Name of data split to load. One of (train/val/test)</p></li>
+<li><p><strong>filters</strong> (<em>Any</em>) – Keyword arguments, containing row filters.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>DataLoader with filtered data</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.get_patient_ids">
+<span class="sig-name descname"><span class="pre">get_patient_ids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">split</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.get_patient_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.get_patient_ids" title="Link to this definition"></a></dt>
+<dd><p>Get unique patient IDs for dataset or a specific data split</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>split</strong> (<em>str</em><em>, </em><em>optional</em>) – Data split (train/val/test)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of patient IDs</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.set_kfold_index">
+<span class="sig-name descname"><span class="pre">set_kfold_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fold</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.set_kfold_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.set_kfold_index" title="Link to this definition"></a></dt>
+<dd><p>If performing cross-validation, sets fold index.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Fold index can range between [0, num_folds - 1]</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>fold</strong> (<em>int</em>) – Fold index</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'fit'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.setup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.setup" title="Link to this definition"></a></dt>
+<dd><p>Prepares data for model training/validation/testing</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.size">
+<span class="sig-name descname"><span class="pre">size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">split</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.size"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.size" title="Link to this definition"></a></dt>
+<dd><p>Get size of dataset or specific data split</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>split</strong> (<em>str</em><em>, </em><em>optional</em>) – Data split (train/val/test)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of patient IDs</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.test_dataloader">
+<span class="sig-name descname"><span class="pre">test_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.test_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.test_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for test set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for test data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.train_dataloader">
+<span class="sig-name descname"><span class="pre">train_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.train_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.train_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for training set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for training data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataModule.val_dataloader">
+<span class="sig-name descname"><span class="pre">val_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataModule.val_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataModule.val_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for validation set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for validation data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDataset">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.dataset.</span></span><span class="sig-name descname"><span class="pre">UltrasoundDataset</span></span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDataset" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></p>
+<p>Abstract Dataset class to load images.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDatasetDataFrame">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.dataset.</span></span><span class="sig-name descname"><span class="pre">UltrasoundDatasetDataFrame</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_part</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split_label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">load_seg_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_liver_seg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">standardize_images</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transforms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">ignore_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDatasetDataFrame"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDatasetDataFrame" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#src.data_prep.dataset.UltrasoundDataset" title="src.data_prep.dataset.UltrasoundDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">UltrasoundDataset</span></code></a></p>
+<p>Dataset to load images and labels from a DataFrame.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDatasetDataFrame.get_segmentation_mask">
+<span class="sig-name descname"><span class="pre">get_segmentation_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDatasetDataFrame.get_segmentation_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDatasetDataFrame.get_segmentation_mask" title="Link to this definition"></a></dt>
+<dd><p>Get segmentation masks for image at index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – Integer index to paths.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains flag if segmentation mask exists and segmentation mask</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDatasetDataFrame.get_sequence">
+<span class="sig-name descname"><span class="pre">get_sequence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDatasetDataFrame.get_sequence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDatasetDataFrame.get_sequence" title="Link to this definition"></a></dt>
+<dd><p>Used to override __getitem__ when loading ultrasound sequences as each
+item.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – Integer index to a list of unique (patient id, visit number)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains torch.Tensor and dict (containing metadata). Metadata may
+include paths to images and labels.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDatasetDataFramePair">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.dataset.</span></span><span class="sig-name descname"><span class="pre">UltrasoundDatasetDataFramePair</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">random_pair</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDatasetDataFramePair"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDatasetDataFramePair" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#src.data_prep.dataset.UltrasoundDatasetDataFrame" title="src.data_prep.dataset.UltrasoundDatasetDataFrame"><code class="xref py py-class docutils literal notranslate"><span class="pre">UltrasoundDatasetDataFrame</span></code></a></p>
+<p>Dataset to load images and labels from a DataFrame in item pairs.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDatasetDir">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.dataset.</span></span><span class="sig-name descname"><span class="pre">UltrasoundDatasetDir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transforms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDatasetDir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDatasetDir" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#src.data_prep.dataset.UltrasoundDataset" title="src.data_prep.dataset.UltrasoundDataset"><code class="xref py py-class docutils literal notranslate"><span class="pre">UltrasoundDataset</span></code></a></p>
+<p>Dataset to load images from a directory.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.dataset.UltrasoundDatasetDir.get_sequence">
+<span class="sig-name descname"><span class="pre">get_sequence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#UltrasoundDatasetDir.get_sequence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.UltrasoundDatasetDir.get_sequence" title="Link to this definition"></a></dt>
+<dd><p>Used to override __getitem__ when loading ultrasound sequences as each
+item.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – Integer index to a list of unique (patient id, visit number)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains torch.Tensor and dict (containing metadata). Metadata may
+include paths to images.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.dataset.load_dataset_from_dataframe">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.dataset.</span></span><span class="sig-name descname"><span class="pre">load_dataset_from_dataframe</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#load_dataset_from_dataframe"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.load_dataset_from_dataframe" title="Link to this definition"></a></dt>
+<dd><p>Loads image dataset from dataframe of image paths and labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df</strong> (<em>pd.DataFrame</em>) – Contains column with absolute/relative path to images, and labels</p></li>
+<li><p><strong>img_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Path to directory containing ultrasound images, by default None.</p></li>
+<li><p><strong>full_seq</strong> (<em>str</em>) – If True, groups ultrasound images by unique patient-visits, by default
+False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains images, metadata from filename, and labels from dataframe</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.utils.data.Dataset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.dataset.load_dataset_from_dir">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.dataset.</span></span><span class="sig-name descname"><span class="pre">load_dataset_from_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/dataset.html#load_dataset_from_dir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.dataset.load_dataset_from_dir" title="Link to this definition"></a></dt>
+<dd><p>Loads image dataset from directory of images.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img_dir</strong> (<em>str</em>) – Path to directory containing ultrasound images.</p></li>
+<li><p><strong>full_seq</strong> (<em>str</em>) – If True, groups ultrasound images by unique patient-visits, by default
+False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains images and metadata from filename</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.utils.data.Dataset</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-data-prep-moco-dataset-module">
-<h2>src.data_prep.moco_dataset module<a class="headerlink" href="#src-data-prep-moco-dataset-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.moco_dataset">
+<span id="src-data-prep-moco-dataset-module"></span><h2>src.data_prep.moco_dataset module<a class="headerlink" href="#module-src.data_prep.moco_dataset" title="Link to this heading"></a></h2>
+<p>moco_dataset.py</p>
+<dl class="simple">
+<dt>Description: Contains module to load data for Momentum Contrastive learning</dt><dd><p>(MoCo) self-supervised pretraining.</p>
+</dd>
+<dt>Note: Model trained on this dataset does NOT take advantage of temporal</dt><dd><p>information in patient ultrasound image sequences.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.moco_dataset.MoCoDataModule">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.moco_dataset.</span></span><span class="sig-name descname"><span class="pre">MoCoDataModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">same_label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">custom_collate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">augment_training</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/moco_dataset.html#MoCoDataModule"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.moco_dataset.MoCoDataModule" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#src.data_prep.dataset.UltrasoundDataModule" title="src.data_prep.dataset.UltrasoundDataModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">UltrasoundDataModule</span></code></a></p>
+<p>Top-level object used to access all data preparation and loading
+functionalities in the self-supervised setting.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.moco_dataset.MoCoDataModule.test_dataloader">
+<span class="sig-name descname"><span class="pre">test_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/moco_dataset.html#MoCoDataModule.test_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.moco_dataset.MoCoDataModule.test_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for test set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for test data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.moco_dataset.MoCoDataModule.train_dataloader">
+<span class="sig-name descname"><span class="pre">train_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/moco_dataset.html#MoCoDataModule.train_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.moco_dataset.MoCoDataModule.train_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for training set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for training data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.moco_dataset.MoCoDataModule.val_dataloader">
+<span class="sig-name descname"><span class="pre">val_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/moco_dataset.html#MoCoDataModule.val_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.moco_dataset.MoCoDataModule.val_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for validation set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for validation data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
-<section id="src-data-prep-segment-dataset-module">
-<h2>src.data_prep.segment_dataset module<a class="headerlink" href="#src-data-prep-segment-dataset-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.segment_dataset">
+<span id="src-data-prep-segment-dataset-module"></span><h2>src.data_prep.segment_dataset module<a class="headerlink" href="#module-src.data_prep.segment_dataset" title="Link to this heading"></a></h2>
+<p>segment_dataset.py</p>
+<p>Description: Used to load ultrasound images with segmentation masks</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.segment_dataset.SegmentedUSDataset">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.segment_dataset.</span></span><span class="sig-name descname"><span class="pre">SegmentedUSDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask_img_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_img_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reverse_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_dataset.html#SegmentedUSDataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_dataset.SegmentedUSDataset" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Dataset</span></code></p>
+<p>Dataset to load images from a directory.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.segment_dataset.SegmentedUSDataset.get_sequence">
+<span class="sig-name descname"><span class="pre">get_sequence</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_dataset.html#SegmentedUSDataset.get_sequence"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_dataset.SegmentedUSDataset.get_sequence" title="Link to this definition"></a></dt>
+<dd><p>Used to override __getitem__ when loading ultrasound sequences as each
+item.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – Integer index to a list of unique (patient id, visit number)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains torch.Tensor and dict (containing metadata). Metadata may
+include paths to images.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.segment_dataset.SegmentedUSDataset.load_masked_image">
+<span class="sig-name descname"><span class="pre">load_masked_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_img_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_img_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_dataset.html#SegmentedUSDataset.load_masked_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_dataset.SegmentedUSDataset.load_masked_image" title="Link to this definition"></a></dt>
+<dd><p>Loads a masked image given the path to the source image and the image
+mask.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>src_img_path</strong> (<em>str</em>) – Path to the source image</p></li>
+<li><p><strong>mask_img_path</strong> (<em>str</em>) – Path to the image mask</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Masked tensor (image with mask)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>maskedtensor.maskedtensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.segment_dataset.SegmentedUSModule">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.segment_dataset.</span></span><span class="sig-name descname"><span class="pre">SegmentedUSModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask_img_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_img_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataloader_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reverse_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">full_seq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_dataset.html#SegmentedUSModule"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_dataset.SegmentedUSModule" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">LightningDataModule</span></code></p>
+<p>Top-level object used to access all data preparation and loading
+functionalities.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.segment_dataset.SegmentedUSModule.setup">
+<span class="sig-name descname"><span class="pre">setup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'fit'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_dataset.html#SegmentedUSModule.setup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_dataset.SegmentedUSModule.setup" title="Link to this definition"></a></dt>
+<dd><p>Prepares data for model training/validation/testing</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.segment_dataset.SegmentedUSModule.train_dataloader">
+<span class="sig-name descname"><span class="pre">train_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_dataset.html#SegmentedUSModule.train_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_dataset.SegmentedUSModule.train_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for training set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for training data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.segment_dataset.custom_collate_fn">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.segment_dataset.</span></span><span class="sig-name descname"><span class="pre">custom_collate_fn</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_dataset.html#custom_collate_fn"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_dataset.custom_collate_fn" title="Link to this definition"></a></dt>
+<dd><p>Custom collate function for Masked Tensors.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>torch.stack isn’t</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>batch</strong> (<em>list</em><em> of </em><em>(</em><em>MaskedTensors</em><em>, </em><em>dict</em><em>) </em><em>tuples</em>) – Batch where each item is a pair of image (MaskedTensor) and metadata
+dictionary</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>_description_</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>_type_</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-data-prep-segment-prep-script-module">
-<h2>src.data_prep.segment_prep_script module<a class="headerlink" href="#src-data-prep-segment-prep-script-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.segment_prep_script">
+<span id="src-data-prep-segment-prep-script-module"></span><h2>src.data_prep.segment_prep_script module<a class="headerlink" href="#module-src.data_prep.segment_prep_script" title="Link to this heading"></a></h2>
+<p>segment_prep_script.py</p>
+<p>Description: Used to extract foreground and background from image segmentations.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.segment_prep_script.get_fg_and_bg_of_segmentation">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.segment_prep_script.</span></span><span class="sig-name descname"><span class="pre">get_fg_and_bg_of_segmentation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segment_img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower_bound</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper_bound</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_prep_script.html#get_fg_and_bg_of_segmentation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_prep_script.get_fg_and_bg_of_segmentation" title="Link to this definition"></a></dt>
+<dd><p>Get foreground and background of image segmentation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>src_img</strong> (<em>numpy.array</em>) – Source ultrasound image (BGR format)</p></li>
+<li><p><strong>segment_img</strong> (<em>numpy.array</em>) – Source ultrasound image with segmentation (BGR format)</p></li>
+<li><p><strong>lower_bound</strong> (<em>tuple</em><em> of </em><em>(</em><em>int</em><em>, </em><em>int</em><em>, </em><em>int</em><em>)</em>) – Contains lower bound on BGR pixel values</p></li>
+<li><p><strong>upper_bound</strong> (<em>tuple</em><em> of </em><em>(</em><em>int</em><em>, </em><em>int</em><em>, </em><em>int</em><em>)</em>) – Contains upper bound on BGR pixel values</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains (foreground image, background image)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of (numpy.array, numpy.array)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.segment_prep_script.get_segmented_type">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.segment_prep_script.</span></span><span class="sig-name descname"><span class="pre">get_segmented_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_prep_script.html#get_segmented_type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_prep_script.get_segmented_type" title="Link to this definition"></a></dt>
+<dd><p>Return item segmented in image from filename.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>filename</strong> (<em>str</em>) – Filename of image. If segmented, must contain at least one of
+(“bseg”, “kseg”, “cseg”)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Item segmented (bladder, kidney, hn), or None if not found</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.segment_prep_script.get_source_to_segmented_filenames">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.segment_prep_script.</span></span><span class="sig-name descname"><span class="pre">get_source_to_segmented_filenames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">paths</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_prep_script.html#get_source_to_segmented_filenames"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_prep_script.get_source_to_segmented_filenames" title="Link to this definition"></a></dt>
+<dd><p>Given all image file paths, find segmented images (given by filename suffix)
+and create a mapping of {source filename : [segmented image filenames]}.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>paths</strong> (<em>list</em>) – List of image file paths</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Maps source filename to list of filenames of corresponding segmented
+images.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.segment_prep_script.load_metadata_with_segmentation">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.segment_prep_script.</span></span><span class="sig-name descname"><span class="pre">load_metadata_with_segmentation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">segment_files</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/segment_prep_script.html#load_metadata_with_segmentation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.segment_prep_script.load_metadata_with_segmentation" title="Link to this definition"></a></dt>
+<dd><p>Attempt to get labels for segmented image files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>segment_files</strong> (<em>list</em>) – Filenames of segmented images</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains image metadata (label, patient ID, visit number, seq. number)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-data-prep-ssl-collate-fn-module">
-<h2>src.data_prep.ssl_collate_fn module<a class="headerlink" href="#src-data-prep-ssl-collate-fn-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.ssl_collate_fn">
+<span id="src-data-prep-ssl-collate-fn-module"></span><h2>src.data_prep.ssl_collate_fn module<a class="headerlink" href="#module-src.data_prep.ssl_collate_fn" title="Link to this heading"></a></h2>
+<p>ssl_collate_fn.py</p>
+<dl class="simple">
+<dt>Description: Contains collate functions to augment image batches for</dt><dd><p>self-supervised pretraining.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.BYOLSameLabelCollateFunction">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.ssl_collate_fn.</span></span><span class="sig-name descname"><span class="pre">BYOLSameLabelCollateFunction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Compose</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#BYOLSameLabelCollateFunction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.BYOLSameLabelCollateFunction" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseCollateFunction</span></code></p>
+<p>BYOLSameLabelCollateFunction.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Used to augment each image once and pair the image with another image of the
+same label.</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.BYOLSameLabelCollateFunction.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#BYOLSameLabelCollateFunction.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.BYOLSameLabelCollateFunction.forward" title="Link to this definition"></a></dt>
+<dd><p>For each image in the batch, randomly augments each image and pairs with
+a same-label image. Those missing a pair will be discarded.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>batch</strong> (<em>tuple</em><em> of </em><em>(</em><em>torch.Tensor</em><em>, </em><em>dict</em><em>)</em>) – Tuple of image tensors and metadata dict (containing filenames,
+etc.)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The two tensors with corresponding images that have the same
+label.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of ((torch.Tensor, torch.Tensor), dict).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.MoCoSameLabelCollateFunction">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.ssl_collate_fn.</span></span><span class="sig-name descname"><span class="pre">MoCoSameLabelCollateFunction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Compose</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#MoCoSameLabelCollateFunction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.MoCoSameLabelCollateFunction" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseCollateFunction</span></code></p>
+<p>MoCoSameLabelCollateFunction.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Used to create two augmentations for each images, and pair images with the
+same label.</p>
+<p>The same image with a different augmentation can be considered a negative
+sample.</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.MoCoSameLabelCollateFunction.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#MoCoSameLabelCollateFunction.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.MoCoSameLabelCollateFunction.forward" title="Link to this definition"></a></dt>
+<dd><p>For each image in the batch, creates two random augmentations on each
+image and pairs same-label images.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Because of two augmentations per image, there is no possibility that
+a label having only 1 image (in the batch) will have no pair. In the
+worst case, it will pair with a random augmentation of itself.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>batch</strong> (<em>tuple</em><em> of </em><em>(</em><em>torch.Tensor</em><em>, </em><em>dict</em><em>)</em>) – Tuple of image tensors and metadata dict (containing filenames,
+etc.)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The two tensors with corresponding images that have the same
+label.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of ((torch.Tensor, torch.Tensor), dict).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.SimCLRCollateFunction">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.ssl_collate_fn.</span></span><span class="sig-name descname"><span class="pre">SimCLRCollateFunction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Compose</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#SimCLRCollateFunction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.SimCLRCollateFunction" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseCollateFunction</span></code></p>
+<p>SimCLRCollateFunction. Used to create paired image augmentations with custom
+batch data.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.SimCLRCollateFunction.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#SimCLRCollateFunction.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.SimCLRCollateFunction.forward" title="Link to this definition"></a></dt>
+<dd><p>For each image in the batch, creates two random augmentations on the
+same image and pairs them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>batch</strong> (<em>tuple</em><em> of </em><em>(</em><em>torch.Tensor</em><em>, </em><em>dict</em><em>)</em>) – Tuple of image tensors and metadata dict (containing filenames,
+etc.)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The two tensors consist of corresponding images transformed from
+the original batch.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of ((torch.Tensor, torch.Tensor), dict).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.TCLRCollateFunction">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.ssl_collate_fn.</span></span><span class="sig-name descname"><span class="pre">TCLRCollateFunction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">transform</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Compose</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#TCLRCollateFunction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.TCLRCollateFunction" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseCollateFunction</span></code></p>
+<p>TCLRCollateFunction class</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.ssl_collate_fn.TCLRCollateFunction.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/ssl_collate_fn.html#TCLRCollateFunction.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.ssl_collate_fn.TCLRCollateFunction.forward" title="Link to this definition"></a></dt>
+<dd><p>Given each item in the batch is an ultrasound image sequence with a
+fixed number of frames, performs the following:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p>Augments each frame 2 times independently, maintaining the
+initial shape</p></li>
+</ol>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>batch</strong> (<em>tuple</em><em> of </em><em>(</em><em>torch.Tensor</em><em>, </em><em>dict</em><em>)</em>) – <p>Tuple of image clips and metadata dict (containing filenames,
+etc.), where each batch is of the shape:
+(B, <cite>seq_length</cite>, 3, H, W).</p>
+<blockquote>
+<div><p># B: batch size
+# <cite>seq_length</cite>: fixed number of frames per ultrasound seq.
+# H: height
+# W: width</p>
+</div></blockquote>
+</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The two augmented video tensors with corresponding ultrasound
+image sequences of the shape (B, <cite>seq_length</cite>, 3, H, W).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of ((torch.Tensor, torch.Tensor), dict).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
-<section id="src-data-prep-tclr-dataset-module">
-<h2>src.data_prep.tclr_dataset module<a class="headerlink" href="#src-data-prep-tclr-dataset-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.tclr_dataset">
+<span id="src-data-prep-tclr-dataset-module"></span><h2>src.data_prep.tclr_dataset module<a class="headerlink" href="#module-src.data_prep.tclr_dataset" title="Link to this heading"></a></h2>
+<p>tclr_dataset.py</p>
+<dl class="simple">
+<dt>Description: Contains module to load data for Temporal Contrastive Learning</dt><dd><p>(TCLR) self-supervised pretraining.</p>
+</dd>
+<dt>Note: Model trained on this dataset attempts to take advantage of temporal</dt><dd><p>information in patient ultrasound image sequences.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.data_prep.tclr_dataset.TCLRDataModule">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.data_prep.tclr_dataset.</span></span><span class="sig-name descname"><span class="pre">TCLRDataModule</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader_params</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seq_length</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">18</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/tclr_dataset.html#TCLRDataModule"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.tclr_dataset.TCLRDataModule" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#src.data_prep.dataset.UltrasoundDataModule" title="src.data_prep.dataset.UltrasoundDataModule"><code class="xref py py-class docutils literal notranslate"><span class="pre">UltrasoundDataModule</span></code></a></p>
+<p>Top-level object used to access all data preparation and loading
+functionalities in the self-supervised setting.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.tclr_dataset.TCLRDataModule.train_dataloader">
+<span class="sig-name descname"><span class="pre">train_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/tclr_dataset.html#TCLRDataModule.train_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.tclr_dataset.TCLRDataModule.train_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for training set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for training data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.data_prep.tclr_dataset.TCLRDataModule.val_dataloader">
+<span class="sig-name descname"><span class="pre">val_dataloader</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/tclr_dataset.html#TCLRDataModule.val_dataloader"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.tclr_dataset.TCLRDataModule.val_dataloader" title="Link to this definition"></a></dt>
+<dd><p>Returns DataLoader for validation set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Data loader for validation data</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>torch.utils.data.DataLoader</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
-<section id="src-data-prep-utils-module">
-<h2>src.data_prep.utils module<a class="headerlink" href="#src-data-prep-utils-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.utils">
+<span id="src-data-prep-utils-module"></span><h2>src.data_prep.utils module<a class="headerlink" href="#module-src.data_prep.utils" title="Link to this heading"></a></h2>
+<p>utils.py</p>
+<dl class="simple">
+<dt>Description: Contains helper functions for a variety of data/label preprocessing</dt><dd><p>functions.</p>
+</dd>
+</dl>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.argsort_unsort">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">argsort_unsort</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arr</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#argsort_unsort"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.argsort_unsort" title="Link to this definition"></a></dt>
+<dd><p>Given an array to sort, return indices to sort and unsort the array.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<dl class="simple">
+<dt>Given arr = [C, A, B, D] and its index array be [0, 1, 2, 3].</dt><dd><p>Sort indices: [2, 0, 1, 3] result in [A, B, C, D] &amp; [1, 2, 0, 3],
+respectively.</p>
+</dd>
+<dt>To unsort, sort index array initially sorted by <cite>arr</cite></dt><dd><p>Initial index: [1, 2, 0, 3]
+Sorted indices: [2, 0, 1, 3] result in arr = [C, A, B, D]</p>
+</dd>
+</dl>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>arr</strong> (<em>pd.Series</em><em> or </em><em>np.array</em>) – Array of items to sort</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>First array contains indices to sort the array.
+Second array contains indices to unsort the sorted array.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of (np.array, np.array)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.assign_split_row">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">assign_split_row</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">row</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'sickkids'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#assign_split_row"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.assign_split_row" title="Link to this definition"></a></dt>
+<dd><p>Given a row from a dataframe, assign its dataset based on the patient ID</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>row</strong> (<em>pd.Series</em><em> or </em><em>dict</em>) – Row from metadata table</p></li>
+<li><p><strong>dset</strong> (<em>str</em>) – Hospital/dataset (e.g., sickkids, sickkids_silent_trial)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dataset split (train/val/test) or None (if not a split)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.assign_split_table">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">assign_split_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">other_split</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'test'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">split_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#assign_split_table"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.assign_split_table" title="Link to this definition"></a></dt>
+<dd><p>Split table into train and test, and add “split” column to specify which
+split.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If image has no label, it’s not part of any split.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pd.DataFrame</em>) – Each row represents an US image at least a patient ID and label</p></li>
+<li><p><strong>other_split</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of other split. For example, (“val”, “test”), by default “test”</p></li>
+<li><p><strong>overwrite</strong> (<em>bool</em><em>, </em><em>optional</em>) – If val/test splits already exists, then don’t overwrite</p></li>
+<li><p><strong>**split_kwargs</strong> (<em>Any</em>) – Keyword arguments to pass into <cite>split_by_ids</cite></p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.assign_split_table_by_dset">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">assign_split_table_by_dset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">split_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#assign_split_table_by_dset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.assign_split_table_by_dset" title="Link to this definition"></a></dt>
+<dd><p>Assign data split by dataset</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_metadata</strong> (<em>pd.DataFrame</em>) – Metadata table containing images from 1+ datasets specified in <cite>dset</cite>
+column</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table where <cite>split</cite> column was assigned</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.assign_unlabeled_split">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">assign_unlabeled_split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'train'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#assign_unlabeled_split"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.assign_unlabeled_split" title="Link to this definition"></a></dt>
+<dd><p>Assign unlabeled data to data split (e.g., train)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pd.DataFrame</em>) – Metadata table where each row is an ultrasound image</p></li>
+<li><p><strong>split</strong> (<em>str</em><em>, </em><em>optional</em>) – Data split. Can also be None, if not desired to be part of
+train/val/test</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table where unlabeled images are now part of specified split</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.contains_overlapping_vals">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">contains_overlapping_vals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#contains_overlapping_vals"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.contains_overlapping_vals" title="Link to this definition"></a></dt>
+<dd><p>Checks if values overlap in column <cite>column</cite> between dataframes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_a</strong> (<em>pd.DataFrame</em>) – Arbitrary table A with column <cite>column</cite></p></li>
+<li><p><strong>df_b</strong> (<em>pd.DataFrame</em>) – Arbitrary table B with column <cite>column</cite></p></li>
+<li><p><strong>column</strong> (<em>str</em>) – Name of column to check for overlapping values</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Returns True if values overlap between dataframes in column <cite>column</cite>,
+and False, otherwise.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.cross_validation_by_patient">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">cross_validation_by_patient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">patient_ids</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_folds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#cross_validation_by_patient"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.cross_validation_by_patient" title="Link to this definition"></a></dt>
+<dd><p>Create train/val indices for Cross-Validation with exclusive patient ids
+betwen training and validation sets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>patient_ids</strong> (<em>np.array</em><em> or </em><em>array-like</em>) – List of patient IDs (IDs can repeat).</p></li>
+<li><p><strong>num_folds</strong> (<em>int</em>) – Number of folds for cross-validation</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Each tuple in the list corresponds to a fold’s (train_ids, val_ids)</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list of &lt;num_folds&gt; tuples of (np.array, np.array)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.exclude_from_any_split">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">exclude_from_any_split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">json_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#exclude_from_any_split"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.exclude_from_any_split" title="Link to this definition"></a></dt>
+<dd><p>Get list of filenames to exclude from any split. Unset their assigned split.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pd.DataFrame</em>) – Metadata table</p></li>
+<li><p><strong>json_path</strong> (<em>str</em>) – Path to json file containing list of filenames to exclude</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table with rows whose data splits were could be unassigned</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.extract_data_from_filename">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">extract_data_from_filename</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'filename'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#extract_data_from_filename"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.extract_data_from_filename" title="Link to this definition"></a></dt>
+<dd><p>Extract metadata from each image’s filename and combines with HN labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p></li>
+<li><p><strong>col</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of column containing filename, by default “filename”.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table with additional data extracted</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.extract_data_from_filename_and_join">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">extract_data_from_filename_and_join</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'sickkids'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#extract_data_from_filename_and_join"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.extract_data_from_filename_and_join" title="Link to this definition"></a></dt>
+<dd><p>Extract extra metadata</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image, but is missing
+extra desired metadata</p></li>
+<li><p><strong>dset</strong> (<em>str</em><em> or </em><em>list</em><em>, </em><em>optional</em>) – Name of dset/s in <cite>df_metadata</cite>, by default “sickkids”.</p></li>
+<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Keyword arguments to pass into <cite>load_metadata</cite>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table with additional data extracted</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.extract_from_label">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">extract_from_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">extract</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'plane'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#extract_from_label"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.extract_from_label" title="Link to this definition"></a></dt>
+<dd><p>Extract data from label string.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>label</strong> (<em>str</em>) – Label of the form &lt;plane&gt;_&lt;side&gt; or “Bladder”</p></li>
+<li><p><strong>extract</strong> (<em>str</em><em>, </em><em>optional</em>) – One of “plane” or “side”, by default “plane”</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Extracted item from label</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.extract_hn_labels">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">extract_hn_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sickkids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stanford</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#extract_hn_labels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.extract_hn_labels" title="Link to this definition"></a></dt>
+<dd><p>Extract labels for hydronephrosis (HN) and surgery, if available, and insert
+them into the supplied metadata table in-place.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Unlabeled will appear as null values.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p></li>
+<li><p><strong>sickkids</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loads in HN labels for SickKids data, by default True.</p></li>
+<li><p><strong>stanford</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loads in HN labels for Stanford data, by default True.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table with HN and surgery labels filled in.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.get_from_path">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">get_from_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'id'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#get_from_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.get_from_path" title="Link to this definition"></a></dt>
+<dd><p>Extract metadata from an image path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>str</em>) – Image path</p></li>
+<li><p><strong>item</strong> (<em>str</em>) – Desired item to extract. One of “id” (patient ID), “visit” or
+“seq_number”.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Extracted metadata strings</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.get_from_paths">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">get_from_paths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'id'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#get_from_paths"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.get_from_paths" title="Link to this definition"></a></dt>
+<dd><p>Extract metadata from a list of paths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>paths</strong> (<em>list</em>) – List of image paths</p></li>
+<li><p><strong>item</strong> (<em>str</em>) – Desired item to extract. One of “id” (patient ID), “visit” or
+“seq_number”.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of extracted metadata strings</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.get_label_boundaries">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">get_label_boundaries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_block_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#get_label_boundaries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.get_label_boundaries" title="Link to this definition"></a></dt>
+<dd><p>Provide mask for samples at the boundaries of contiguous label blocks for
+each unique ultrasound sequence.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p></li>
+<li><p><strong>min_block_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Minimum number of images of the same label to be a valid contiguous
+label block, to be searched for the images at the boundaries</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Boolean mask, where True signifies image is at the boundary of two
+contiguous label blocks</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.Series</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.get_labels_for_filenames">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">get_labels_for_filenames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filenames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sickkids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stanford</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_part</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#get_labels_for_filenames"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.get_labels_for_filenames" title="Link to this definition"></a></dt>
+<dd><p>Attempt to get labels for all filenames given, using metadata file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filenames</strong> (<em>list</em><em> or </em><em>array-like</em><em> or </em><em>pandas.Series</em>) – List of filenames</p></li>
+<li><p><strong>sickkids</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, include SickKids image labels, by default True.</p></li>
+<li><p><strong>stanford</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, include Stanford image labels, by default True.</p></li>
+<li><p><strong>label_part</strong> (<em>str</em><em>, </em><em>optional</em>) – If specified, either <cite>side</cite> or <cite>plane</cite> is extracted from each label
+and used as the given label, by default None.</p></li>
+<li><p><strong>**kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – Keyword arguments to pass into dset-specific metadata-loading
+functions.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of view labels. For filenames not found, label will None.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>numpy.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.get_machine_for_filenames">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">get_machine_for_filenames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filenames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sickkids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#get_machine_for_filenames"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.get_machine_for_filenames" title="Link to this definition"></a></dt>
+<dd><p>Attempt to get machine labels for all filenames given, using metadata file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>filenames</strong> (<em>list</em><em> or </em><em>array-like</em><em> or </em><em>pandas.Series</em>) – List of filenames</p></li>
+<li><p><strong>sickkids</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, include SickKids image labels, by default True.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of machine labels. For filenames not found, label will None.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>numpy.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.has_seg_mask">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">has_seg_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_liver_seg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#has_seg_mask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.has_seg_mask" title="Link to this definition"></a></dt>
+<dd><p>Checks if a specific image has at least 1 segmentation mask.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Assumes segmentation mask is in the same directory, and labeled with the
+same filename but with a suffix (“_kseg”, “_bseg”, “_lseg”).</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img_path</strong> (<em>str</em>) – Path to image</p></li>
+<li><p><strong>include_liver_seg</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, also consider liver segmentation, by default False</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if image has a mask, and False otherwise</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.identify_not_in_label_group">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">identify_not_in_label_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_block_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#identify_not_in_label_group"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.identify_not_in_label_group" title="Link to this definition"></a></dt>
+<dd><p>Provide mask for samples not part of a contiguous label block for
+each unique ultrasound sequence.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p></li>
+<li><p><strong>min_block_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Minimum number of images of the same label to be a valid contiguous
+label block, to be searched for the images at the boundaries</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Boolean mask, where True signifies image is in a contiguous label block</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.Series</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.is_null">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">is_null</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#is_null"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.is_null" title="Link to this definition"></a></dt>
+<dd><p>Returns True, if x is null</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>Any</em>) – Any object</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>True if x is null and False otherwise</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.left_join_filtered_to_source">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">left_join_filtered_to_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_filtered</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_full</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#left_join_filtered_to_source"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.left_join_filtered_to_source" title="Link to this definition"></a></dt>
+<dd><p>Given the same table (with filtered columns) and its full table, perform a
+LEFT JOIN to get all columns data from the full table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_filtered</strong> (<em>pd.DataFrame</em>) – Table with columns removed</p></li>
+<li><p><strong>df_full</strong> (<em>pd.DataFrame</em>) – Source table with all columns present</p></li>
+<li><p><strong>index_cols</strong> (<em>list</em><em>, </em><em>optional</em>) – If provided, reindex both tables on this index before joining.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Filtered table with all columns data</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.load_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">load_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dsets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prepend_img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#load_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.load_metadata" title="Link to this definition"></a></dt>
+<dd><p>Loads metadata for specified datasets/hospital/s</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>By default, unlabeled images are included, and potentially missing machine,
+HN and surgery labels may be present for SickKids/Stanford data.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dsets</strong> (<em>str</em><em> or </em><em>list</em>) – 1+ hospital (and/or dataset) name/s</p></li>
+<li><p><strong>prepend_img_dir</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, prepends default image directory for hospital to “filename”
+column, by default False</p></li>
+<li><p><strong>**config</strong> (<em>dict</em><em>, </em><em>optional</em>) – <p>Configuration for metadata loading, which includes:
+label_part : str, optional</p>
+<blockquote>
+<div><p>If specified, either <cite>side</cite> or <cite>plane</cite> is extracted from each label
+and used as the given label, by default None.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>relative_side<span class="classifier">bool, optional</span></dt><dd><p>If True, converts side (Left/Right) to order in which side appeared
+(First/Second/None). Requires &lt;extract&gt; to be True, by default False.</p>
+</dd>
+</dl>
+</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>May contain metadata (filename, view label, patient id, visit, sequence
+number).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.make_side_label_relative">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">make_side_label_relative</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#make_side_label_relative"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.make_side_label_relative" title="Link to this definition"></a></dt>
+<dd><p>First side (Left/Right) becomes First, while the other becomes Second. Use
+this to convert all labels from side to relative side.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>labels</strong> (<em>array-like</em>) – List of labels of the form &lt;plane&gt;_&lt;side&gt; or Bladder</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of transformed label to &lt;plane&gt;_[First/Second] or Bladder</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.prep_augmentations">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">prep_augmentations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(256,</span> <span class="pre">256)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crop_scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#prep_augmentations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.prep_augmentations" title="Link to this definition"></a></dt>
+<dd><p>Prepare training augmentations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img_size</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Expected image size post-augmentations</p></li>
+<li><p><strong>crop_scale</strong> (<em>float</em>) – Minimum proportion/size of area to crop</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Maps from texture/geometric to training transforms</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.preprocess_image">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">preprocess_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crop_dims</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(150,</span> <span class="pre">150)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resize_dims</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(256,</span> <span class="pre">256)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_crop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#preprocess_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.preprocess_image" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Perform preprocessing on image array:</dt><dd><ol class="arabic simple">
+<li><p>Center crop 150 x 150 (by default)</p></li>
+<li><p>Resize to 256 x 256 (by default)</p></li>
+<li><p>Histogram equalize image</p></li>
+</ol>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img</strong> (<em>np.array</em>) – Input image to crop</p></li>
+<li><p><strong>crop_dims</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Dimensions (height, width) of image crop, by default (150, 150).</p></li>
+<li><p><strong>resize_dims</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Dimensions (height, width) of final image, by default (256, 256).</p></li>
+<li><p><strong>ignore_crop</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, do not crop image during preprocessing, by default False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Preprocessed image.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.preprocess_image_dir">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">preprocess_image_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_regex</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'*.*'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#preprocess_image_dir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.preprocess_image_dir" title="Link to this definition"></a></dt>
+<dd><p>Perform image preprocessing on images in &lt;image_dir&gt; directory with filename
+possibly matching regex. Save preprocessed images to save_dir.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>image_dir</strong> (<em>str</em>) – Path to directory of unprocessed images</p></li>
+<li><p><strong>save_dir</strong> (<em>str</em>) – Path to directory to save processed images</p></li>
+<li><p><strong>file_regex</strong> (<em>str</em><em>, </em><em>optional</em>) – Regex for image filename. Only preprocesses these images, by default
+“<em>.</em>”.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.remove_only_unlabeled_seqs">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">remove_only_unlabeled_seqs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#remove_only_unlabeled_seqs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.remove_only_unlabeled_seqs" title="Link to this definition"></a></dt>
+<dd><p>Removes rows from fully unlabeled ultrasound sequences.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image. May contain
+unlabeled images (label as “Other”)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata dataframe with completely unlabeled sequences removed</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.restrict_seq_len">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">restrict_seq_len</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">18</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#restrict_seq_len"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.restrict_seq_len" title="Link to this definition"></a></dt>
+<dd><p>Filter metadata for ultrasound image sequences, to restrict each sequence to
+have exactly <cite>n</cite> images.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains an <cite>id</cite> and <cite>visit</cite>, which specify a unique US
+sequence.</p></li>
+<li><p><strong>n</strong> (<em>int</em><em>, </em><em>optional</em>) – Absolute sequence length to restrict to, by default 18.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Filtered metadata table</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.split_by_ids">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">split_by_ids</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">patient_ids</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_split</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force_train_ids</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">42</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#split_by_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.split_by_ids" title="Link to this definition"></a></dt>
+<dd><p>Splits list of patient IDs into training and val/test set.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Split may not be exactly equal to desired train_split due to imbalance of
+patients.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>patient_ids</strong> (<em>np.array</em><em> or </em><em>array-like</em>) – List of patient IDs (IDs can repeat).</p></li>
+<li><p><strong>train_split</strong> (<em>float</em><em>, </em><em>optional</em>) – Proportion of total data to leave for training, by default 0.8</p></li>
+<li><p><strong>force_train_ids</strong> (<em>list</em><em>, </em><em>optional</em>) – List of patient IDs to force into the training set</p></li>
+<li><p><strong>seed</strong> (<em>int</em><em>, </em><em>optional</em>) – If provided, sets random seed to value, by default constants.SEED</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains (train_indices, val_indices), which are arrays of indices into
+patient_ids to specify which are used for training or validation/test.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of (np.array, np.array)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.utils.vals_is_subset">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.utils.</span></span><span class="sig-name descname"><span class="pre">vals_is_subset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_b</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/utils.html#vals_is_subset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.utils.vals_is_subset" title="Link to this definition"></a></dt>
+<dd><p>Checks if values in table A are a subset of values in table  B.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_a</strong> (<em>pd.DataFrame</em>) – Arbitrary table A with column <cite>column</cite></p></li>
+<li><p><strong>df_b</strong> (<em>pd.DataFrame</em>) – Arbitrary table B with column <cite>column</cite></p></li>
+<li><p><strong>column</strong> (<em>str</em>) – Name of column to check for values</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Returns True if values in table A are a subset of values in table B,
+and False, otherwise.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="module-contents">
-<h2>Module contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.data_prep" title="Link to this heading"></a></h2>
 </section>
 </section>
 

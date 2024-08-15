@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.data_prep.segment_prep_script &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.data_prep.segment_prep_script</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.data_prep.segment_prep_script</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">segment_prep_script.py</span>
+
+<span class="sd">Description: Used to extract foreground and background from image segmentations.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.data_prep</span> <span class="kn">import</span> <span class="n">utils</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="n">SEGMENT_TO_COLOR_BOUNDS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;bladder&quot;</span><span class="p">:</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">180</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">160</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">160</span><span class="p">)),</span>
+    <span class="s2">&quot;kidney&quot;</span><span class="p">:</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">209</span><span class="p">),</span> <span class="p">(</span><span class="mi">190</span><span class="p">,</span> <span class="mi">190</span><span class="p">,</span> <span class="mi">255</span><span class="p">)),</span>
+    <span class="s2">&quot;hn&quot;</span><span class="p">:</span> <span class="p">((</span><span class="mi">180</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">255</span><span class="p">,</span> <span class="mi">160</span><span class="p">,</span> <span class="mi">160</span><span class="p">))</span>
+<span class="p">}</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="get_source_to_segmented_filenames">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.segment_prep_script.get_source_to_segmented_filenames">[docs]</a>
+<span class="k">def</span> <span class="nf">get_source_to_segmented_filenames</span><span class="p">(</span><span class="n">paths</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given all image file paths, find segmented images (given by filename suffix)</span>
+<span class="sd">    and create a mapping of {source filename : [segmented image filenames]}.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    paths : list</span>
+<span class="sd">        List of image file paths</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Maps source filename to list of filenames of corresponding segmented</span>
+<span class="sd">        images.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract filenames from possible paths</span>
+    <span class="n">filenames</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">]</span>
+
+    <span class="c1"># Get mapping of original filename to corresponding segmentations</span>
+    <span class="n">src_to_segments</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">filename</span> <span class="ow">in</span> <span class="n">filenames</span><span class="p">:</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">filename</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># NOTE: Ignore liver for now</span>
+        <span class="k">if</span> <span class="s2">&quot;liver&quot;</span> <span class="ow">in</span> <span class="n">filename</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">src_filename</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">[:</span><span class="mi">3</span><span class="p">])</span> <span class="o">+</span> <span class="s2">&quot;.jpg&quot;</span>
+        <span class="n">src_to_segments</span><span class="p">[</span><span class="n">src_filename</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">src_to_segments</span></div>
+
+
+
+<div class="viewcode-block" id="load_metadata_with_segmentation">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.segment_prep_script.load_metadata_with_segmentation">[docs]</a>
+<span class="k">def</span> <span class="nf">load_metadata_with_segmentation</span><span class="p">(</span><span class="n">segment_files</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Attempt to get labels for segmented image files.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    segment_files : list</span>
+<span class="sd">        Filenames of segmented images</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Contains image metadata (label, patient ID, visit number, seq. number)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract filenames from possibly paths</span>
+    <span class="n">df_filenames</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="n">segment_files</span><span class="p">})</span>
+    <span class="n">df_filenames</span><span class="o">.</span><span class="n">filename</span> <span class="o">=</span> <span class="n">df_filenames</span><span class="o">.</span><span class="n">filename</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">)</span>
+
+    <span class="c1"># Load metadata</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">load_metadata</span><span class="p">(</span><span class="s2">&quot;sickkids&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Temporarily set index for table join</span>
+    <span class="n">df_filenames</span> <span class="o">=</span> <span class="n">df_filenames</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;filename&quot;</span><span class="p">)</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;filename&quot;</span><span class="p">)</span>
+    <span class="n">df_segments_with_labels</span> <span class="o">=</span> <span class="n">df_filenames</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_segments_with_labels</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="get_segmented_type">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.segment_prep_script.get_segmented_type">[docs]</a>
+<span class="k">def</span> <span class="nf">get_segmented_type</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return item segmented in image from filename.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    filename : str</span>
+<span class="sd">        Filename of image. If segmented, must contain at least one of</span>
+<span class="sd">        (&quot;bseg&quot;, &quot;kseg&quot;, &quot;cseg&quot;)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Item segmented (bladder, kidney, hn), or None if not found</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="s2">&quot;bseg&quot;</span> <span class="ow">in</span> <span class="n">filename</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;bladder&quot;</span>
+    <span class="k">elif</span> <span class="s2">&quot;kseg&quot;</span> <span class="ow">in</span> <span class="n">filename</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;kidney&quot;</span>
+    <span class="k">elif</span> <span class="s2">&quot;cseg&quot;</span> <span class="ow">in</span> <span class="n">filename</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;hn&quot;</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="get_fg_and_bg_of_segmentation">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.segment_prep_script.get_fg_and_bg_of_segmentation">[docs]</a>
+<span class="k">def</span> <span class="nf">get_fg_and_bg_of_segmentation</span><span class="p">(</span><span class="n">src_img</span><span class="p">,</span> <span class="n">segment_img</span><span class="p">,</span>
+                                  <span class="n">lower_bound</span><span class="p">,</span> <span class="n">upper_bound</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get foreground and background of image segmentation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    src_img : numpy.array</span>
+<span class="sd">        Source ultrasound image (BGR format)</span>
+<span class="sd">    segment_img : numpy.array</span>
+<span class="sd">        Source ultrasound image with segmentation (BGR format)</span>
+<span class="sd">    lower_bound : tuple of (int, int, int)</span>
+<span class="sd">        Contains lower bound on BGR pixel values</span>
+<span class="sd">    upper_bound : tuple of (int, int, int)</span>
+<span class="sd">        Contains upper bound on BGR pixel values</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (numpy.array, numpy.array)</span>
+<span class="sd">        Contains (foreground image, background image)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Extract foreground</span>
+    <span class="n">foreground_mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">inRange</span><span class="p">(</span><span class="n">segment_img</span><span class="p">,</span> <span class="n">lower_bound</span><span class="p">,</span> <span class="n">upper_bound</span><span class="p">)</span>
+    <span class="n">foreground</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">bitwise_and</span><span class="p">(</span><span class="n">src_img</span><span class="p">,</span> <span class="n">src_img</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">foreground_mask</span><span class="p">)</span>
+
+    <span class="c1"># Extract background</span>
+    <span class="n">background_mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">bitwise_not</span><span class="p">(</span><span class="n">foreground_mask</span><span class="p">)</span>
+    <span class="n">background</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">bitwise_and</span><span class="p">(</span><span class="n">src_img</span><span class="p">,</span> <span class="n">src_img</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="n">background_mask</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">foreground</span><span class="p">,</span> <span class="n">background</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                    Script                                    #</span>
+<span class="c1">################################################################################</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s1">&#39;__main__&#39;</span><span class="p">:</span>
+    <span class="n">paths</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_SEGMENT</span> <span class="o">+</span> <span class="s2">&quot;/*&quot;</span><span class="p">)</span>
+    <span class="n">src_to_segments</span> <span class="o">=</span> <span class="n">get_source_to_segmented_filenames</span><span class="p">(</span><span class="n">paths</span><span class="p">)</span>
+
+    <span class="c1"># For kidney/bladder segmentation</span>
+    <span class="c1"># Identify foreground</span>
+    <span class="c1"># Identify background</span>
+    <span class="k">for</span> <span class="n">src_file</span><span class="p">,</span> <span class="n">segment_files</span> <span class="ow">in</span> <span class="n">src_to_segments</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="c1"># Load original image</span>
+        <span class="n">src_img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_SEGMENT</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">src_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                             <span class="n">cv2</span><span class="o">.</span><span class="n">IMREAD_GRAYSCALE</span><span class="p">)</span>
+
+        <span class="c1"># Perform preprocessing on source image</span>
+        <span class="n">src_img_proc</span> <span class="o">=</span> <span class="n">utils</span><span class="o">.</span><span class="n">preprocess_image</span><span class="p">(</span><span class="n">src_img</span><span class="p">,</span> <span class="n">ignore_crop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Go through segmentations</span>
+        <span class="k">for</span> <span class="n">segment_file</span> <span class="ow">in</span> <span class="n">segment_files</span><span class="p">:</span>
+            <span class="c1"># Load segmented image</span>
+            <span class="n">segment_img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_SEGMENT</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">segment_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Get upper/lower bound BGR values in segmentation</span>
+            <span class="n">item_segmented</span> <span class="o">=</span> <span class="n">get_segmented_type</span><span class="p">(</span><span class="n">segment_file</span><span class="p">)</span>
+            <span class="n">lower_bound</span><span class="p">,</span> <span class="n">upper_bound</span> <span class="o">=</span> <span class="n">SEGMENT_TO_COLOR_BOUNDS</span><span class="p">[</span><span class="n">item_segmented</span><span class="p">]</span>
+
+            <span class="c1"># Save mask to file</span>
+            <span class="n">mask_save_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_SEGMENT_PROC</span><span class="p">,</span>
+                                        <span class="s2">&quot;mask&quot;</span><span class="p">,</span> <span class="n">src_file</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">fg_save_path</span><span class="p">):</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">inRange</span><span class="p">(</span><span class="n">segment_img</span><span class="p">,</span> <span class="n">lower_bound</span><span class="p">,</span> <span class="n">upper_bound</span><span class="p">)</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">mask_save_path</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+
+            <span class="c1"># Get foreground/background of PROCESSED source image</span>
+            <span class="n">foreground</span><span class="p">,</span> <span class="n">background</span> <span class="o">=</span> <span class="n">get_fg_and_bg_of_segmentation</span><span class="p">(</span>
+                <span class="n">src_img_proc</span><span class="p">,</span> <span class="n">segment_img</span><span class="p">,</span>
+                <span class="n">lower_bound</span><span class="p">,</span> <span class="n">upper_bound</span>
+            <span class="p">)</span>
+
+            <span class="c1"># If hydro, save only background</span>
+            <span class="k">if</span> <span class="n">item_segmented</span> <span class="o">==</span> <span class="s2">&quot;hn&quot;</span><span class="p">:</span>
+                <span class="n">save_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_SEGMENT_PROC</span><span class="p">,</span>
+                                         <span class="s2">&quot;background_hydro&quot;</span><span class="p">,</span> <span class="n">src_file</span><span class="p">)</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="n">background</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Save foreground</span>
+                <span class="n">fg_save_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_SEGMENT_PROC</span><span class="p">,</span>
+                                            <span class="s2">&quot;foreground&quot;</span><span class="p">,</span> <span class="n">src_file</span><span class="p">)</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">fg_save_path</span><span class="p">,</span> <span class="n">foreground</span><span class="p">)</span>
+
+                <span class="c1"># Save background</span>
+                <span class="n">bg_save_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_SEGMENT_PROC</span><span class="p">,</span>
+                                            <span class="s2">&quot;background&quot;</span><span class="p">,</span> <span class="n">src_file</span><span class="p">)</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">bg_save_path</span><span class="p">,</span> <span class="n">background</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

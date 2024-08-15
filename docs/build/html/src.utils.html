@@ -94,20 +94,262 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 </section>
-<section id="src-utils-config-module">
-<h2>src.utils.config module<a class="headerlink" href="#src-utils-config-module" title="Link to this heading"></a></h2>
+<section id="module-src.utils.config">
+<span id="src-utils-config-module"></span><h2>src.utils.config module<a class="headerlink" href="#module-src.utils.config" title="Link to this heading"></a></h2>
+<p>config.py</p>
+<p>Description: Used to load configuration file with specification</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.config.flatten_nested_dict">
+<span class="sig-prename descclassname"><span class="pre">src.utils.config.</span></span><span class="sig-name descname"><span class="pre">flatten_nested_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dictionary</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/config.html#flatten_nested_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.config.flatten_nested_dict" title="Link to this definition"></a></dt>
+<dd><p>Flatten nested dictionary recursively</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dictionary</strong> (<em>dict</em>) – Arbitrarily nested dictionary</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Flattened dictionay</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.config.load_config">
+<span class="sig-prename descclassname"><span class="pre">src.utils.config.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">calling_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_fname</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/config.html#load_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.config.load_config" title="Link to this definition"></a></dt>
+<dd><p>Load configuration file (located in specific config. subdirectory). Load
+config specification file as well to validate configuration file.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If not provided, only load defaults from config. specs.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>calling_file</strong> (<em>str</em>) – Path to calling file whose configs to load</p></li>
+<li><p><strong>config_fname</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of configuration file</p></li>
+<li><p><strong>copy</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, copy default (unspecified) parameters to config.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Loaded configurations dictionary</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ConfigDict</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-utils-efficientnet-pytorch-utils-module">
-<h2>src.utils.efficientnet_pytorch_utils module<a class="headerlink" href="#src-utils-efficientnet-pytorch-utils-module" title="Link to this heading"></a></h2>
+<section id="module-src.utils.efficientnet_pytorch_utils">
+<span id="src-utils-efficientnet-pytorch-utils-module"></span><h2>src.utils.efficientnet_pytorch_utils module<a class="headerlink" href="#module-src.utils.efficientnet_pytorch_utils" title="Link to this heading"></a></h2>
+<p>efficientnet_pytorch_utils.py</p>
+<p>Description: Used to make utility functions in certain cases.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.efficientnet_pytorch_utils.load_pretrained_weights">
+<span class="sig-prename descclassname"><span class="pre">src.utils.efficientnet_pytorch_utils.</span></span><span class="sig-name descname"><span class="pre">load_pretrained_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">load_fc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">advprop</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/efficientnet_pytorch_utils.html#load_pretrained_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.efficientnet_pytorch_utils.load_pretrained_weights" title="Link to this definition"></a></dt>
+<dd><p>Loads pretrained weights from weights path or download using url.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Changed to not be sensitive to extra model layers.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>Module</em>) – The whole model of efficientnet.</p></li>
+<li><p><strong>model_name</strong> (<em>str</em>) – Model name of efficientnet.</p></li>
+<li><p><strong>weights_path</strong> (<em>None</em><em> or </em><em>str</em>) – str: path to pretrained weights file on the local disk.
+None: use pretrained weights downloaded from the Internet.</p></li>
+<li><p><strong>load_fc</strong> (<em>bool</em>) – Whether to load pretrained weights for fc layer at the end of the model.</p></li>
+<li><p><strong>advprop</strong> (<em>bool</em>) – Whether to load pretrained weights
+trained with advprop (valid when weights_path is None).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-utils-grokfast-module">
-<h2>src.utils.grokfast module<a class="headerlink" href="#src-utils-grokfast-module" title="Link to this heading"></a></h2>
+<section id="module-src.utils.grokfast">
+<span id="src-utils-grokfast-module"></span><h2>src.utils.grokfast module<a class="headerlink" href="#module-src.utils.grokfast" title="Link to this heading"></a></h2>
+<p>grokfast.py</p>
+<p>Description: Original implmentation of GrokFast.</p>
+<p>Source Code: <a class="reference external" href="https://github.com/ironjr/grokfast/">https://github.com/ironjr/grokfast/</a></p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.grokfast.gradfilter_ema">
+<span class="sig-prename descclassname"><span class="pre">src.utils.grokfast.</span></span><span class="sig-name descname"><span class="pre">gradfilter_ema</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">m</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grads</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.98</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lamb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Tensor</span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="_modules/src/utils/grokfast.html#gradfilter_ema"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.grokfast.gradfilter_ema" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 </section>
-<section id="src-utils-influence-module">
-<h2>src.utils.influence module<a class="headerlink" href="#src-utils-influence-module" title="Link to this heading"></a></h2>
+<section id="module-src.utils.influence">
+<span id="src-utils-influence-module"></span><h2>src.utils.influence module<a class="headerlink" href="#module-src.utils.influence" title="Link to this heading"></a></h2>
+<p>influence_function.py</p>
+<p>Description: This</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.utils.influence.MyCrossEntropyLoss">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.utils.influence.</span></span><span class="sig-name descname"><span class="pre">MyCrossEntropyLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">hparams</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#MyCrossEntropyLoss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.MyCrossEntropyLoss" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseObjective</span></code></p>
+<p>L2-regularized cross entropy loss</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Reproducing the same loss is important</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.utils.influence.MyCrossEntropyLoss.test_loss">
+<span class="sig-name descname"><span class="pre">test_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#MyCrossEntropyLoss.test_loss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.MyCrossEntropyLoss.test_loss" title="Link to this definition"></a></dt>
+<dd><p>Compute test loss, excluding regularization terms.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.utils.influence.MyCrossEntropyLoss.train_loss_on_outputs">
+<span class="sig-name descname"><span class="pre">train_loss_on_outputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outputs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#MyCrossEntropyLoss.train_loss_on_outputs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.MyCrossEntropyLoss.train_loss_on_outputs" title="Link to this definition"></a></dt>
+<dd><p>Compute training loss, excluding regularization terms.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.utils.influence.MyCrossEntropyLoss.train_outputs">
+<span class="sig-name descname"><span class="pre">train_outputs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#MyCrossEntropyLoss.train_outputs"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.MyCrossEntropyLoss.train_outputs" title="Link to this definition"></a></dt>
+<dd><p>Pass data through model</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.utils.influence.MyCrossEntropyLoss.train_regularization">
+<span class="sig-name descname"><span class="pre">train_regularization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#MyCrossEntropyLoss.train_regularization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.MyCrossEntropyLoss.train_regularization" title="Link to this definition"></a></dt>
+<dd><p>Compute loss regularization terms.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.influence.get_image_from_index">
+<span class="sig-prename descclassname"><span class="pre">src.utils.influence.</span></span><span class="sig-name descname"><span class="pre">get_image_from_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataloader</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#get_image_from_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.get_image_from_index" title="Link to this definition"></a></dt>
+<dd><p>Given an image index, get their corresponding image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>idx</strong> (<em>int</em>) – Image index</p></li>
+<li><p><strong>dataloader</strong> (<em>torch.utils.data.DataLoader</em>) – Arbitrary DataLoader</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Each item() in the list is an image corresponding to the indices</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list of np.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.influence.plot_most_helpful_harmful_examples">
+<span class="sig-prename descclassname"><span class="pre">src.utils.influence.</span></span><span class="sig-name descname"><span class="pre">plot_most_helpful_harmful_examples</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hparams</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">train_loader</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_loader</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">how</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'cg'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_examples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">9</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#plot_most_helpful_harmful_examples"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.plot_most_helpful_harmful_examples" title="Link to this definition"></a></dt>
+<dd><p>Get most helpful and harmful training examples.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>torch.nn.Module</em>) – Arbitrary model</p></li>
+<li><p><strong>hparams</strong> (<em>dict</em>) – Model hyperparameters</p></li>
+<li><p><strong>train_loader</strong> (<em>torch.utils.data.DataLoader</em>) – Training set dataloader</p></li>
+<li><p><strong>test_loader</strong> (<em>torch.utils.data.DataLoader</em>) – Validation/Test set dataloader</p></li>
+<li><p><strong>how</strong> (<em>str</em><em>, </em><em>optional</em>) – Method to compute inverse Hessian-vector product (autograd=AutoGrad,
+cg=Conjugate Gradients, lissa=Linear time Stochastic Second-Order Algo.)</p></li>
+<li><p><strong>num_examples</strong> (<em>int</em><em>, </em><em>optional</em>) – Maximum number of examples to show for each class.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>dict of {kind (helpful/harmful)</strong> – Contains grid plots of the most helpful/harmful images for each label.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>{label: plt.Figure}}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.influence.plot_test_helpful_harmful">
+<span class="sig-prename descclassname"><span class="pre">src.utils.influence.</span></span><span class="sig-name descname"><span class="pre">plot_test_helpful_harmful</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">test_imgs_and_captions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">helpful_imgs_and_captions</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">harmful_imgs_and_captions</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#plot_test_helpful_harmful"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.plot_test_helpful_harmful" title="Link to this definition"></a></dt>
+<dd><p>Plot test sample and the most helpful and most harmful training examples
+for that test sample.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>test_imgs_and_captions</strong> (<em>list</em><em> of </em><em>tuples</em>) – Each tuple contains the image and caption</p></li>
+<li><p><strong>helpful_imgs_and_captions</strong> (<em>list</em><em> of </em><em>tuples</em>) – Each tuple contains the image and caption</p></li>
+<li><p><strong>harmful_imgs_and_captions</strong> (<em>list</em><em> of </em><em>tuples</em>) – Each tuple contains the image and caption</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Created figure</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>plt.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.influence.predict_single_by_index">
+<span class="sig-prename descclassname"><span class="pre">src.utils.influence.</span></span><span class="sig-name descname"><span class="pre">predict_single_by_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataloader</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/influence.html#predict_single_by_index"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.influence.predict_single_by_index" title="Link to this definition"></a></dt>
+<dd><p>Predict on single sample, based on their dataset index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>idx</strong> (<em>int</em>) – Sample/image index</p></li>
+<li><p><strong>model</strong> (<em>torch.nn.Module</em>) – Arbitrary model</p></li>
+<li><p><strong>dataloader</strong> (<em>torch.utils.data.DataLoader</em>) – Arbitrary DataLoader</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains prediction and label for sample</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-utils-logging-module">
-<h2>src.utils.logging module<a class="headerlink" href="#src-utils-logging-module" title="Link to this heading"></a></h2>
+<section id="module-src.utils.logging">
+<span id="src-utils-logging-module"></span><h2>src.utils.logging module<a class="headerlink" href="#module-src.utils.logging" title="Link to this heading"></a></h2>
+<p>logging.py</p>
+<dl class="simple">
+<dt>Description: Wrapper over PyTorch Lightning’s CSVLogger to output a simpler CSV</dt><dd><p>file (history.csv) after training.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.utils.logging.FriendlyCSVLogger">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.utils.logging.</span></span><span class="sig-name descname"><span class="pre">FriendlyCSVLogger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'lightning_logs'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flush_logs_every_n_steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">100</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/logging.html#FriendlyCSVLogger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.logging.FriendlyCSVLogger" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">CSVLogger</span></code></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.utils.logging.FriendlyCSVLogger.finalize">
+<span class="sig-name descname"><span class="pre">finalize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">status</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="reference internal" href="_modules/src/utils/logging.html#FriendlyCSVLogger.finalize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.logging.FriendlyCSVLogger.finalize" title="Link to this definition"></a></dt>
+<dd><p>Do any processing that is necessary to finalize an experiment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>status</strong> – Status that the experiment finished with (e.g. success, failed, aborted)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.utils.logging.load_comet_logger">
+<span class="sig-prename descclassname"><span class="pre">src.utils.logging.</span></span><span class="sig-name descname"><span class="pre">load_comet_logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/utils/logging.html#load_comet_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.utils.logging.load_comet_logger" title="Link to this definition"></a></dt>
+<dd><p>Load Comet ML logger for existing experiment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>exp_key</strong> (<em>str</em>) – Experiment key for existing experiment</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Can be used for logging</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>comet_ml.ExistingExperiment</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 <section id="module-src.utils">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.utils" title="Link to this heading"></a></h2>

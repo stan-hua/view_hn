@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.data_prep.utils &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.data_prep.utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.data_prep.utils</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">utils.py</span>
+
+<span class="sd">Description: Contains helper functions for a variety of data/label preprocessing</span>
+<span class="sd">             functions.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">torchvision.transforms.v2</span> <span class="k">as</span> <span class="nn">T</span>
+<span class="kn">from</span> <span class="nn">sklearn.utils</span> <span class="kn">import</span> <span class="n">shuffle</span>
+<span class="kn">from</span> <span class="nn">skimage.exposure</span> <span class="kn">import</span> <span class="n">equalize_hist</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                             Metadata Extraction                              #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># TODO: Remove all calls that use removed keywords &quot;extract&quot;</span>
+<div class="viewcode-block" id="load_metadata">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.load_metadata">[docs]</a>
+<span class="k">def</span> <span class="nf">load_metadata</span><span class="p">(</span><span class="n">dsets</span><span class="p">,</span> <span class="n">prepend_img_dir</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">config</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loads metadata for specified datasets/hospital/s</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    By default, unlabeled images are included, and potentially missing machine,</span>
+<span class="sd">    HN and surgery labels may be present for SickKids/Stanford data.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dsets : str or list</span>
+<span class="sd">        1+ hospital (and/or dataset) name/s</span>
+<span class="sd">    prepend_img_dir : bool, optional</span>
+<span class="sd">        If True, prepends default image directory for hospital to &quot;filename&quot;</span>
+<span class="sd">        column, by default False</span>
+<span class="sd">    **config : dict, optional</span>
+<span class="sd">        Configuration for metadata loading, which includes:</span>
+<span class="sd">        label_part : str, optional</span>
+<span class="sd">            If specified, either `side` or `plane` is extracted from each label</span>
+<span class="sd">            and used as the given label, by default None.</span>
+<span class="sd">        relative_side : bool, optional</span>
+<span class="sd">            If True, converts side (Left/Right) to order in which side appeared</span>
+<span class="sd">            (First/Second/None). Requires &lt;extract&gt; to be True, by default False.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        May contain metadata (filename, view label, patient id, visit, sequence</span>
+<span class="sd">        number).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Raise runtime error, if relative side specified</span>
+    <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;relative_side&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">&quot;Relative side is deprecated! Look at commented out code below for &quot;</span>
+            <span class="s2">&quot;implementation...&quot;</span><span class="p">)</span>
+        <span class="c1"># NOTE: Below was the implementation for creating relative side labels.</span>
+        <span class="c1">#       Feel free to re-use if need be</span>
+        <span class="c1"># df_metadata = df_metadata.sort_values(</span>
+        <span class="c1">#         by=[&quot;id&quot;, &quot;visit&quot;, &quot;seq_number&quot;])</span>
+        <span class="c1"># relative_labels = df_metadata.groupby(by=[&quot;id&quot;, &quot;visit&quot;])\</span>
+        <span class="c1">#     .apply(lambda df: pd.Series(make_side_label_relative(</span>
+        <span class="c1">#         df.label.tolist()))).to_numpy()</span>
+        <span class="c1"># df_metadata[&quot;label&quot;] = relative_labels</span>
+
+    <span class="c1"># Get mapping of dataset/hospital to clean metadata</span>
+    <span class="n">dset_to_metadata</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;clean&quot;</span><span class="p">]</span>
+
+    <span class="c1"># INPUT: Ensure `hospital` is a list</span>
+    <span class="n">dsets</span> <span class="o">=</span> <span class="p">[</span><span class="n">dsets</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dsets</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">dsets</span>
+
+    <span class="c1"># Accumulate metadata for each hospital specified</span>
+    <span class="n">metadata_tables</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dset</span> <span class="ow">in</span> <span class="n">dsets</span><span class="p">:</span>
+        <span class="c1"># Ensure hospital specified is implemented</span>
+        <span class="k">if</span> <span class="n">dset</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;clean&quot;</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Metadata loading is NOT implemented for &quot;</span>
+                               <span class="sa">f</span><span class="s2">&quot;dataset `</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s2">`!&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Load metadata table</span>
+        <span class="n">df_metadata_curr</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">dset_to_metadata</span><span class="p">[</span><span class="n">dset</span><span class="p">])</span>
+
+        <span class="c1"># Set extracted side/plane as label, if specified</span>
+        <span class="k">if</span> <span class="n">config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;label_part&quot;</span><span class="p">)</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">):</span>
+            <span class="c1"># Store original label in another column</span>
+            <span class="n">df_metadata_curr</span><span class="p">[</span><span class="s2">&quot;orig_label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata_curr</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
+            <span class="n">df_metadata_curr</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata_curr</span><span class="p">[</span><span class="n">config</span><span class="p">[</span><span class="s2">&quot;label_part&quot;</span><span class="p">]]</span>
+
+        <span class="c1"># Add image directory as a separate column </span>
+        <span class="n">img_dir</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_IMG_SUBDIR_FULL</span><span class="p">[</span><span class="n">dset</span><span class="p">]</span>
+        <span class="n">df_metadata_curr</span><span class="p">[</span><span class="s2">&quot;dir_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">img_dir</span>
+
+        <span class="c1"># If specified, attempt to prepend default image directory to filename</span>
+        <span class="k">if</span> <span class="n">prepend_img_dir</span><span class="p">:</span>
+            <span class="n">df_metadata_curr</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata_curr</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+                <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Ensure all columns are string type</span>
+        <span class="n">df_metadata_curr</span> <span class="o">=</span> <span class="n">df_metadata_curr</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+
+        <span class="n">metadata_tables</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df_metadata_curr</span><span class="p">)</span>
+
+    <span class="c1"># Concatenate metadata across hospitals</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">metadata_tables</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="extract_data_from_filename">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.extract_data_from_filename">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_data_from_filename</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">col</span><span class="o">=</span><span class="s2">&quot;filename&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract metadata from each image&#39;s filename and combines with HN labels.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pandas.DataFrame</span>
+<span class="sd">        Each row contains metadata for an ultrasound image.</span>
+<span class="sd">    col : str, optional</span>
+<span class="sd">        Name of column containing filename, by default &quot;filename&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Metadata table with additional data extracted</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create copy to avoid in-place assignment</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Extract data from filenames</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;basename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">col</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">)</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;basename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;visit&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;basename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;seq_number&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;basename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;.jpg&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)))</span>
+    <span class="n">df_metadata</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;basename&quot;</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="extract_data_from_filename_and_join">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.extract_data_from_filename_and_join">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_data_from_filename_and_join</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">dset</span><span class="o">=</span><span class="s2">&quot;sickkids&quot;</span><span class="p">,</span>
+                                        <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract extra metadata</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pandas.DataFrame</span>
+<span class="sd">        Each row contains metadata for an ultrasound image, but is missing</span>
+<span class="sd">        extra desired metadata</span>
+<span class="sd">    dset : str or list, optional</span>
+<span class="sd">        Name of dset/s in `df_metadata`, by default &quot;sickkids&quot;.</span>
+<span class="sd">    **kwargs : dict, optional</span>
+<span class="sd">        Keyword arguments to pass into `load_metadata`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Metadata table with additional data extracted</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># CHECK: No duplicates in filenames</span>
+    <span class="k">assert</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">duplicated</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Filenames in `df_metadata` contain duplicates!&quot;</span>
+
+    <span class="c1"># INPUT: If only 1 dset provided, ensure its a list</span>
+    <span class="n">dsets</span> <span class="o">=</span> <span class="p">[</span><span class="n">dset</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dset</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">dset</span>
+
+    <span class="c1"># Ensure dsets are unique</span>
+    <span class="n">dsets</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">dsets</span><span class="p">))</span>
+
+    <span class="c1"># Create copy to avoid in-place assignment</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="c1"># Clean path</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">normpath</span><span class="p">)</span>
+
+    <span class="c1"># Load metadata from ALL dsets specified</span>
+    <span class="n">df_metadata_all</span> <span class="o">=</span> <span class="n">load_metadata</span><span class="p">(</span><span class="n">dsets</span><span class="o">=</span><span class="n">dsets</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="c1"># Clean path</span>
+    <span class="n">df_metadata_all</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata_all</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">normpath</span><span class="p">)</span>
+
+    <span class="c1"># If not all filenames found, try loading all metadata WITH image directory</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">vals_is_subset</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">df_metadata_all</span><span class="p">,</span> <span class="s2">&quot;filename&quot;</span><span class="p">):</span>
+        <span class="n">df_metadata_all</span> <span class="o">=</span> <span class="n">load_metadata</span><span class="p">(</span>
+            <span class="n">dsets</span><span class="o">=</span><span class="n">dsets</span><span class="p">,</span>
+            <span class="n">prepend_img_dir</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="c1"># Clean path</span>
+        <span class="n">df_metadata_all</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata_all</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">normpath</span><span class="p">)</span>
+
+    <span class="c1"># Raise RuntimeError, if not all filenames overlap</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">vals_is_subset</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">df_metadata_all</span><span class="p">,</span> <span class="s2">&quot;filename&quot;</span><span class="p">):</span>
+         <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Filenames in provided metadata table and source &quot;</span>
+                           <span class="s2">&quot;metadata table do NOT overlap!&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Check columns that can be used for identification</span>
+    <span class="n">idx_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">,</span> <span class="s2">&quot;seq_number&quot;</span><span class="p">]</span>
+    <span class="n">idx_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">idx_cols</span> <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()]</span>
+
+    <span class="c1"># Perform LEFT JOIN on identifying columns</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">left_join_filtered_to_source</span><span class="p">(</span>
+        <span class="n">df_metadata</span><span class="p">,</span> <span class="n">df_metadata_all</span><span class="p">,</span>
+        <span class="n">index_cols</span><span class="o">=</span><span class="n">idx_cols</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="extract_hn_labels">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.extract_hn_labels">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_hn_labels</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">sickkids</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stanford</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract labels for hydronephrosis (HN) and surgery, if available, and insert</span>
+<span class="sd">    them into the supplied metadata table in-place.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Unlabeled will appear as null values.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pandas.DataFrame</span>
+<span class="sd">        Each row contains metadata for an ultrasound image.</span>
+<span class="sd">    sickkids : bool, optional</span>
+<span class="sd">        If True, loads in HN labels for SickKids data, by default True.</span>
+<span class="sd">    stanford : bool, optional</span>
+<span class="sd">        If True, loads in HN labels for Stanford data, by default True.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Metadata table with HN and surgery labels filled in.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Load SickKids HN labels</span>
+    <span class="n">df_hn</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">sickkids</span><span class="p">:</span>
+        <span class="n">df_hn</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_hn</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;sickkids_hn&quot;</span><span class="p">])])</span>
+    <span class="k">if</span> <span class="n">stanford</span><span class="p">:</span>
+        <span class="n">df_hn</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_hn</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;stanford_hn&quot;</span><span class="p">])])</span>
+
+    <span class="c1"># Ensure ID is string</span>
+    <span class="n">df_hn</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_hn</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+
+    <span class="c1"># Join to df_metadata</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">df_hn</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="extract_from_label">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.extract_from_label">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_from_label</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">extract</span><span class="o">=</span><span class="s2">&quot;plane&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract data from label string.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    label : str</span>
+<span class="sd">        Label of the form &lt;plane&gt;_&lt;side&gt; or &quot;Bladder&quot;</span>
+<span class="sd">    extract : str, optional</span>
+<span class="sd">        One of &quot;plane&quot; or &quot;side&quot;, by default &quot;plane&quot;</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Extracted item from label</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">extract</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;plane&quot;</span><span class="p">,</span> <span class="s2">&quot;side&quot;</span><span class="p">)</span>
+    <span class="n">label_parts</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">extract</span> <span class="o">==</span> <span class="s2">&quot;side&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">label_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">label_parts</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="s2">&quot;None&quot;</span>
+    <span class="k">return</span> <span class="n">label_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="get_from_paths">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.get_from_paths">[docs]</a>
+<span class="k">def</span> <span class="nf">get_from_paths</span><span class="p">(</span><span class="n">paths</span><span class="p">,</span> <span class="n">item</span><span class="o">=</span><span class="s2">&quot;id&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract metadata from a list of paths.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    paths : list</span>
+<span class="sd">        List of image paths</span>
+<span class="sd">    item : str</span>
+<span class="sd">        Desired item to extract. One of &quot;id&quot; (patient ID), &quot;visit&quot; or</span>
+<span class="sd">        &quot;seq_number&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array</span>
+<span class="sd">        List of extracted metadata strings</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">item</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">,</span> <span class="s2">&quot;seq_number&quot;</span><span class="p">)</span>
+
+    <span class="n">patient_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+        <span class="n">patient_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">get_from_path</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">item</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">patient_ids</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="get_from_path">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.get_from_path">[docs]</a>
+<span class="k">def</span> <span class="nf">get_from_path</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">item</span><span class="o">=</span><span class="s2">&quot;id&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract metadata from an image path.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Image path</span>
+<span class="sd">    item : str</span>
+<span class="sd">        Desired item to extract. One of &quot;id&quot; (patient ID), &quot;visit&quot; or</span>
+<span class="sd">        &quot;seq_number&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Extracted metadata strings</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">item</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">,</span> <span class="s2">&quot;seq_number&quot;</span><span class="p">)</span>
+
+    <span class="n">item_to_idx</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s2">&quot;visit&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span> <span class="mi">2</span>
+    <span class="p">}</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">item_to_idx</span><span class="p">[</span><span class="n">item</span><span class="p">]</span>
+
+    <span class="n">extracted</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="n">idx</span><span class="p">]</span>
+
+    <span class="c1"># If seq number, convert to integer</span>
+    <span class="k">if</span> <span class="n">item</span> <span class="o">==</span> <span class="s2">&quot;seq_number&quot;</span><span class="p">:</span>
+        <span class="n">extracted</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">extracted</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">extracted</span></div>
+
+
+
+<div class="viewcode-block" id="get_labels_for_filenames">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.get_labels_for_filenames">[docs]</a>
+<span class="k">def</span> <span class="nf">get_labels_for_filenames</span><span class="p">(</span><span class="n">filenames</span><span class="p">,</span> <span class="n">sickkids</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">stanford</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                             <span class="n">label_part</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                             <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Attempt to get labels for all filenames given, using metadata file</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    filenames : list or array-like or pandas.Series</span>
+<span class="sd">        List of filenames</span>
+<span class="sd">    sickkids : bool, optional</span>
+<span class="sd">        If True, include SickKids image labels, by default True.</span>
+<span class="sd">    stanford : bool, optional</span>
+<span class="sd">        If True, include Stanford image labels, by default True.</span>
+<span class="sd">    label_part : str, optional</span>
+<span class="sd">        If specified, either `side` or `plane` is extracted from each label</span>
+<span class="sd">        and used as the given label, by default None.</span>
+<span class="sd">    **kwargs : dict, optional</span>
+<span class="sd">        Keyword arguments to pass into dset-specific metadata-loading</span>
+<span class="sd">        functions.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.array</span>
+<span class="sd">        List of view labels. For filenames not found, label will None.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dsets</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">sickkids</span><span class="p">:</span>
+        <span class="n">dsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;sickkids&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">stanford</span><span class="p">:</span>
+        <span class="n">dsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;stanford&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">sickkids</span> <span class="ow">or</span> <span class="n">stanford</span><span class="p">,</span> <span class="s2">&quot;This function doesn&#39;t work for other datasets!&quot;</span>
+
+    <span class="c1"># Load metadata</span>
+    <span class="n">df_labels</span> <span class="o">=</span> <span class="n">load_metadata</span><span class="p">(</span><span class="n">dsets</span><span class="p">,</span> <span class="n">prepend_img_dir</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">label_part</span><span class="o">=</span><span class="n">label_part</span><span class="p">)</span>
+
+    <span class="c1"># Get mapping of filename to labels</span>
+    <span class="n">filename_to_label</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">df_labels</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">],</span> <span class="n">df_labels</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]))</span>
+
+    <span class="c1"># Extract only filename</span>
+    <span class="n">filenames</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span> <span class="k">for</span> <span class="n">filename</span> <span class="ow">in</span> <span class="n">filenames</span><span class="p">]</span>
+
+    <span class="c1"># Get labels</span>
+    <span class="n">view_labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">*</span><span class="nb">map</span><span class="p">(</span><span class="n">filename_to_label</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="n">filenames</span><span class="p">)])</span>
+
+    <span class="k">return</span> <span class="n">view_labels</span></div>
+
+
+
+<div class="viewcode-block" id="get_machine_for_filenames">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.get_machine_for_filenames">[docs]</a>
+<span class="k">def</span> <span class="nf">get_machine_for_filenames</span><span class="p">(</span><span class="n">filenames</span><span class="p">,</span> <span class="n">sickkids</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Attempt to get machine labels for all filenames given, using metadata file</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    filenames : list or array-like or pandas.Series</span>
+<span class="sd">        List of filenames</span>
+<span class="sd">    sickkids : bool, optional</span>
+<span class="sd">        If True, include SickKids image labels, by default True.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.array</span>
+<span class="sd">        List of machine labels. For filenames not found, label will None.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">filename_to_machine</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">sickkids</span><span class="p">:</span>
+        <span class="c1"># Get mapping of filename to machine</span>
+        <span class="n">df_machines</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span>
+            <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;sickkids_machine&quot;</span><span class="p">]),</span>
+            <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_METADATA</span><span class="p">[</span><span class="s2">&quot;raw&quot;</span><span class="p">][</span><span class="s2">&quot;sickkids_test_machine&quot;</span><span class="p">])</span>
+        <span class="p">])</span>
+        <span class="n">df_machines</span> <span class="o">=</span> <span class="n">df_machines</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">&quot;IMG_FILE&quot;</span><span class="p">)</span>
+        <span class="n">filename_to_machine</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">df_machines</span><span class="p">[</span><span class="s2">&quot;machine&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_dict</span><span class="p">())</span>
+
+    <span class="c1"># Get machine label for each filename</span>
+    <span class="n">machine_labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">*</span><span class="nb">map</span><span class="p">(</span><span class="n">filename_to_machine</span><span class="o">.</span><span class="n">get</span><span class="p">,</span> <span class="n">filenames</span><span class="p">)])</span>
+
+    <span class="k">return</span> <span class="n">machine_labels</span></div>
+
+
+
+<div class="viewcode-block" id="get_label_boundaries">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.get_label_boundaries">[docs]</a>
+<span class="k">def</span> <span class="nf">get_label_boundaries</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">min_block_size</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Provide mask for samples at the boundaries of contiguous label blocks for</span>
+<span class="sd">    each unique ultrasound sequence.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pandas.DataFrame</span>
+<span class="sd">        Each row contains metadata for an ultrasound image.</span>
+<span class="sd">    min_block_size : int, optional</span>
+<span class="sd">        Minimum number of images of the same label to be a valid contiguous</span>
+<span class="sd">        label block, to be searched for the images at the boundaries</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.Series</span>
+<span class="sd">        Boolean mask, where True signifies image is at the boundary of two</span>
+<span class="sd">        contiguous label blocks</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">_find_boundaries</span><span class="p">(</span><span class="n">df_seq</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Given metadata for a unique ultrasound sequence, identify boundaries</span>
+<span class="sd">        between contiguous label blocks.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        df_seq : pandas.DataFrame</span>
+<span class="sd">            Contains metadata for all ultrasound images for one unique sequence</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pd.Series</span>
+<span class="sd">            Boolean mask at a per-sequence level</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Get indices to sort/unsort by sequence number</span>
+        <span class="n">sort_idx</span><span class="p">,</span> <span class="n">unsort_idx</span> <span class="o">=</span> <span class="n">argsort_unsort</span><span class="p">(</span><span class="n">df_seq</span><span class="p">[</span><span class="s2">&quot;seq_number&quot;</span><span class="p">])</span>
+        <span class="n">df_seq</span> <span class="o">=</span> <span class="n">df_seq</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+
+        <span class="c1"># Identify boundaries of label blocks</span>
+        <span class="n">all_labels</span> <span class="o">=</span> <span class="n">df_seq</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
+        <span class="n">last_label</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">curr_block_size</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">boundary_mask</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">all_labels</span><span class="p">:</span>
+            <span class="c1"># Case 1: If same label as last</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="n">last_label</span><span class="p">:</span>
+                <span class="n">curr_block_size</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Case 2: If new label and last block size was &gt;= the minimum</span>
+            <span class="n">last_block_mask</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span><span class="o">*</span><span class="n">curr_block_size</span>
+            <span class="k">if</span> <span class="n">curr_block_size</span> <span class="o">&gt;=</span> <span class="n">min_block_size</span><span class="p">:</span>
+                <span class="n">last_block_mask</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">last_block_mask</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="c1"># Update accumulators</span>
+            <span class="n">boundary_mask</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">last_block_mask</span><span class="p">)</span>
+            <span class="n">last_label</span> <span class="o">=</span> <span class="n">label</span>
+            <span class="n">curr_block_size</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># NOTE: Boundary mask for last block wasn&#39;t updated</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">boundary_mask</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_labels</span><span class="p">):</span>
+            <span class="n">last_block_mask</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span><span class="o">*</span><span class="n">curr_block_size</span>
+            <span class="k">if</span> <span class="n">curr_block_size</span> <span class="o">&gt;=</span> <span class="n">min_block_size</span><span class="p">:</span>
+                <span class="n">last_block_mask</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">last_block_mask</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">boundary_mask</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">last_block_mask</span><span class="p">)</span>
+
+        <span class="c1"># Unsort mask</span>
+        <span class="n">boundary_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">boundary_mask</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">boundary_mask</span><span class="p">[</span><span class="n">unsort_idx</span><span class="p">]</span>
+
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_find_boundaries</span><span class="p">)</span>
+
+    <span class="c1"># Flatten mask</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">mask</span></div>
+
+
+
+<div class="viewcode-block" id="identify_not_in_label_group">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.identify_not_in_label_group">[docs]</a>
+<span class="k">def</span> <span class="nf">identify_not_in_label_group</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">min_block_size</span><span class="o">=</span><span class="mi">3</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Provide mask for samples not part of a contiguous label block for</span>
+<span class="sd">    each unique ultrasound sequence.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pandas.DataFrame</span>
+<span class="sd">        Each row contains metadata for an ultrasound image.</span>
+<span class="sd">    min_block_size : int, optional</span>
+<span class="sd">        Minimum number of images of the same label to be a valid contiguous</span>
+<span class="sd">        label block, to be searched for the images at the boundaries</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.Series</span>
+<span class="sd">        Boolean mask, where True signifies image is in a contiguous label block</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">_find_blocks</span><span class="p">(</span><span class="n">df_seq</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Given metadata for a unique ultrasound sequence, identify boundaries</span>
+<span class="sd">        between contiguous label blocks.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        df_seq : pandas.DataFrame</span>
+<span class="sd">            Contains metadata for all ultrasound images for one unique sequence</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pd.Series</span>
+<span class="sd">            Boolean mask at a per-sequence level</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Get indices to sort/unsort by sequence number</span>
+        <span class="n">sort_idx</span><span class="p">,</span> <span class="n">unsort_idx</span> <span class="o">=</span> <span class="n">argsort_unsort</span><span class="p">(</span><span class="n">df_seq</span><span class="p">[</span><span class="s2">&quot;seq_number&quot;</span><span class="p">])</span>
+        <span class="n">df_seq</span> <span class="o">=</span> <span class="n">df_seq</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+
+        <span class="c1"># Identify boundaries of label blocks</span>
+        <span class="n">all_labels</span> <span class="o">=</span> <span class="n">df_seq</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
+        <span class="n">last_label</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">curr_block_size</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">boundary_mask</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">all_labels</span><span class="p">:</span>
+            <span class="c1"># Case 1: If same label as last</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="n">last_label</span><span class="p">:</span>
+                <span class="n">curr_block_size</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Case 2: If new label and last block size was &gt;= the minimum</span>
+            <span class="n">last_block_mask</span> <span class="o">=</span> <span class="p">[</span><span class="kc">True</span><span class="p">]</span><span class="o">*</span><span class="n">curr_block_size</span>
+            <span class="k">if</span> <span class="n">curr_block_size</span> <span class="o">&gt;=</span> <span class="n">min_block_size</span><span class="p">:</span>
+                <span class="n">last_block_mask</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">last_block_mask</span><span class="p">))]</span>
+            <span class="c1"># Update accumulators</span>
+            <span class="n">boundary_mask</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">last_block_mask</span><span class="p">)</span>
+            <span class="n">last_label</span> <span class="o">=</span> <span class="n">label</span>
+            <span class="n">curr_block_size</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="c1"># NOTE: Boundary mask for last block wasn&#39;t updated</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">boundary_mask</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_labels</span><span class="p">):</span>
+            <span class="n">last_block_mask</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span><span class="o">*</span><span class="n">curr_block_size</span>
+            <span class="k">if</span> <span class="n">curr_block_size</span> <span class="o">&gt;=</span> <span class="n">min_block_size</span><span class="p">:</span>
+                <span class="n">last_block_mask</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">last_block_mask</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">boundary_mask</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">last_block_mask</span><span class="p">)</span>
+
+        <span class="c1"># Unsort mask</span>
+        <span class="n">boundary_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">boundary_mask</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">boundary_mask</span><span class="p">[</span><span class="n">unsort_idx</span><span class="p">]</span>
+
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_find_blocks</span><span class="p">)</span>
+
+    <span class="c1"># Flatten mask</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">mask</span></div>
+
+
+
+<div class="viewcode-block" id="has_seg_mask">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.has_seg_mask">[docs]</a>
+<span class="k">def</span> <span class="nf">has_seg_mask</span><span class="p">(</span><span class="n">img_path</span><span class="p">,</span> <span class="n">include_liver_seg</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Checks if a specific image has at least 1 segmentation mask.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Assumes segmentation mask is in the same directory, and labeled with the</span>
+<span class="sd">    same filename but with a suffix (&quot;_kseg&quot;, &quot;_bseg&quot;, &quot;_lseg&quot;).</span>
+
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    img_path : str</span>
+<span class="sd">        Path to image</span>
+<span class="sd">    include_liver_seg : bool, optional</span>
+<span class="sd">        If True, also consider liver segmentation, by default False</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        True if image has a mask, and False otherwise</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># CASE 1: Bladder image</span>
+    <span class="n">seg_fname_suffixes</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;_bseg&quot;</span><span class="p">,</span> <span class="s2">&quot;_kseg&quot;</span><span class="p">]</span>
+    <span class="c1"># Add flag to include liver</span>
+    <span class="k">if</span> <span class="n">include_liver_seg</span><span class="p">:</span>
+        <span class="n">seg_fname_suffixes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;_lseg&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Load kidney/bladder/liver segmentations</span>
+    <span class="k">for</span> <span class="n">suffix</span> <span class="ow">in</span> <span class="n">seg_fname_suffixes</span><span class="p">:</span>
+        <span class="c1"># Create potential name of mask image (located in the same directory)</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">img_path</span><span class="p">)</span>
+        <span class="n">split_fname</span> <span class="o">=</span> <span class="n">fname</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">)</span>
+        <span class="n">mask_fname</span> <span class="o">=</span> <span class="s2">&quot;.&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">split_fname</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="n">suffix</span> <span class="o">+</span> <span class="s2">&quot;.&quot;</span> <span class="o">+</span> <span class="n">split_fname</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">mask_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">img_path</span><span class="p">),</span> <span class="n">mask_fname</span><span class="p">)</span>
+
+        <span class="c1"># Early return, if mask exists</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">mask_path</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span></div>
+
+
+
+<div class="viewcode-block" id="is_null">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.is_null">[docs]</a>
+<span class="k">def</span> <span class="nf">is_null</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns True, if x is null</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : Any</span>
+<span class="sd">        Any object</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        True if x is null and False otherwise</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">pd</span><span class="o">.</span><span class="n">isnull</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="ow">or</span> <span class="n">x</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="s2">&quot;nan&quot;</span> <span class="ow">or</span> <span class="n">x</span> <span class="o">==</span> <span class="s2">&quot;None&quot;</span> <span class="ow">or</span> <span class="n">x</span> <span class="o">==</span> <span class="s2">&quot;N/A&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                           Metadata Post-Processing                           #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="make_side_label_relative">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.make_side_label_relative">[docs]</a>
+<span class="k">def</span> <span class="nf">make_side_label_relative</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    First side (Left/Right) becomes First, while the other becomes Second. Use</span>
+<span class="sd">    this to convert all labels from side to relative side.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    labels : array-like</span>
+<span class="sd">        List of labels of the form &lt;plane&gt;_&lt;side&gt; or Bladder</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        List of transformed label to &lt;plane&gt;_[First/Second] or Bladder</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">first_side</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Mapping from label with side to relative (First/Second)</span>
+    <span class="n">side_to_relative</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">new_labels</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+        <span class="n">label_parts</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)</span>
+
+        <span class="c1"># If Bladder</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">label_parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">new_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="c1"># If first side, perform set up</span>
+        <span class="k">if</span> <span class="n">first_side</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">first_side</span> <span class="o">=</span> <span class="n">label_parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">second_side</span> <span class="o">=</span> <span class="s2">&quot;Left&quot;</span> <span class="k">if</span> <span class="n">first_side</span> <span class="o">!=</span> <span class="s2">&quot;Left&quot;</span> <span class="k">else</span> <span class="s2">&quot;Right&quot;</span>
+
+            <span class="k">for</span> <span class="n">plane</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;Transverse&quot;</span><span class="p">,</span> <span class="s2">&quot;Saggital&quot;</span><span class="p">):</span>
+                <span class="n">side_to_relative</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">plane</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">first_side</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">plane</span><span class="si">}</span><span class="s2">_First&quot;</span>
+                <span class="n">side_to_relative</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">plane</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">second_side</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">plane</span><span class="si">}</span><span class="s2">_Second&quot;</span>
+
+        <span class="c1"># Convert label with side to relative side</span>
+        <span class="n">new_labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">side_to_relative</span><span class="p">[</span><span class="n">label</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">new_labels</span></div>
+
+
+
+<div class="viewcode-block" id="remove_only_unlabeled_seqs">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.remove_only_unlabeled_seqs">[docs]</a>
+<span class="k">def</span> <span class="nf">remove_only_unlabeled_seqs</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Removes rows from fully unlabeled ultrasound sequences.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pandas.DataFrame</span>
+<span class="sd">        Each row contains metadata for an ultrasound image. May contain</span>
+<span class="sd">        unlabeled images (label as &quot;Other&quot;)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Metadata dataframe with completely unlabeled sequences removed</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># If including unlabeled, exclude sequences that are all &quot;Others&quot;</span>
+    <span class="c1"># NOTE: This leads to the same patient-visit splits as in training</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">label</span> <span class="o">==</span> <span class="s2">&quot;Other&quot;</span><span class="p">))</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">mask</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+    <span class="n">mask</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;bool_mask&quot;</span>
+
+    <span class="c1"># Join to filter </span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">set_index</span><span class="p">([</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;inner&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Remove added column</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;bool_mask&quot;</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="restrict_seq_len">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.restrict_seq_len">[docs]</a>
+<span class="k">def</span> <span class="nf">restrict_seq_len</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="mi">18</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Filter metadata for ultrasound image sequences, to restrict each sequence to</span>
+<span class="sd">    have exactly `n` images.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pandas.DataFrame</span>
+<span class="sd">        Each row contains an `id` and `visit`, which specify a unique US</span>
+<span class="sd">        sequence.</span>
+<span class="sd">    n : int, optional</span>
+<span class="sd">        Absolute sequence length to restrict to, by default 18.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pandas.DataFrame</span>
+<span class="sd">        Filtered metadata table</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">downsample_df</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Downsample dataframe with consecutive rows.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        df : pandas.DataFrame</span>
+<span class="sd">            Metadata table with n+ rows</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pandas.DataFrame</span>
+<span class="sd">            Downsampled metadata dataframe</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span> <span class="o">==</span> <span class="n">n</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">df</span>
+        <span class="n">start_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">high</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="o">-</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">start_idx</span><span class="p">:</span> <span class="n">start_idx</span><span class="o">+</span><span class="n">n</span><span class="p">]</span>
+
+    <span class="c1"># Create copy to avoid in-place operations</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Create identifiers for ultrasound sequences</span>
+    <span class="c1"># NOTE: Unique sequences are identified by patient ID and hospital visit</span>
+    <span class="n">seq_ids</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span>
+        <span class="n">df_metadata</span><span class="p">[[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">]]</span><span class="o">.</span><span class="n">itertuples</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="kc">None</span><span class="p">))</span>
+
+    <span class="c1"># Get number of images per US sequence</span>
+    <span class="n">seq_counts</span> <span class="o">=</span> <span class="n">seq_ids</span><span class="o">.</span><span class="n">value_counts</span><span class="p">()</span>
+    <span class="n">initial_num_seq</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">seq_counts</span><span class="p">)</span>
+
+    <span class="c1"># Filter for minimum length sequences</span>
+    <span class="n">seq_counts</span> <span class="o">=</span> <span class="n">seq_counts</span><span class="p">[</span><span class="n">seq_counts</span> <span class="o">&gt;=</span> <span class="n">n</span><span class="p">]</span>
+    <span class="n">filtered_num_seq</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">seq_counts</span><span class="p">)</span>
+    <span class="n">kept_idx</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">seq_counts</span><span class="o">.</span><span class="n">index</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">seq_ids</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">kept_idx</span><span class="p">)</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+    <span class="c1"># Log number of sequences that decreased</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Filter for Sequences w/ </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">+ Images: &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">initial_num_seq</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">filtered_num_seq</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Downsample sequences with &gt; `n` images</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;visit&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span>
+        <span class="n">downsample_df</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                Data Splitting                                #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="split_by_ids">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.split_by_ids">[docs]</a>
+<span class="k">def</span> <span class="nf">split_by_ids</span><span class="p">(</span><span class="n">patient_ids</span><span class="p">,</span> <span class="n">train_split</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                 <span class="n">force_train_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">seed</span><span class="o">=</span><span class="n">constants</span><span class="o">.</span><span class="n">SEED</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Splits list of patient IDs into training and val/test set.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Split may not be exactly equal to desired train_split due to imbalance of</span>
+<span class="sd">    patients.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    patient_ids : np.array or array-like</span>
+<span class="sd">        List of patient IDs (IDs can repeat).</span>
+<span class="sd">    train_split : float, optional</span>
+<span class="sd">        Proportion of total data to leave for training, by default 0.8</span>
+<span class="sd">    force_train_ids : list, optional</span>
+<span class="sd">        List of patient IDs to force into the training set</span>
+<span class="sd">    seed : int, optional</span>
+<span class="sd">        If provided, sets random seed to value, by default constants.SEED</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (np.array, np.array)</span>
+<span class="sd">        Contains (train_indices, val_indices), which are arrays of indices into</span>
+<span class="sd">        patient_ids to specify which are used for training or validation/test.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get expected # of items in training set</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">patient_ids</span><span class="p">)</span>
+    <span class="n">n_train</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span> <span class="o">*</span> <span class="n">train_split</span><span class="p">)</span>
+
+    <span class="c1"># Add soft lower/upper bounds (5%) to expected number. </span>
+    <span class="c1"># NOTE: Assume it won&#39;t become negative</span>
+    <span class="n">n_train_min</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_train</span> <span class="o">-</span> <span class="p">(</span><span class="n">n</span> <span class="o">*</span> <span class="mf">0.05</span><span class="p">))</span>
+    <span class="n">n_train_max</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_train</span> <span class="o">+</span> <span class="p">(</span><span class="n">n</span> <span class="o">*</span> <span class="mf">0.05</span><span class="p">))</span>
+
+    <span class="c1"># Create mapping of patient ID to number of occurrences</span>
+    <span class="n">id_to_len</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">_id</span> <span class="ow">in</span> <span class="n">patient_ids</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">id_to_len</span><span class="p">:</span>
+            <span class="n">id_to_len</span><span class="p">[</span><span class="n">_id</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">id_to_len</span><span class="p">[</span><span class="n">_id</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="c1"># Shuffle unique patient IDs</span>
+    <span class="n">unique_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">id_to_len</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">shuffled_unique_ids</span> <span class="o">=</span> <span class="n">shuffle</span><span class="p">(</span><span class="n">unique_ids</span><span class="p">,</span> <span class="n">random_state</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span>
+
+    <span class="c1"># Randomly choose patients to add to training set until full</span>
+    <span class="n">train_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">n_train_curr</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="c1"># If provided, strictly move patients into training set</span>
+    <span class="k">if</span> <span class="n">force_train_ids</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">forced_id</span> <span class="ow">in</span> <span class="n">force_train_ids</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">forced_id</span> <span class="ow">in</span> <span class="n">id_to_len</span><span class="p">:</span>
+                <span class="n">train_ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">forced_id</span><span class="p">)</span>
+                <span class="n">n_train_curr</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="n">shuffled_unique_ids</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">forced_id</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">_id</span> <span class="ow">in</span> <span class="n">shuffled_unique_ids</span><span class="p">:</span>
+        <span class="c1"># Add patient if number of training samples doesn&#39;t exceed upper bound</span>
+        <span class="k">if</span> <span class="n">n_train_curr</span> <span class="o">+</span> <span class="n">id_to_len</span><span class="p">[</span><span class="n">_id</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">n_train_max</span><span class="p">:</span>
+            <span class="n">train_ids</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">_id</span><span class="p">)</span>
+            <span class="n">n_train_curr</span> <span class="o">+=</span> <span class="n">id_to_len</span><span class="p">[</span><span class="n">_id</span><span class="p">]</span>
+
+        <span class="c1"># Stop when there is roughly enough in the training set</span>
+        <span class="k">if</span> <span class="n">n_train_curr</span> <span class="o">&gt;=</span> <span class="n">n_train_min</span><span class="p">:</span>
+            <span class="k">break</span>
+
+    <span class="c1"># Create indices</span>
+    <span class="n">train_idx</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">val_idx</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">patient_ids</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">_id</span> <span class="ow">in</span> <span class="n">train_ids</span><span class="p">:</span>
+            <span class="n">train_idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">val_idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+
+    <span class="c1"># Convert to arrays</span>
+    <span class="n">train_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">train_idx</span><span class="p">)</span>
+    <span class="n">val_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">val_idx</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">train_idx</span><span class="p">,</span> <span class="n">val_idx</span></div>
+
+
+
+<div class="viewcode-block" id="cross_validation_by_patient">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.cross_validation_by_patient">[docs]</a>
+<span class="k">def</span> <span class="nf">cross_validation_by_patient</span><span class="p">(</span><span class="n">patient_ids</span><span class="p">,</span> <span class="n">num_folds</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create train/val indices for Cross-Validation with exclusive patient ids</span>
+<span class="sd">    betwen training and validation sets.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    patient_ids : np.array or array-like</span>
+<span class="sd">        List of patient IDs (IDs can repeat).</span>
+<span class="sd">    num_folds : int</span>
+<span class="sd">        Number of folds for cross-validation</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of &lt;num_folds&gt; tuples of (np.array, np.array)</span>
+<span class="sd">        Each tuple in the list corresponds to a fold&#39;s (train_ids, val_ids)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">folds</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">training_folds</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">remaining_ids</span> <span class="o">=</span> <span class="n">patient_ids</span>
+
+    <span class="c1"># Get patient IDs for training set in each folds</span>
+    <span class="k">while</span> <span class="n">num_folds</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">proportion</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">num_folds</span>
+        <span class="n">train_idx</span><span class="p">,</span> <span class="n">rest_idx</span> <span class="o">=</span> <span class="n">split_by_ids</span><span class="p">(</span><span class="n">remaining_ids</span><span class="p">,</span> <span class="n">proportion</span><span class="p">)</span>
+
+        <span class="n">training_folds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">remaining_ids</span><span class="p">[</span><span class="n">train_idx</span><span class="p">]))</span>
+        <span class="n">remaining_ids</span> <span class="o">=</span> <span class="n">remaining_ids</span><span class="p">[</span><span class="n">rest_idx</span><span class="p">]</span>
+        
+        <span class="n">num_folds</span> <span class="o">-=</span> <span class="mi">1</span>
+
+    <span class="c1"># The last remaining IDs are the patient IDs of the last fold</span>
+    <span class="n">training_folds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">remaining_ids</span><span class="p">))</span>
+
+    <span class="c1"># Create folds</span>
+    <span class="n">fold_idx</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">training_folds</span><span class="p">)))</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">fold_idx</span><span class="p">:</span>
+        <span class="c1"># Get training set indices</span>
+        <span class="n">uniq_train_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">training_folds</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="n">train_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">_id</span> <span class="ow">in</span> <span class="n">uniq_train_ids</span> <span class="k">for</span> <span class="n">_id</span> <span class="ow">in</span> <span class="n">patient_ids</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># Get validation set indices</span>
+        <span class="n">val_indices</span> <span class="o">=</span> <span class="n">fold_idx</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">val_indices</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+        <span class="n">val_patient_ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">training_folds</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">)[</span><span class="n">val_indices</span><span class="p">])</span>
+        <span class="n">uniq_val_ids</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">val_patient_ids</span><span class="p">)</span>
+        <span class="n">val_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">_id</span> <span class="ow">in</span> <span class="n">uniq_val_ids</span> <span class="k">for</span> <span class="n">_id</span> <span class="ow">in</span> <span class="n">patient_ids</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">folds</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">train_idx</span><span class="p">,</span> <span class="n">val_idx</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">folds</span></div>
+
+
+
+<div class="viewcode-block" id="assign_split_table_by_dset">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.assign_split_table_by_dset">[docs]</a>
+<span class="k">def</span> <span class="nf">assign_split_table_by_dset</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="o">**</span><span class="n">split_kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assign data split by dataset</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pd.DataFrame</span>
+<span class="sd">        Metadata table containing images from 1+ datasets specified in `dset`</span>
+<span class="sd">        column</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Metadata table where `split` column was assigned</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">accum_df</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">dset</span> <span class="ow">in</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">():</span>
+        <span class="n">df_dset</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;dset&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">dset</span><span class="p">]</span>
+        <span class="n">df_dset</span> <span class="o">=</span> <span class="n">assign_split_table</span><span class="p">(</span><span class="n">df_dset</span><span class="p">,</span> <span class="o">**</span><span class="n">split_kwargs</span><span class="p">)</span>
+        <span class="n">accum_df</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df_dset</span><span class="p">)</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">accum_df</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="assign_split_table">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.assign_split_table">[docs]</a>
+<span class="k">def</span> <span class="nf">assign_split_table</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span>
+                       <span class="n">other_split</span><span class="o">=</span><span class="s2">&quot;test&quot;</span><span class="p">,</span>
+                       <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                       <span class="o">**</span><span class="n">split_kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Split table into train and test, and add &quot;split&quot; column to specify which</span>
+<span class="sd">    split.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    If image has no label, it&#39;s not part of any split.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pd.DataFrame</span>
+<span class="sd">        Each row represents an US image at least a patient ID and label</span>
+<span class="sd">    other_split : str, optional</span>
+<span class="sd">        Name of other split. For example, (&quot;val&quot;, &quot;test&quot;), by default &quot;test&quot;</span>
+<span class="sd">    overwrite : bool, optional</span>
+<span class="sd">        If val/test splits already exists, then don&#39;t overwrite</span>
+<span class="sd">    **split_kwargs : Any</span>
+<span class="sd">        Keyword arguments to pass into `split_by_ids`</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Metadata table</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Reset index</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># If split already exists, then don&#39;t overwrite and return early</span>
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">overwrite</span> <span class="ow">and</span> <span class="s2">&quot;split&quot;</span> <span class="ow">in</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="ow">and</span> <span class="n">other_split</span> <span class="ow">in</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()):</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Split `</span><span class="si">{</span><span class="n">other_split</span><span class="si">}</span><span class="s2">` already exists! Not overwriting...&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">df_metadata</span>
+
+    <span class="c1"># Add column for split</span>
+    <span class="k">if</span> <span class="s2">&quot;split&quot;</span> <span class="ow">in</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Overwriting existing data splits for (train/</span><span class="si">{</span><span class="n">other_split</span><span class="si">}</span><span class="s2">)!&quot;</span><span class="p">)</span>
+    <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Split into tables with labels and without</span>
+    <span class="n">df_labeled</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="o">~</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()]</span>
+    <span class="n">df_unlabeled</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()]</span>
+
+    <span class="c1"># If specified, only modify val/test if there are none that exist</span>
+    <span class="c1"># Split labeled data into train and test</span>
+    <span class="n">patient_ids</span> <span class="o">=</span> <span class="n">df_labeled</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+    <span class="n">train_idx</span><span class="p">,</span> <span class="n">test_idx</span> <span class="o">=</span> <span class="n">split_by_ids</span><span class="p">(</span><span class="n">patient_ids</span><span class="p">,</span> <span class="o">**</span><span class="n">split_kwargs</span><span class="p">)</span>
+    <span class="n">df_labeled</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">train_idx</span><span class="p">,</span> <span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;train&quot;</span>
+    <span class="n">df_labeled</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">test_idx</span><span class="p">,</span> <span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">other_split</span>
+
+    <span class="c1"># Recombine data</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_labeled</span><span class="p">,</span> <span class="n">df_unlabeled</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="assign_split_row">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.assign_split_row">[docs]</a>
+<span class="k">def</span> <span class="nf">assign_split_row</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">dset</span><span class="o">=</span><span class="s2">&quot;sickkids&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a row from a dataframe, assign its dataset based on the patient ID</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    row : pd.Series or dict</span>
+<span class="sd">        Row from metadata table</span>
+<span class="sd">    dset : str</span>
+<span class="sd">        Hospital/dataset (e.g., sickkids, sickkids_silent_trial)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Dataset split (train/val/test) or None (if not a split)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get flag if has label</span>
+    <span class="n">has_label</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">is_null</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">])</span>
+
+    <span class="c1"># CASE 0: Not part of any split, if there&#39;s no label</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">has_label</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="c1"># CASE 1: If no train/val/test splits, assume test if there&#39;s a label</span>
+    <span class="k">if</span> <span class="n">dset</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_SPLIT_IDS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">&quot;test&quot;</span> <span class="k">if</span> <span class="n">has_label</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="c1"># CASE 2: Defined for the hospital</span>
+    <span class="n">dset_to_ids</span> <span class="o">=</span> <span class="n">constants</span><span class="o">.</span><span class="n">DSET_TO_SPLIT_IDS</span><span class="p">[</span><span class="n">dset</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">dset_to_ids</span><span class="p">[</span><span class="n">split</span><span class="p">]</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])</span> <span class="ow">in</span> <span class="n">dset_to_ids</span><span class="p">[</span><span class="n">split</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">split</span>
+
+    <span class="c1"># CASE 3: If reached this point, then its not part of any split</span>
+    <span class="k">return</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="assign_unlabeled_split">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.assign_unlabeled_split">[docs]</a>
+<span class="k">def</span> <span class="nf">assign_unlabeled_split</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="s2">&quot;train&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assign unlabeled data to data split (e.g., train)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pd.DataFrame</span>
+<span class="sd">        Metadata table where each row is an ultrasound image</span>
+<span class="sd">    split : str, optional</span>
+<span class="sd">        Data split. Can also be None, if not desired to be part of</span>
+<span class="sd">        train/val/test</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Metadata table where unlabeled images are now part of specified split</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Don&#39;t perform in-place</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Add column for split, if not exists</span>
+    <span class="k">if</span> <span class="s2">&quot;split&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># Split into tables with labels and without</span>
+    <span class="n">df_labeled</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="o">~</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()]</span>
+    <span class="n">df_unlabeled</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isna</span><span class="p">()]</span>
+
+    <span class="c1"># Move unlabeled data to specified set</span>
+    <span class="n">df_unlabeled</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">split</span>
+
+    <span class="c1"># Recombine data</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">df_labeled</span><span class="p">,</span> <span class="n">df_unlabeled</span><span class="p">],</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<div class="viewcode-block" id="exclude_from_any_split">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.exclude_from_any_split">[docs]</a>
+<span class="k">def</span> <span class="nf">exclude_from_any_split</span><span class="p">(</span><span class="n">df_metadata</span><span class="p">,</span> <span class="n">json_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get list of filenames to exclude from any split. Unset their assigned split.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_metadata : pd.DataFrame</span>
+<span class="sd">        Metadata table</span>
+<span class="sd">    json_path : str</span>
+<span class="sd">        Path to json file containing list of filenames to exclude</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Metadata table with rows whose data splits were could be unassigned</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Raise error, if file doesn&#39;t exist</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">json_path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Exclude filename path doesn&#39;t exist!</span><span class="se">\n\t</span><span class="s2">&quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">json_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Create copy to avoid in-place operations</span>
+    <span class="n">df_metadata</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Load JSON file</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">json_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">handler</span><span class="p">:</span>
+        <span class="n">exclude_fnames</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">handler</span><span class="p">))</span>
+
+    <span class="c1"># For each of train/val/test, ensure images are all filtered</span>
+    <span class="n">splits</span> <span class="o">=</span> <span class="p">[</span><span class="n">split</span> <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">if</span> <span class="n">split</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="n">splits</span><span class="p">:</span>
+        <span class="c1"># Check if each file should be included/excluded</span>
+        <span class="n">excluded_mask</span> <span class="o">=</span> <span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">exclude_fnames</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="ow">in</span> <span class="n">exclude_fnames</span>
+        <span class="p">)</span>
+        <span class="c1"># Filter for split-specific data</span>
+        <span class="n">excluded_mask</span> <span class="o">=</span> <span class="n">excluded_mask</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">df_metadata</span><span class="p">[</span><span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">split</span><span class="p">)</span>
+        <span class="c1"># Unassign split</span>
+        <span class="n">df_metadata</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">excluded_mask</span><span class="p">,</span> <span class="s2">&quot;split&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Explicitly excluding </span><span class="si">{</span><span class="p">(</span><span class="n">excluded_mask</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span><span class="si">}</span><span class="s2"> images from `</span><span class="si">{</span><span class="n">split</span><span class="si">}</span><span class="s2">`!&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">df_metadata</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                             Image Preprocessing                              #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="preprocess_image_dir">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.preprocess_image_dir">[docs]</a>
+<span class="k">def</span> <span class="nf">preprocess_image_dir</span><span class="p">(</span><span class="n">image_dir</span><span class="p">,</span> <span class="n">save_dir</span><span class="p">,</span> <span class="n">file_regex</span><span class="o">=</span><span class="s2">&quot;*.*&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Perform image preprocessing on images in &lt;image_dir&gt; directory with filename</span>
+<span class="sd">    possibly matching regex. Save preprocessed images to save_dir.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    image_dir : str</span>
+<span class="sd">        Path to directory of unprocessed images</span>
+<span class="sd">    save_dir : str</span>
+<span class="sd">        Path to directory to save processed images</span>
+<span class="sd">    file_regex : str, optional</span>
+<span class="sd">        Regex for image filename. Only preprocesses these images, by default</span>
+<span class="sd">        &quot;*.*&quot;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">img_path</span> <span class="ow">in</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">image_dir</span><span class="p">,</span> <span class="n">file_regex</span><span class="p">)):</span>
+        <span class="c1"># Read and preprocess image</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">img_path</span><span class="p">)</span>
+        <span class="n">processed_img</span> <span class="o">=</span> <span class="n">preprocess_image</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span> <span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">))</span>
+
+        <span class="c1"># Save image to specified directory</span>
+        <span class="n">filename</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">img_path</span><span class="p">)</span>
+        <span class="n">new_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">save_dir</span><span class="p">,</span> <span class="n">filename</span><span class="p">)</span>
+        <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">new_path</span><span class="p">,</span> <span class="n">processed_img</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="preprocess_image">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.preprocess_image">[docs]</a>
+<span class="k">def</span> <span class="nf">preprocess_image</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">crop_dims</span><span class="o">=</span><span class="p">(</span><span class="mi">150</span><span class="p">,</span> <span class="mi">150</span><span class="p">),</span> <span class="n">resize_dims</span><span class="o">=</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span>
+                     <span class="n">ignore_crop</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Perform preprocessing on image array:</span>
+<span class="sd">        (1) Center crop 150 x 150 (by default)</span>
+<span class="sd">        (2) Resize to 256 x 256 (by default)</span>
+<span class="sd">        (3) Histogram equalize image</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    img : np.array</span>
+<span class="sd">        Input image to crop</span>
+<span class="sd">    crop_dims : tuple, optional</span>
+<span class="sd">        Dimensions (height, width) of image crop, by default (150, 150).</span>
+<span class="sd">    resize_dims : tuple, optional</span>
+<span class="sd">        Dimensions (height, width) of final image, by default (256, 256).</span>
+<span class="sd">    ignore_crop : bool, optional</span>
+<span class="sd">        If True, do not crop image during preprocessing, by default False.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array</span>
+<span class="sd">        Preprocessed image.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># If specified, crop image</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ignore_crop</span><span class="p">:</span>
+        <span class="n">height</span><span class="p">,</span> <span class="n">width</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="c1"># Sanitize input to be less than or equal to max width/height</span>
+        <span class="n">crop_height</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">crop_dims</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">height</span><span class="p">)</span>
+        <span class="n">crop_width</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">crop_dims</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Get midpoints and necessary distance from midpoints</span>
+        <span class="n">mid_x</span><span class="p">,</span> <span class="n">mid_y</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">width</span><span class="o">/</span><span class="mi">2</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">height</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">half_crop_height</span><span class="p">,</span> <span class="n">half_crop_width</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">crop_width</span><span class="o">/</span><span class="mi">2</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">crop_height</span><span class="o">/</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># Crop image</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="p">[</span><span class="n">mid_y</span><span class="o">-</span><span class="n">half_crop_width</span><span class="p">:</span><span class="n">mid_y</span><span class="o">+</span><span class="n">half_crop_width</span><span class="p">,</span>
+                  <span class="n">mid_x</span><span class="o">-</span><span class="n">half_crop_height</span><span class="p">:</span><span class="n">mid_x</span><span class="o">+</span><span class="n">half_crop_height</span><span class="p">]</span>
+
+    <span class="c1"># Resize image</span>
+    <span class="n">resized_img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">resize_dims</span><span class="p">)</span>
+
+    <span class="c1"># Histogram equalize images</span>
+    <span class="n">equalized_img</span> <span class="o">=</span> <span class="n">equalize_hist</span><span class="p">(</span><span class="n">resized_img</span><span class="p">)</span>
+
+    <span class="c1"># Scale back to 255</span>
+    <span class="n">processed_img</span> <span class="o">=</span> <span class="mi">255</span> <span class="o">*</span> <span class="n">equalized_img</span>
+
+    <span class="k">return</span> <span class="n">processed_img</span></div>
+
+
+
+<div class="viewcode-block" id="prep_augmentations">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.prep_augmentations">[docs]</a>
+<span class="k">def</span> <span class="nf">prep_augmentations</span><span class="p">(</span><span class="n">img_size</span><span class="o">=</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">),</span> <span class="n">crop_scale</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare training augmentations.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    img_size : tuple, optional</span>
+<span class="sd">        Expected image size post-augmentations</span>
+<span class="sd">    crop_scale : float</span>
+<span class="sd">        Minimum proportion/size of area to crop</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Maps from texture/geometric to training transforms</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">transforms</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">transforms</span><span class="p">[</span><span class="s2">&quot;texture&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">Compose</span><span class="p">([</span>
+        <span class="n">T</span><span class="o">.</span><span class="n">RandomAdjustSharpness</span><span class="p">(</span><span class="mf">1.25</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.25</span><span class="p">),</span>
+        <span class="n">T</span><span class="o">.</span><span class="n">RandomApply</span><span class="p">([</span><span class="n">T</span><span class="o">.</span><span class="n">GaussianBlur</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)],</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+    <span class="p">])</span>
+    <span class="n">transforms</span><span class="p">[</span><span class="s2">&quot;geometric&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">T</span><span class="o">.</span><span class="n">Compose</span><span class="p">([</span>
+        <span class="n">T</span><span class="o">.</span><span class="n">RandomRotation</span><span class="p">(</span><span class="mi">15</span><span class="p">),</span>
+        <span class="n">T</span><span class="o">.</span><span class="n">RandomResizedCrop</span><span class="p">(</span><span class="n">img_size</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="p">(</span><span class="n">crop_scale</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span>
+        <span class="n">T</span><span class="o">.</span><span class="n">RandomZoomOut</span><span class="p">(</span><span class="n">fill</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">side_range</span><span class="o">=</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span>  <span class="mf">2.0</span><span class="p">),</span> <span class="n">p</span><span class="o">=</span><span class="mf">0.25</span><span class="p">),</span>
+        <span class="n">T</span><span class="o">.</span><span class="n">Resize</span><span class="p">(</span><span class="n">img_size</span><span class="p">),</span>
+    <span class="p">])</span>
+    <span class="k">return</span> <span class="n">transforms</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                        Miscellaneous Helper Functions                        #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="argsort_unsort">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.argsort_unsort">[docs]</a>
+<span class="k">def</span> <span class="nf">argsort_unsort</span><span class="p">(</span><span class="n">arr</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given an array to sort, return indices to sort and unsort the array.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Given arr = [C, A, B, D] and its index array be [0, 1, 2, 3].</span>
+<span class="sd">        Sort indices: [2, 0, 1, 3] result in [A, B, C, D] &amp; [1, 2, 0, 3],</span>
+<span class="sd">        respectively.</span>
+
+<span class="sd">    To unsort, sort index array initially sorted by `arr`</span>
+<span class="sd">        Initial index: [1, 2, 0, 3]</span>
+<span class="sd">        Sorted indices: [2, 0, 1, 3] result in arr = [C, A, B, D]</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    arr : pd.Series or np.array</span>
+<span class="sd">        Array of items to sort</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (np.array, np.array)</span>
+<span class="sd">        First array contains indices to sort the array.</span>
+<span class="sd">        Second array contains indices to unsort the sorted array.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sort_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span>
+    <span class="n">unsort_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">arr</span><span class="p">))[</span><span class="n">sort_idx</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">sort_idx</span><span class="p">,</span> <span class="n">unsort_idx</span></div>
+
+
+
+<div class="viewcode-block" id="left_join_filtered_to_source">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.left_join_filtered_to_source">[docs]</a>
+<span class="k">def</span> <span class="nf">left_join_filtered_to_source</span><span class="p">(</span><span class="n">df_filtered</span><span class="p">,</span> <span class="n">df_full</span><span class="p">,</span> <span class="n">index_cols</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given the same table (with filtered columns) and its full table, perform a</span>
+<span class="sd">    LEFT JOIN to get all columns data from the full table.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_filtered : pd.DataFrame</span>
+<span class="sd">        Table with columns removed</span>
+<span class="sd">    df_full : pd.DataFrame</span>
+<span class="sd">        Source table with all columns present</span>
+<span class="sd">    index_cols : list, optional</span>
+<span class="sd">        If provided, reindex both tables on this index before joining.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    pd.DataFrame</span>
+<span class="sd">        Filtered table with all columns data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># If specified, set index</span>
+    <span class="k">if</span> <span class="n">index_cols</span><span class="p">:</span>
+        <span class="n">df_filtered</span> <span class="o">=</span> <span class="n">df_filtered</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">index_cols</span><span class="p">)</span>
+        <span class="n">df_full</span> <span class="o">=</span> <span class="n">df_full</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">index_cols</span><span class="p">)</span>
+
+    <span class="c1"># Perform LEFT JOIN</span>
+    <span class="n">df_filtered</span> <span class="o">=</span> <span class="n">df_filtered</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">df_full</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="n">rsuffix</span><span class="o">=</span><span class="s2">&quot;__dup&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Remove duplicate columnss</span>
+    <span class="n">drop_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">df_filtered</span><span class="o">.</span><span class="n">columns</span>
+                 <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">col</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">col</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;__dup&quot;</span><span class="p">)]</span>
+    <span class="n">df_filtered</span> <span class="o">=</span> <span class="n">df_filtered</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="n">drop_cols</span><span class="p">)</span>
+
+    <span class="c1"># Reset index, if earlier specified</span>
+    <span class="k">if</span> <span class="n">index_cols</span><span class="p">:</span>
+        <span class="n">df_filtered</span> <span class="o">=</span> <span class="n">df_filtered</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">df_filtered</span></div>
+
+
+
+<div class="viewcode-block" id="contains_overlapping_vals">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.contains_overlapping_vals">[docs]</a>
+<span class="k">def</span> <span class="nf">contains_overlapping_vals</span><span class="p">(</span><span class="n">df_a</span><span class="p">,</span> <span class="n">df_b</span><span class="p">,</span> <span class="n">column</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Checks if values overlap in column `column` between dataframes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_a : pd.DataFrame</span>
+<span class="sd">        Arbitrary table A with column `column`</span>
+<span class="sd">    df_b : pd.DataFrame</span>
+<span class="sd">        Arbitrary table B with column `column`</span>
+<span class="sd">    column : str</span>
+<span class="sd">        Name of column to check for overlapping values</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        Returns True if values overlap between dataframes in column `column`,</span>
+<span class="sd">        and False, otherwise.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get unique values</span>
+    <span class="n">uniq_vals_a</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_a</span><span class="p">[</span><span class="n">column</span><span class="p">])</span>
+    <span class="n">uniq_vals_b</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_b</span><span class="p">[</span><span class="n">column</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">uniq_vals_a</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">uniq_vals_b</span><span class="p">))</span> <span class="o">!=</span> <span class="mi">0</span></div>
+
+
+
+<div class="viewcode-block" id="vals_is_subset">
+<a class="viewcode-back" href="../../../src.data_prep.html#src.data_prep.utils.vals_is_subset">[docs]</a>
+<span class="k">def</span> <span class="nf">vals_is_subset</span><span class="p">(</span><span class="n">df_a</span><span class="p">,</span> <span class="n">df_b</span><span class="p">,</span> <span class="n">column</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Checks if values in table A are a subset of values in table  B.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    df_a : pd.DataFrame</span>
+<span class="sd">        Arbitrary table A with column `column`</span>
+<span class="sd">    df_b : pd.DataFrame</span>
+<span class="sd">        Arbitrary table B with column `column`</span>
+<span class="sd">    column : str</span>
+<span class="sd">        Name of column to check for values</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        Returns True if values in table A are a subset of values in table B,</span>
+<span class="sd">        and False, otherwise.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get unique values</span>
+    <span class="n">uniq_vals_a</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_a</span><span class="p">[</span><span class="n">column</span><span class="p">])</span>
+    <span class="n">uniq_vals_b</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">df_b</span><span class="p">[</span><span class="n">column</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">uniq_vals_a</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="n">uniq_vals_b</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

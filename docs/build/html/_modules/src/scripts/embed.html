@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.scripts.embed &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.scripts.embed</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.scripts.embed</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">embed.py</span>
+
+<span class="sd">Description: Contains function to extract embeddings from pretrained models.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="c1"># import tensorflow as tf</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.data_prep.dataset</span> <span class="kn">import</span> <span class="n">UltrasoundDataModule</span>
+<span class="kn">from</span> <span class="nn">src.data_prep.segment_dataset</span> <span class="kn">import</span> <span class="n">SegmentedUSModule</span>
+<span class="kn">from</span> <span class="nn">src.scripts</span> <span class="kn">import</span> <span class="n">load_data</span><span class="p">,</span> <span class="n">load_model</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># Configure logging</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">)</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+<span class="c1"># Verbosity</span>
+<span class="n">VERBOSE</span> <span class="o">=</span> <span class="kc">True</span>
+
+<span class="c1"># Embedding path suffixes</span>
+<span class="n">EMBED_SUFFIX</span> <span class="o">=</span> <span class="s2">&quot;_embeddings(histogram_norm).h5&quot;</span>
+<span class="n">EMBED_SUFFIX_RAW</span> <span class="o">=</span> <span class="s2">&quot;_embeddings(raw).h5&quot;</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                   Classes                                    #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="ImageEmbedder">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.ImageEmbedder">[docs]</a>
+<span class="k">class</span> <span class="nc">ImageEmbedder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class used to create image embeddings</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize ImageEmbedder with feature extractor model</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : object</span>
+<span class="sd">            Image feature extractor containing a feature extraction method.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+
+
+<div class="viewcode-block" id="ImageEmbedder.embed">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.ImageEmbedder.embed">[docs]</a>
+    <span class="k">def</span> <span class="nf">embed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">save_path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Embed images specified in a dataframe, directory or image dataloader.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        save_path : str</span>
+<span class="sd">            Path to save embeddings to</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pandas.DataFrame</span>
+<span class="sd">            Embedded features</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Separate by PyTorch and Tensorflow models</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embed_torch_batch</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">embed_tf_batch</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ImageEmbedder.embed_torch">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.ImageEmbedder.embed_torch">[docs]</a>
+    <span class="k">def</span> <span class="nf">embed_torch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Extract embeddings for image, using a PyTorch model.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : torch.Tensor</span>
+<span class="sd">            Image tensor</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.array</span>
+<span class="sd">            1280-dimensional embedding</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">)</span>
+
+        <span class="c1"># Set model to evaluation mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
+        <span class="c1"># Check if custom embed function present</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;forward_embed&quot;</span><span class="p">):</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">forward_embed</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;extract_embeds&quot;</span><span class="p">):</span>
+                <span class="n">features</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">extract_embeds</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">extract_embeds</span>
+                <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No feature extraction function defined!&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># If more than 1 image, attempt to flatten extra 3rd dimension</span>
+        <span class="k">if</span> <span class="n">features</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">features</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+        <span class="c1"># Convert to numpy</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">features</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">features</span></div>
+
+
+
+<div class="viewcode-block" id="ImageEmbedder.embed_tf_batch">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.ImageEmbedder.embed_tf_batch">[docs]</a>
+    <span class="k">def</span> <span class="nf">embed_tf_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">save_path</span><span class="p">,</span> <span class="n">img_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                       <span class="n">img_dataloader</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                       <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Extract embeddings for all images in the directory, using Tensorflow</span>
+<span class="sd">        data loading libraries.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        save_path : str</span>
+<span class="sd">            File path to save embeddings at. Saved as h5 file.</span>
+<span class="sd">        img_dir : str, optional</span>
+<span class="sd">            Path to directory containing images, by default None.</span>
+<span class="sd">        img_dataloader : torch.utils.data.DataLoader</span>
+<span class="sd">            Image dataloader with metadata dictionary containing `filename`, by</span>
+<span class="sd">            default None</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pd.DataFrame</span>
+<span class="sd">            Contains a column for the path to the image file. Other columns are</span>
+<span class="sd">            embedding columns</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+    <span class="c1">#     def process_path(file_path):</span>
+    <span class="c1">#         &quot;&quot;&quot;</span>
+    <span class="c1">#         Loads image from file path</span>
+
+    <span class="c1">#         Parameters</span>
+    <span class="c1">#         ----------</span>
+    <span class="c1">#         file_path : str</span>
+    <span class="c1">#             Path to image</span>
+
+    <span class="c1">#         Returns</span>
+    <span class="c1">#         -------</span>
+    <span class="c1">#         tf.Tensor</span>
+    <span class="c1">#             Tensor containing image</span>
+    <span class="c1">#         &quot;&quot;&quot;</span>
+    <span class="c1">#         # Load the raw data from the file as a string</span>
+    <span class="c1">#         img = tf.io.read_file(file_path)</span>
+    <span class="c1">#         img = tf.io.decode_jpeg(img, channels=3)</span>
+    <span class="c1">#         return img</span>
+
+    <span class="c1">#     # Input sanitization</span>
+    <span class="c1">#     assert img_dir or img_dataloader is not None, \</span>
+    <span class="c1">#         &quot;Must specify img_dir/img_dataloader!&quot;</span>
+    <span class="c1">#     # Verify model provided</span>
+    <span class="c1">#     assert not isinstance(self.model, torch.nn.Module), \</span>
+    <span class="c1">#         &quot;Provided model is not a Tensorflow model!&quot;</span>
+
+    <span class="c1">#     if img_dir:</span>
+    <span class="c1">#         assert os.path.isdir(img_dir), &quot;Path provided does not lead to a &quot;\</span>
+    <span class="c1">#                                        &quot;directory!&quot;</span>
+    <span class="c1">#         # Get file paths</span>
+    <span class="c1">#         files_ds = tf.data.Dataset.list_files(</span>
+    <span class="c1">#             os.path.join(img_dir, &quot;*&quot;), shuffle=False)</span>
+    <span class="c1">#         file_paths = list(files_ds.as_numpy_iterator())</span>
+
+    <span class="c1">#         # Get images from file paths</span>
+    <span class="c1">#         img_ds = files_ds.map(process_path,</span>
+    <span class="c1">#                               num_parallel_calls=tf.data.AUTOTUNE)</span>
+
+    <span class="c1">#         # Make image generator efficient via prefetching</span>
+    <span class="c1">#         img_ds = img_ds.prefetch(buffer_size=tf.data.AUTOTUNE)</span>
+
+    <span class="c1">#         # Extract embeddings in batches of 32</span>
+    <span class="c1">#         all_embeds = self.model.predict(img_ds)</span>
+    <span class="c1">#     else:   # DataLoader</span>
+    <span class="c1">#         all_embeds = []</span>
+    <span class="c1">#         file_paths = []</span>
+
+    <span class="c1">#         # Extract embeddings in batches</span>
+    <span class="c1">#         for img, metadata in tqdm(img_dataloader):</span>
+    <span class="c1">#             x = img.detach().cpu().numpy()</span>
+    <span class="c1">#             if len(x.shape) == 5:</span>
+    <span class="c1">#                 x = x.squeeze(axis=0)</span>
+    <span class="c1">#             # Flip around channel dimension</span>
+    <span class="c1">#             if x.shape[1] == 3:</span>
+    <span class="c1">#                 x = np.moveaxis(x, 1, 3)</span>
+    <span class="c1">#             embeds = self.model.predict(x)</span>
+
+    <span class="c1">#             all_embeds.append(embeds)</span>
+    <span class="c1">#             file_paths.extend(metadata[&quot;filename&quot;])</span>
+
+    <span class="c1">#         # Concatenate batched embeddings</span>
+    <span class="c1">#         all_embeds = np.concatenate(all_embeds)</span>
+
+    <span class="c1">#     # Save embeddings</span>
+    <span class="c1">#     df_features = pd.DataFrame(np.array(all_embeds))</span>
+    <span class="c1">#     assert not df_features.isna().all(axis=None)</span>
+    <span class="c1">#     df_features[&quot;filename&quot;] = np.array(file_paths).flatten()</span>
+    <span class="c1">#     df_features.to_hdf(save_path, &quot;embeds&quot;)</span>
+
+
+<div class="viewcode-block" id="ImageEmbedder.embed_torch_batch">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.ImageEmbedder.embed_torch_batch">[docs]</a>
+    <span class="k">def</span> <span class="nf">embed_torch_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">save_path</span><span class="p">,</span>
+                          <span class="n">img_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">img_dataloader</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                          <span class="n">device</span><span class="o">=</span><span class="n">constants</span><span class="o">.</span><span class="n">DEVICE</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Extract embeddings for all images in the directory, using PyTorch</span>
+<span class="sd">        libraries.</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        One of (img_dir, img_dataloader) must be specified!</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        save_path : str</span>
+<span class="sd">            File path to save embeddings at. Saved as h5 file.</span>
+<span class="sd">        img_dir : str, optional</span>
+<span class="sd">            Path to directory containing images, by default None.</span>
+<span class="sd">        img_dataloader : torch.utils.data.DataLoader, optional</span>
+<span class="sd">            Image dataloader with metadata dictionary containing `filename`, by</span>
+<span class="sd">            default None</span>
+<span class="sd">        device : str, optional</span>
+<span class="sd">            Device to send data to, by default constants.DEVICE.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        pd.DataFrame</span>
+<span class="sd">            Contains a column for the path to the image file. Other columns are</span>
+<span class="sd">            embedding columns</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># INPUT: If GPU specified but no GPU available, default to CPU</span>
+        <span class="k">if</span> <span class="n">device</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="n">device</span> <span class="o">=</span> <span class="s2">&quot;cpu&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="c1"># Input sanitization</span>
+        <span class="k">assert</span> <span class="n">img_dir</span> <span class="ow">or</span> <span class="n">img_dataloader</span><span class="p">,</span> <span class="s2">&quot;Must specify at least image &quot;</span>\
+                                          <span class="s2">&quot;directory or image dataloader&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">),</span> \
+            <span class="s2">&quot;Provided model is not a PyTorch model!&quot;</span>
+
+        <span class="c1"># Get data loader</span>
+        <span class="k">if</span> <span class="n">img_dir</span><span class="p">:</span>               <span class="c1"># by directory</span>
+            <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">),</span> <span class="s2">&quot;Path provided does not lead to a &quot;</span>\
+                                           <span class="s2">&quot;directory!&quot;</span>
+            <span class="c1"># Prepare to load data</span>
+            <span class="n">data_module</span> <span class="o">=</span> <span class="n">UltrasoundDataModule</span><span class="p">(</span><span class="n">img_dir</span><span class="o">=</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+            <span class="n">data_module</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+            <span class="c1"># NOTE: Extracts embeddings from all images in directory</span>
+            <span class="n">dataloader</span> <span class="o">=</span> <span class="n">data_module</span><span class="o">.</span><span class="n">train_dataloader</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dataloader</span> <span class="o">=</span> <span class="n">img_dataloader</span>
+
+        <span class="n">all_embeds</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">file_paths</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Extract embeddings in batches</span>
+        <span class="k">for</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">dataloader</span><span class="p">):</span>
+            <span class="c1"># If shape is (1, seq_len, C, H, W), flatten first dimension</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">size</span><span class="p">())</span> <span class="o">==</span> <span class="mi">5</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">device</span> <span class="o">!=</span> <span class="s2">&quot;cpu&quot;</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">embeds</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">embed_torch</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+            <span class="c1"># Remove possibly added extra dimension</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeds</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span> <span class="ow">and</span> <span class="n">embeds</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">embeds</span> <span class="o">=</span> <span class="n">embeds</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeds</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span> <span class="ow">and</span> \
+                    <span class="n">embeds</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">embeds</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">embeds</span> <span class="o">=</span> <span class="n">embeds</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">embeds</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> \
+                    <span class="s2">&quot;Unexpected case, where embed. output has 4 dimensions!&quot;</span>
+
+            <span class="n">all_embeds</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">embeds</span><span class="p">)</span>
+            <span class="n">file_paths</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">])</span>
+
+        <span class="c1"># Save embeddings. Each row is a feature vector</span>
+        <span class="n">df_features</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">all_embeds</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">df_features</span><span class="o">.</span><span class="n">isna</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+        <span class="n">df_features</span><span class="p">[</span><span class="s2">&quot;filename&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">file_paths</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="n">df_features</span><span class="o">.</span><span class="n">to_hdf</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="s2">&quot;embeds&quot;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;w&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">df_features</span></div>
+</div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                              Feature Extraction                              #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="extract_embeds">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.extract_embeds">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_embeds</span><span class="p">(</span><span class="n">model</span><span class="p">,</span>
+                   <span class="n">save_embed_path</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                   <span class="n">exp_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                   <span class="n">img_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                   <span class="o">**</span><span class="n">embedder_kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a Tensorflow/Torch model, extract features from</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    img_file, img_dir and img_dataloader cannot both be empty.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : tf.Model or torch.nn.Module</span>
+<span class="sd">        Pretrained model</span>
+<span class="sd">    save_embed_path : str, optional</span>
+<span class="sd">        If path provided, stores embeddings at path, by default None.</span>
+<span class="sd">    exp_name : str, optional</span>
+<span class="sd">        Name of experiment. Can be used to generate `save_embed_path`, if it&#39;s</span>
+<span class="sd">        not provided, by default None.</span>
+<span class="sd">    img_file : str</span>
+<span class="sd">        Path to image file</span>
+<span class="sd">    img_dir : str</span>
+<span class="sd">        Path to directory of images</span>
+<span class="sd">    img_dataloader : torch.utils.data.DataLoader</span>
+<span class="sd">        Image dataloader with metadata dictionary containing `filename`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># INPUT: Create save path, if only experiment name provided</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">save_embed_path</span> <span class="ow">and</span> <span class="n">exp_name</span><span class="p">:</span>
+        <span class="n">save_embed_path</span> <span class="o">=</span> <span class="n">get_save_path</span><span class="p">(</span><span class="n">exp_name</span><span class="p">)</span>
+
+    <span class="c1"># Wrap model in ImageEmbedder</span>
+    <span class="n">embedder</span> <span class="o">=</span> <span class="n">ImageEmbedder</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+    <span class="c1"># If an image file</span>
+    <span class="k">if</span> <span class="n">img_file</span><span class="p">:</span>
+        <span class="n">embeds</span> <span class="o">=</span> <span class="n">embedder</span><span class="o">.</span><span class="n">embed_torch</span><span class="p">(</span><span class="n">img_file</span><span class="p">,</span> <span class="o">**</span><span class="n">embedder_kwargs</span><span class="p">)</span>
+        <span class="n">df_embed</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">embeds</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">df_embed</span><span class="p">[</span><span class="s1">&#39;filename&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">img_file</span>
+        <span class="n">df_embed</span><span class="o">.</span><span class="n">to_hdf</span><span class="p">(</span><span class="n">save_embed_path</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="c1"># Embed image directory/dataloader/dataframe</span>
+    <span class="k">return</span> <span class="n">embedder</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">save_embed_path</span><span class="p">,</span> <span class="o">**</span><span class="n">embedder_kwargs</span><span class="p">)</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                              Loading Embeddings                              #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="get_embeds">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.get_embeds">[docs]</a>
+<span class="k">def</span> <span class="nf">get_embeds</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Retrieve extracted deep embeddings using model specified.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str or list</span>
+<span class="sd">        Model/experiment name, or list of model/experiment names to concatenate</span>
+<span class="sd">        embeddings.</span>
+<span class="sd">    **kwargs : Keyword arguments for `get_save_path`</span>
+<span class="sd">        raw : bool, optional</span>
+<span class="sd">        segmented : bool, optional</span>
+<span class="sd">        reverse_mask : bool, optional</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">)),</span> <span class="s2">&quot;Invalid type for `name`!&quot;</span>
+
+    <span class="c1"># If getting embeddings for 1 model</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">embed_path</span> <span class="o">=</span> <span class="n">get_save_path</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">df_embeds</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_hdf</span><span class="p">(</span><span class="n">embed_path</span><span class="p">,</span> <span class="s2">&quot;embeds&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">df_embeds</span>
+
+    <span class="c1"># If getting embeddings for 1+ models</span>
+    <span class="n">embed_lst</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name_i</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+        <span class="n">embed_path</span> <span class="o">=</span> <span class="n">get_save_path</span><span class="p">(</span><span class="n">name_i</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">df_embed_i</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_hdf</span><span class="p">(</span><span class="n">embed_path</span><span class="p">,</span> <span class="s2">&quot;embeds&quot;</span><span class="p">)</span>
+        <span class="n">embed_lst</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df_embed_i</span><span class="p">)</span>
+    <span class="n">df_embeds</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">embed_lst</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">df_embeds</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                Main Function                                 #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.main">[docs]</a>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Extract embeddings for the following experiments and datasets</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    args : argparse.Namespace</span>
+<span class="sd">        Contains command-line arguments</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dsets</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">dsets</span>
+    <span class="n">splits</span> <span class="o">=</span> <span class="n">args</span><span class="o">.</span><span class="n">splits</span>
+    <span class="c1"># If only one of dset/split is &gt; 1, assume it&#39;s meant to be broadcast</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dsets</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">splits</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Only 1 `dset` provided! Assuming same `dset` for all `splits`...&quot;</span><span class="p">)</span>
+        <span class="n">dsets</span> <span class="o">=</span> <span class="n">dsets</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">splits</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">splits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">dsets</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Only 1 `split` provided! Assuming same `split` for all `dsets`...&quot;</span><span class="p">)</span>
+        <span class="n">splits</span> <span class="o">=</span> <span class="n">splits</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">dsets</span><span class="p">)</span>
+
+    <span class="c1"># Ensure number of datasets match number of splits</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">dsets</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">splits</span><span class="p">),</span> <span class="s2">&quot;Length of `dsets` and `splits` do not match!&quot;</span>
+
+    <span class="c1"># Extract embeddings for each experiment name</span>
+    <span class="k">for</span> <span class="n">exp_name</span> <span class="ow">in</span> <span class="n">args</span><span class="o">.</span><span class="n">exp_name</span><span class="p">:</span>
+        <span class="c1"># 1. Load pre-trained model</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">load_model</span><span class="o">.</span><span class="n">load_pretrained_from_exp_name</span><span class="p">(</span><span class="n">exp_name</span><span class="p">)</span>
+
+        <span class="c1"># Load experiment hyperparameters</span>
+        <span class="n">exp_hparams</span> <span class="o">=</span> <span class="n">load_model</span><span class="o">.</span><span class="n">get_hyperparameters</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">)</span>
+
+        <span class="c1"># Extract embeddings for each dataset</span>
+        <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">dset</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">dsets</span><span class="p">):</span>
+            <span class="n">split</span> <span class="o">=</span> <span class="n">splits</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+            <span class="c1"># If dataset was used in training, then load DM as usual</span>
+            <span class="k">if</span> <span class="n">dset</span> <span class="ow">in</span> <span class="n">exp_hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dsets&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;sickkids&quot;</span><span class="p">]):</span>
+                <span class="n">dm</span> <span class="o">=</span> <span class="n">load_data</span><span class="o">.</span><span class="n">setup_data_module</span><span class="p">(</span><span class="n">hparams</span><span class="o">=</span><span class="n">exp_hparams</span><span class="p">,</span> <span class="n">full_path</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">img_dataloader</span> <span class="o">=</span> <span class="n">dm</span><span class="o">.</span><span class="n">get_filtered_dataloader</span><span class="p">(</span><span class="n">split</span><span class="o">=</span><span class="n">split</span><span class="p">,</span> <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c1"># Get image dataloader</span>
+                <span class="n">img_dataloader</span> <span class="o">=</span> <span class="n">load_data</span><span class="o">.</span><span class="n">setup_default_dataloader_for_dset</span><span class="p">(</span>
+                    <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="n">split</span><span class="p">,</span>
+                    <span class="n">full_path</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="c1"># Create path to save embeddings</span>
+            <span class="n">save_embed_path</span> <span class="o">=</span> <span class="n">get_save_path</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span> <span class="n">split</span><span class="o">=</span><span class="n">split</span><span class="p">)</span>
+            <span class="c1"># Early return, if embeddings already made</span>
+            <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">save_embed_path</span><span class="p">):</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Embeddings for exp_name: (</span><span class="si">{</span><span class="n">exp_name</span><span class="si">}</span><span class="s2">), &quot;</span>
+                            <span class="sa">f</span><span class="s2">&quot;dset: (</span><span class="si">{</span><span class="n">dset_or_split</span><span class="si">}</span><span class="s2">) already exists! Skipping...&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Perform extraction</span>
+            <span class="n">extract_embeds</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
+                           <span class="n">save_embed_path</span><span class="o">=</span><span class="n">save_embed_path</span><span class="p">,</span>
+                           <span class="n">img_dataloader</span><span class="o">=</span><span class="n">img_dataloader</span><span class="p">,</span>
+                           <span class="n">device</span><span class="o">=</span><span class="n">constants</span><span class="o">.</span><span class="n">DEVICE</span><span class="p">,)</span>
+
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Success! Created embeddings for exp_name: &quot;</span>
+                        <span class="sa">f</span><span class="s2">&quot;(</span><span class="si">{</span><span class="n">exp_name</span><span class="si">}</span><span class="s2">), dset: (</span><span class="si">{</span><span class="n">dset_or_split</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="init">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.init">[docs]</a>
+<span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="n">parser</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialize ArgumentParser arguments.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parser : argparse.ArgumentParser</span>
+<span class="sd">        ArgumentParser object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">arg_help</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;exp_name&quot;</span><span class="p">:</span> <span class="s2">&quot;Name of experiment/s to create embeddings for&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dsets&quot;</span><span class="p">:</span> <span class="s2">&quot;Name of datasets to embed&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;splits&quot;</span><span class="p">:</span> <span class="s2">&quot;For each `dset`, what data split to embed&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--exp_name&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;exp_name&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--dsets&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;dsets&quot;</span><span class="p">])</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--splits&quot;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;splits&quot;</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="get_save_path">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.embed.get_save_path">[docs]</a>
+<span class="k">def</span> <span class="nf">get_save_path</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dset</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span>
+                  <span class="n">raw</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">segmented</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">reverse_mask</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Create expected save path from model name and parameters.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Model/Experiment name</span>
+<span class="sd">    dset : str, optional</span>
+<span class="sd">        Name of dataset (e.g., sickkids)</span>
+<span class="sd">    split : str, optional</span>
+<span class="sd">        Specific data split (i.e., train/val/test)</span>
+<span class="sd">    raw : bool, optional</span>
+<span class="sd">        If True, extracts embeddings for raw images. Otherwise, uses</span>
+<span class="sd">        preprocessed images, by default False.</span>
+<span class="sd">    segmented : bool, optional</span>
+<span class="sd">        If True, extracts embeddings for segmented images, by default False.</span>
+<span class="sd">    reverse_mask : bool, optional</span>
+<span class="sd">        If True, reverses mask for segmented images, by default False</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Full path to save embeddings</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Ensure that embedding directory exists</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_EMBEDS</span><span class="p">):</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Embedding directory not found! Creating...&quot;</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_EMBEDS</span><span class="p">)</span>
+
+    <span class="n">embed_suffix</span> <span class="o">=</span> <span class="n">EMBED_SUFFIX_RAW</span> <span class="k">if</span> <span class="n">raw</span> <span class="k">else</span> <span class="n">EMBED_SUFFIX</span>
+    <span class="n">segmented_suffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;_segmented</span><span class="si">{</span><span class="s1">&#39;_reverse&#39;</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">reverse_mask</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">save_path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_EMBEDS</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span>\
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">segmented_suffix</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">segmented</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;&#39;</span><span class="si">}</span><span class="s2">&quot;</span>\
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="sa">f</span><span class="s1">&#39;(</span><span class="si">{</span><span class="n">dset</span><span class="si">}</span><span class="s1">-</span><span class="si">{</span><span class="n">split</span><span class="si">}</span><span class="s1">)&#39;</span><span class="si">}</span><span class="s2">&quot;</span>\
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">embed_suffix</span><span class="si">}</span><span class="s2">&quot;</span>
+
+    <span class="k">return</span> <span class="n">save_path</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="c1"># 0. Initialize ArgumentParser</span>
+    <span class="n">PARSER</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">init</span><span class="p">(</span><span class="n">PARSER</span><span class="p">)</span>
+
+    <span class="c1"># 1. Get arguments</span>
+    <span class="n">ARGS</span> <span class="o">=</span> <span class="n">PARSER</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+    <span class="c1"># 2. Run main flow to extract embeddings</span>
+    <span class="n">main</span><span class="p">(</span><span class="n">ARGS</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

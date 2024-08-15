@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.scripts.load_model &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.scripts.load_model</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.scripts.load_model</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">load_model.py</span>
+
+<span class="sd">Description: Contains utility functions for instantiating model classes/objects.</span>
+
+<span class="sd">Note: `hparams` is a direct dependence on arguments in `model_training.py`.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">yaml</span>
+<span class="kn">from</span> <span class="nn">efficientnet_pytorch</span> <span class="kn">import</span> <span class="n">EfficientNet</span>
+<span class="c1"># from tensorflow.keras.applications.efficientnet import EfficientNetB0</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src</span> <span class="kn">import</span> <span class="n">models</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.utils</span> <span class="kn">import</span> <span class="n">efficientnet_pytorch_utils</span> <span class="k">as</span> <span class="n">effnet_utils</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># Configure logging</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="c1"># Mapping of SSL model name to model class</span>
+<span class="n">SSL_NAME_TO_MODEL_CLS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;moco&quot;</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">MoCo</span><span class="p">,</span>
+    <span class="s2">&quot;byol&quot;</span><span class="p">:</span> <span class="n">models</span><span class="o">.</span><span class="n">BYOL</span><span class="p">,</span>
+
+    <span class="c1"># Deprecated models</span>
+    <span class="c1"># &quot;tclr&quot;: TCLR,</span>
+    <span class="c1"># &quot;linear&quot;: LinearEval,</span>
+    <span class="c1"># &quot;linear_lstm&quot;: LSTMLinearEval,</span>
+    <span class="c1"># &quot;ensemble_linear&quot;: EnsembleLinear,</span>
+    <span class="c1"># &quot;ensemble_linear_lstm&quot;: EnsembleLSTMLinear,</span>
+<span class="p">}</span>
+
+<span class="c1"># Argument renaming</span>
+<span class="n">HPARAM_RENAMED</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;hospital&quot;</span><span class="p">:</span> <span class="s2">&quot;dsets&quot;</span>
+<span class="p">}</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="load_model">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.load_model">[docs]</a>
+<span class="k">def</span> <span class="nf">load_model</span><span class="p">(</span><span class="n">hparams</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given experiment hyperparameters, instantiate/load model specified.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Experiment hyperparameters</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    ------</span>
+<span class="sd">    torch.nn.Module</span>
+<span class="sd">        Desired model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Get model class</span>
+    <span class="n">model_cls</span><span class="p">,</span> <span class="n">model_cls_kwargs</span> <span class="o">=</span> <span class="n">get_model_cls</span><span class="p">(</span><span class="n">hparams</span><span class="p">)</span>
+    <span class="c1"># Instantiate model</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">model_cls</span><span class="p">(</span><span class="o">**</span><span class="n">hparams</span><span class="p">,</span> <span class="o">**</span><span class="n">model_cls_kwargs</span><span class="p">)</span>
+
+    <span class="c1"># If specified, attempt to load ImageNet pretrained weights</span>
+    <span class="k">if</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_imagenet&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;load_imagenet_weights&quot;</span><span class="p">):</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">load_imagenet_weights</span><span class="p">()</span>
+    <span class="c1"># If specified, start from a previously trained model</span>
+    <span class="k">elif</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_exp_name&quot;</span><span class="p">)</span> \
+            <span class="ow">and</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_exp_name&quot;</span><span class="p">),</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span>
+                 <span class="nb">len</span><span class="p">(</span><span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_exp_name&quot;</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="c1"># Parse argument</span>
+        <span class="n">from_exp_name</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_exp_name&quot;</span><span class="p">)</span>
+        <span class="n">from_exp_name</span> <span class="o">=</span> <span class="n">from_exp_name</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">from_exp_name</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> \
+            <span class="k">else</span> <span class="n">from_exp_name</span>
+
+        <span class="c1"># Load pretrained model</span>
+        <span class="n">pretrained_model</span> <span class="o">=</span> <span class="n">load_pretrained_from_exp_name</span><span class="p">(</span>
+            <span class="n">from_exp_name</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">model_cls_kwargs</span><span class="p">)</span>
+        <span class="n">pretrained_model_hparams</span> <span class="o">=</span> <span class="n">get_hyperparameters</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">from_exp_name</span><span class="p">)</span>
+
+        <span class="c1"># CASE 1: If pretrained model is the same, replace with existing model</span>
+        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="o">==</span> <span class="nb">type</span><span class="p">(</span><span class="n">pretrained_model</span><span class="p">):</span>
+            <span class="n">overwrite_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">src_model</span><span class="o">=</span><span class="n">pretrained_model</span><span class="p">)</span>
+        <span class="c1"># CASE 2: SSL-pretrained model and want to load into LinearEval</span>
+        <span class="k">elif</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;self_supervised&quot;</span><span class="p">):</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="ne">DeprecationWarning</span><span class="p">(</span><span class="s2">&quot;This SSL eval. flow is deprecated...&quot;</span><span class="p">))</span>
+            <span class="n">pretrained_state_dict</span> <span class="o">=</span> <span class="n">pretrained_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+            <span class="c1"># NOTE: SSL conv. backbone weights are prefixed by &quot;conv_backbone.&quot;</span>
+            <span class="n">pattern</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;(conv_backbone\..*)|(temporal_backbone\..*)|(fc\..*)&quot;</span>
+            <span class="n">pretrained_state_dict</span> <span class="o">=</span> <span class="n">prepend_prefix</span><span class="p">(</span>
+                <span class="n">pretrained_state_dict</span><span class="p">,</span> <span class="s2">&quot;conv_backbone.&quot;</span><span class="p">,</span>
+                <span class="n">exclude_regex</span><span class="o">=</span><span class="n">pattern</span><span class="p">)</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">overwrite_model</span><span class="p">(</span>
+                <span class="n">model</span><span class="p">,</span>
+                <span class="n">src_state_dict</span><span class="o">=</span><span class="n">pretrained_state_dict</span><span class="p">)</span>
+        <span class="c1"># CASE 3: SSL pre-trained model and want to fine-tune with EfficientNet</span>
+        <span class="k">elif</span> <span class="n">pretrained_model_hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;self_supervised&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;self_supervised&quot;</span><span class="p">):</span>
+            <span class="c1"># Remove &quot;conv_backbone.&quot;/&quot;temporal_backbone.&quot; from weight names</span>
+            <span class="n">pretrained_state_dict</span> <span class="o">=</span> <span class="n">pretrained_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+            <span class="n">pretrained_state_dict</span> <span class="o">=</span> <span class="n">remove_prefix</span><span class="p">(</span>
+                <span class="n">pretrained_state_dict</span><span class="p">,</span> <span class="s2">&quot;conv_backbone.&quot;</span><span class="p">)</span>
+            <span class="n">pretrained_state_dict</span> <span class="o">=</span> <span class="n">remove_prefix</span><span class="p">(</span>
+                <span class="n">pretrained_state_dict</span><span class="p">,</span> <span class="s2">&quot;temporal_backbone.&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Drop all SSL momentum weights</span>
+            <span class="n">pretrained_state_dict</span> <span class="o">=</span> <span class="n">drop_weights_containing</span><span class="p">(</span>
+                <span class="n">pretrained_state_dict</span><span class="p">,</span> <span class="s2">&quot;_momentum.&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Attempt to load into model</span>
+            <span class="n">model</span> <span class="o">=</span> <span class="n">overwrite_model</span><span class="p">(</span>
+                <span class="n">model</span><span class="p">,</span>
+                <span class="n">src_state_dict</span><span class="o">=</span><span class="n">pretrained_state_dict</span><span class="p">)</span>
+        <span class="c1"># UNKNOWN CASE: Not supported case</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">&quot;Model loading is not implemented for:&quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\t</span><span class="s2">exp_name: `</span><span class="si">{</span><span class="n">hparams</span><span class="p">[</span><span class="s1">&#39;exp_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">`&quot;</span><span class="p">,</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n\t</span><span class="s2">from_exp_name: `</span><span class="si">{</span><span class="n">from_exp_name</span><span class="si">}</span><span class="s2">`&quot;</span>
+            <span class="p">)</span>
+
+    <span class="c1"># If specified, compile model</span>
+    <span class="k">if</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;torch_compile&quot;</span><span class="p">):</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Compiling model...&quot;</span><span class="p">)</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Compiling model...DONE&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">model</span></div>
+
+
+
+<div class="viewcode-block" id="load_pretrained_from_exp_name">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.load_pretrained_from_exp_name">[docs]</a>
+<span class="k">def</span> <span class="nf">load_pretrained_from_exp_name</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">ckpt_option</span><span class="o">=</span><span class="s2">&quot;best&quot;</span><span class="p">,</span>
+                                  <span class="o">**</span><span class="n">overwrite_hparams</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load pretrained model from experiment name.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Name of experiment</span>
+<span class="sd">    ckpt_option : str</span>
+<span class="sd">        Choice of &quot;best&quot; checkpoint (based on validation set) or &quot;last&quot;</span>
+<span class="sd">        checkpoint file, by default &quot;best&quot;</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.nn.Module</span>
+<span class="sd">        Pretrained model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 0. Redirect if `exp_name` is &quot;imagenet&quot;</span>
+    <span class="k">if</span> <span class="n">exp_name</span> <span class="o">==</span> <span class="s2">&quot;imagenet&quot;</span><span class="p">:</span>
+        <span class="c1"># Instantiate EfficientNet model</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">EfficientNetPL</span><span class="p">(</span>
+            <span class="n">effnet_name</span><span class="o">=</span><span class="n">overwrite_hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;effnet_name&quot;</span><span class="p">,</span> <span class="s2">&quot;efficientnet-b0&quot;</span><span class="p">),</span>
+            <span class="n">img_size</span><span class="o">=</span><span class="n">overwrite_hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;img_size&quot;</span><span class="p">,</span> <span class="n">constants</span><span class="o">.</span><span class="n">IMG_SIZE</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Load ImageNet weights</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">load_imagenet_weights</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">model</span>
+
+    <span class="c1"># 0. Get experiment directory, where model was trained</span>
+    <span class="n">model_dir</span> <span class="o">=</span> <span class="n">get_exp_dir</span><span class="p">(</span><span class="n">exp_name</span><span class="p">)</span>
+
+    <span class="c1"># 1 Get experiment hyperparameters</span>
+    <span class="n">hparams</span> <span class="o">=</span> <span class="n">get_hyperparameters</span><span class="p">(</span><span class="n">model_dir</span><span class="p">)</span>
+    <span class="n">hparams</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">overwrite_hparams</span><span class="p">)</span>
+
+    <span class="c1"># 2. Load existing model and send to device</span>
+    <span class="c1"># 2.1 Get checkpoint path</span>
+    <span class="k">if</span> <span class="n">ckpt_option</span> <span class="o">==</span> <span class="s2">&quot;last&quot;</span><span class="p">:</span>
+        <span class="n">ckpt_path</span> <span class="o">=</span> <span class="n">find_best_ckpt_path</span><span class="p">(</span><span class="n">model_dir</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">ckpt_path</span> <span class="o">=</span> <span class="n">find_best_ckpt_path</span><span class="p">(</span><span class="n">model_dir</span><span class="p">)</span>
+    <span class="c1"># 2.2 Get model class and extra parameters for loading from checkpoint</span>
+    <span class="n">model_cls</span><span class="p">,</span> <span class="n">model_cls_kwargs</span> <span class="o">=</span> <span class="n">get_model_cls</span><span class="p">(</span><span class="n">hparams</span><span class="p">)</span>
+    <span class="c1"># 2.3 Load model</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">model_cls</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span>
+            <span class="n">checkpoint_path</span><span class="o">=</span><span class="n">ckpt_path</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">model_cls_kwargs</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="n">rename_torch_module</span><span class="p">(</span><span class="n">ckpt_path</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Renamed model module names!&quot;</span><span class="p">)</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">model_cls</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span>
+            <span class="n">checkpoint_path</span><span class="o">=</span><span class="n">ckpt_path</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">model_cls_kwargs</span><span class="p">)</span>
+
+    <span class="c1"># If specified, compile model</span>
+    <span class="k">if</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;torch_compile&quot;</span><span class="p">):</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Compiling model...&quot;</span><span class="p">)</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Compiling model...DONE&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">model</span></div>
+
+
+
+<div class="viewcode-block" id="get_model_cls">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.get_model_cls">[docs]</a>
+<span class="k">def</span> <span class="nf">get_model_cls</span><span class="p">(</span><span class="n">hparams</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given experiment hyperparameters, get appropriate model class.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Adds `backbone` to hparams, if needed.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Experiment parameters</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple of (class, dict) </span>
+<span class="sd">        Model class, and dict of keyword arguments needed to instantiate class</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Accumulate arguments, needed to instantiate class</span>
+    <span class="n">model_cls_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Raise error for deprecated models</span>
+    <span class="c1"># NOTE: Multi-output single-image model is not implemented</span>
+    <span class="k">if</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;multi_output&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Multi-output models are deprecated...&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;full_seq&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ssl_eval_linear_lstm&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Video models are deprecated...&quot;</span><span class="p">)</span>
+    <span class="c1"># For ensembling multiple models. NOTE: Needs to be sequence model</span>
+    <span class="k">elif</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_exp_name&quot;</span><span class="p">)</span> \
+            <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_exp_name&quot;</span><span class="p">),</span> <span class="nb">str</span><span class="p">)</span> \
+            <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_exp_name&quot;</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Ensembling is currently deprecated...&quot;</span><span class="p">)</span>
+
+    <span class="c1"># CASE 1: SSL Image model</span>
+    <span class="n">is_ssl_eval</span> <span class="o">=</span> <span class="p">(</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;ssl_eval_linear&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;ssl_eval_linear_lstm&quot;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;self_supervised&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_ssl_eval</span><span class="p">:</span>
+        <span class="n">ssl_model</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ssl_model&quot;</span><span class="p">,</span> <span class="s2">&quot;moco&quot;</span><span class="p">)</span>
+        <span class="n">ssl_model_cls</span> <span class="o">=</span> <span class="n">SSL_NAME_TO_MODEL_CLS</span><span class="p">[</span><span class="n">ssl_model</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">ssl_model_cls</span><span class="p">,</span> <span class="n">model_cls_kwargs</span>
+
+    <span class="c1"># CASE 2: Fully Supervised Image model</span>
+    <span class="n">model_cls</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">EfficientNetPL</span>
+    <span class="k">return</span> <span class="n">model_cls</span><span class="p">,</span> <span class="n">model_cls_kwargs</span></div>
+
+
+
+<div class="viewcode-block" id="get_hyperparameters">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.get_hyperparameters">[docs]</a>
+<span class="k">def</span> <span class="nf">get_hyperparameters</span><span class="p">(</span><span class="n">hparam_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                        <span class="n">filename</span><span class="o">=</span><span class="s2">&quot;hparams.yaml&quot;</span><span class="p">,</span>
+                        <span class="n">on_error</span><span class="o">=</span><span class="s2">&quot;use_default&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Load hyperparameters from model training directory. If not provided, return</span>
+<span class="sd">    default hyperparameters.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparam_dir : str</span>
+<span class="sd">        Path to model training directory containing hyperparameters.</span>
+<span class="sd">    exp_name : str, optional</span>
+<span class="sd">        If `hparam_dir` not provided but `exp_name` is, use to find model</span>
+<span class="sd">        directory, by default None.</span>
+<span class="sd">    filename : str, optional</span>
+<span class="sd">        Filename of YAML file with hyperparameters, by default &quot;hparams.yaml&quot;</span>
+<span class="sd">    on_error : str, optional</span>
+<span class="sd">        If &quot;use_default&quot;, return default hyperparameters. If &quot;raise&quot;, raises</span>
+<span class="sd">        error, by default &quot;use_default&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Hyperparameters</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 1. If hyperparameter directory not specified but experiment name is, check</span>
+    <span class="c1">#    if model directory exists</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">hparam_dir</span> <span class="ow">and</span> <span class="n">exp_name</span><span class="p">:</span>
+        <span class="n">model_dir</span> <span class="o">=</span> <span class="n">get_exp_dir</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">on_error</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+        <span class="n">hparam_dir</span> <span class="o">=</span> <span class="n">model_dir</span> <span class="ow">or</span> <span class="n">hparam_dir</span>
+
+    <span class="c1"># 2. Load hyperparameters from directory</span>
+    <span class="k">if</span> <span class="n">hparam_dir</span><span class="p">:</span>
+        <span class="n">file_path</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># Recursively find hyperparameter file</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">Path</span><span class="p">(</span><span class="n">hparam_dir</span><span class="p">)</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="n">filename</span><span class="p">):</span>
+            <span class="n">file_path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="c1"># Raise error, if unable to find file</span>
+        <span class="k">if</span> <span class="n">file_path</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No hyperparameters found in experiment &quot;</span>
+                               <span class="sa">f</span><span class="s2">&quot;directory!</span><span class="se">\n\t</span><span class="s2">Directory: </span><span class="si">{</span><span class="n">hparam_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Load hyperparameter file</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">stream</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">hparams</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">full_load</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
+                <span class="c1"># Rename required arguments if necessary</span>
+                <span class="k">for</span> <span class="n">old_key</span><span class="p">,</span> <span class="n">new_key</span> <span class="ow">in</span> <span class="n">HPARAM_RENAMED</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">old_key</span> <span class="ow">in</span> <span class="n">hparams</span><span class="p">:</span>
+                        <span class="n">hparams</span><span class="p">[</span><span class="n">new_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">old_key</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">hparams</span>
+            <span class="k">except</span> <span class="n">yaml</span><span class="o">.</span><span class="n">YAMLError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
+                <span class="n">LOGGER</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s2">&quot;Using default hyperparameters...&quot;</span><span class="p">)</span>
+
+    <span class="c1"># If above does not succeed,</span>
+    <span class="c1"># CASE 0: Use default hyperparameters</span>
+    <span class="k">if</span> <span class="n">on_error</span> <span class="o">==</span> <span class="s2">&quot;use_default&quot;</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Unable to find hyperparameters for specified &quot;</span>
+                       <span class="s2">&quot;experiment! Resorting to default hyperparameters...&quot;</span><span class="p">)</span>
+        <span class="n">hparams</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;img_size&quot;</span><span class="p">:</span> <span class="n">constants</span><span class="o">.</span><span class="n">IMG_SIZE</span><span class="p">,</span>
+            <span class="s2">&quot;dsets&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;sickkids&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;train&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;test&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">&quot;train_test_split&quot;</span><span class="p">:</span> <span class="mf">0.75</span><span class="p">,</span>
+            <span class="s2">&quot;train_val_split&quot;</span><span class="p">:</span> <span class="mf">0.75</span><span class="p">,</span>
+            <span class="s2">&quot;batch_size&quot;</span><span class="p">:</span> <span class="mi">16</span><span class="p">,</span>
+            <span class="s2">&quot;shuffle&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">hparams</span>
+    <span class="c1"># CASE 1: Raise error</span>
+    <span class="k">elif</span> <span class="n">on_error</span> <span class="o">==</span> <span class="s2">&quot;raise&quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Unable to find hyperparameters for specified &quot;</span>
+                           <span class="sa">f</span><span class="s2">&quot;experiment! (</span><span class="si">{</span><span class="n">exp_name</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="find_best_ckpt_path">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.find_best_ckpt_path">[docs]</a>
+<span class="k">def</span> <span class="nf">find_best_ckpt_path</span><span class="p">(</span><span class="n">path_exp_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Finds the path to the best model checkpoint.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path_exp_dir : str</span>
+<span class="sd">        Path to a trained model directory</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Experiment name</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Path to PyTorch Lightning best model checkpoint</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If no valid ckpt files found</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># INPUT: Ensure at least one of `path_exp_dir` or `exp_name` is provided</span>
+    <span class="k">assert</span> <span class="n">path_exp_dir</span> <span class="ow">or</span> <span class="n">exp_name</span>
+
+    <span class="c1"># If only `exp_name` provided, attempt to find experiment training directory</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path_exp_dir</span> <span class="ow">and</span> <span class="n">exp_name</span><span class="p">:</span>
+        <span class="n">path_exp_dir</span> <span class="o">=</span> <span class="n">get_exp_dir</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">on_error</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Look for checkpoint files</span>
+    <span class="n">ckpt_paths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">Path</span><span class="p">(</span><span class="n">path_exp_dir</span><span class="p">)</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s2">&quot;*.ckpt&quot;</span><span class="p">)]</span>
+
+    <span class="c1"># Remove last checkpoint. NOTE: The other checkpoint is for the best epoch</span>
+    <span class="n">ckpt_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">ckpt_paths</span> <span class="k">if</span> <span class="s2">&quot;last.ckpt&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">path</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ckpt_paths</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No best epoch model checkpoint (.ckpt) found! &quot;</span>
+                           <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Directory: </span><span class="si">{</span><span class="n">path_exp_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ckpt_paths</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;More than 1 checkpoint file (.ckpt) found besides &quot;</span>
+                           <span class="sa">f</span><span class="s2">&quot;last.ckpt! </span><span class="se">\n</span><span class="s2">Directory: </span><span class="si">{</span><span class="n">path_exp_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ckpt_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="find_last_ckpt_path">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.find_last_ckpt_path">[docs]</a>
+<span class="k">def</span> <span class="nf">find_last_ckpt_path</span><span class="p">(</span><span class="n">path_exp_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">exp_name</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Finds the path to the last model checkpoint.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path_exp_dir : str</span>
+<span class="sd">        Path to a trained model directory</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Experiment name</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Path to PyTorch Lightning last model checkpoint</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If no valid ckpt files found</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># INPUT: Ensure at least one of `path_exp_dir` or `exp_name` is provided</span>
+    <span class="k">assert</span> <span class="n">path_exp_dir</span> <span class="ow">or</span> <span class="n">exp_name</span>
+
+    <span class="c1"># If only `exp_name` provided, attempt to find experiment training directory</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path_exp_dir</span> <span class="ow">and</span> <span class="n">exp_name</span><span class="p">:</span>
+        <span class="n">path_exp_dir</span> <span class="o">=</span> <span class="n">get_exp_dir</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">on_error</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Look for checkpoint files</span>
+    <span class="n">ckpt_paths</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">Path</span><span class="p">(</span><span class="n">path_exp_dir</span><span class="p">)</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s2">&quot;*.ckpt&quot;</span><span class="p">)]</span>
+
+    <span class="c1"># Get last checkpoint</span>
+    <span class="n">ckpt_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">ckpt_paths</span> <span class="k">if</span> <span class="s2">&quot;last.ckpt&quot;</span> <span class="ow">in</span> <span class="n">path</span><span class="p">]</span>
+
+    <span class="c1"># Raise error, if no ckpt paths  found</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ckpt_paths</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No last epoch model checkpoint (.ckpt) found! &quot;</span>
+                           <span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Directory: </span><span class="si">{</span><span class="n">path_exp_dir</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ckpt_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="extract_backbones_from_ssl">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.extract_backbones_from_ssl">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_backbones_from_ssl</span><span class="p">(</span><span class="n">hparams</span><span class="p">,</span> <span class="n">model_cls</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given experiment hyperparameters with 1+ specified SSL checkpoints, extract</span>
+<span class="sd">    their conv. backbone and temporal backbone, if available.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Experiment parameters, containing 1+ SSL-pretrained model ckpt paths</span>
+<span class="sd">    model_cls : class</span>
+<span class="sd">        Reference to model class, of type torch.nn.Module</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Contains mapping of name to backbones (conv_backbone or</span>
+<span class="sd">        temporal_backbone)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">hparams</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">ssl_ckpt_paths</span> <span class="o">=</span> <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;ssl_ckpt_path&quot;</span><span class="p">]</span>
+
+    <span class="c1"># If only one SSL ckpt path provided</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ssl_ckpt_paths</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">ssl_ckpt_paths</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;ssl_ckpt_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ssl_ckpt_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;ssl_ckpt_path&quot;</span><span class="p">],</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">extract_backbones_from_ssl_single</span><span class="p">(</span><span class="n">hparams</span><span class="p">,</span> <span class="n">model_cls</span><span class="p">)</span>
+
+    <span class="c1"># If multiple SSL ckpt path provided</span>
+    <span class="n">backbone_dict</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ssl_ckpt_path</span> <span class="ow">in</span> <span class="n">ssl_ckpt_paths</span><span class="p">:</span>
+        <span class="c1"># Create copy of hyperparameters</span>
+        <span class="n">hparams_copy</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">hparams_copy</span><span class="p">[</span><span class="s2">&quot;ssl_ckpt_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ssl_ckpt_path</span>
+
+        <span class="c1"># Extract backbones</span>
+        <span class="n">backbone_dict_i</span> <span class="o">=</span> <span class="n">extract_backbones_from_ssl_single</span><span class="p">(</span>
+            <span class="n">hparams_copy</span><span class="p">,</span> <span class="n">model_cls</span><span class="p">)</span>
+
+        <span class="c1"># Accumulate backbones</span>
+        <span class="k">for</span> <span class="n">backbone_name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;conv_backbone&quot;</span><span class="p">,</span> <span class="s2">&quot;temporal_backbone&quot;</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">backbone_name</span> <span class="ow">in</span> <span class="n">backbone_dict_i</span><span class="p">:</span>
+                <span class="n">backbone_dict</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">backbone_name</span><span class="si">}</span><span class="s2">s&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">backbone_dict_i</span><span class="p">[</span><span class="n">backbone_name</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">backbone_dict</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="extract_backbones_from_ssl_single">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.extract_backbones_from_ssl_single">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_backbones_from_ssl_single</span><span class="p">(</span><span class="n">hparams</span><span class="p">,</span> <span class="n">model_cls</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given experiment hyperparameters for 1 SSL-pretrained model, extract its</span>
+<span class="sd">    conv. backbone and temporal backbone, if available.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Experiment parameters</span>
+<span class="sd">    model_cls : class</span>
+<span class="sd">        Reference to model class of type torch.nn.Module</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Contains mapping of name to backbones (conv_backbone or</span>
+<span class="sd">        temporal_backbone)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># If no SSL checkpoint path provided, assume MoCo</span>
+    <span class="n">ssl_ckpt_path</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ssl_ckpt_path&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ssl_ckpt_path</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No SSL checkpoint path provided!&quot;</span><span class="p">)</span>
+
+    <span class="c1"># If loading another SSL eval model, instantiate required conv. backbones</span>
+    <span class="n">extra_model_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;from_ssl_eval&quot;</span><span class="p">):</span>
+        <span class="n">extra_model_kwargs</span><span class="p">[</span><span class="s2">&quot;conv_backbone&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">create_conv_backbone</span><span class="p">(</span><span class="n">hparams</span><span class="p">)</span>
+
+    <span class="c1"># Load pretrained model</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">pretrained_model</span> <span class="o">=</span> <span class="n">model_cls</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span>
+            <span class="n">ssl_ckpt_path</span><span class="p">,</span> <span class="o">**</span><span class="n">extra_model_kwargs</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error_msg</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="n">error_msg</span><span class="p">)</span>
+        <span class="n">rename_torch_module</span><span class="p">(</span><span class="n">ssl_ckpt_path</span><span class="p">)</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Renamed model module names!&quot;</span><span class="p">)</span>
+        <span class="n">pretrained_model</span> <span class="o">=</span> <span class="n">model_cls</span><span class="o">.</span><span class="n">load_from_checkpoint</span><span class="p">(</span>
+            <span class="n">checkpoint_path</span><span class="o">=</span><span class="n">ssl_ckpt_path</span><span class="p">,</span> <span class="o">**</span><span class="n">extra_model_kwargs</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">extract_backbone_dict_from_ssl_model</span><span class="p">(</span><span class="n">pretrained_model</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="extract_backbone_dict_from_ssl_model">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.extract_backbone_dict_from_ssl_model">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_backbone_dict_from_ssl_model</span><span class="p">(</span><span class="n">model</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given SSL-pretrained model instance, extract conv. (and temporal) backbones</span>
+<span class="sd">    into a dictionary.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Must contain &quot;conv_backbone&quot; (and &quot;temporal_backbone&quot;) attributes.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Contains &quot;conv_backbone&quot; and optionally &quot;temporal_backbone&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">backbone_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># Get convolutional backbone</span>
+    <span class="c1"># NOTE: Pretrained backbone/s, needs to be inserted as an argument</span>
+    <span class="k">for</span> <span class="n">conv_backbone_name</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;conv_backbone&quot;</span><span class="p">,</span> <span class="s2">&quot;backbone&quot;</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">conv_backbone_name</span><span class="p">):</span>
+            <span class="n">backbone_dict</span><span class="p">[</span><span class="s2">&quot;conv_backbone&quot;</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">conv_backbone_name</span><span class="p">)</span>
+            <span class="k">break</span>
+    <span class="k">if</span> <span class="s2">&quot;conv_backbone&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">backbone_dict</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Could not find `conv_backbone` for model!&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Get temporal backbone</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;temporal_backbone&quot;</span><span class="p">):</span>
+        <span class="n">temporal_backbone</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">temporal_backbone</span>
+        <span class="n">backbone_dict</span><span class="p">[</span><span class="s2">&quot;temporal_backbone&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">temporal_backbone</span>
+
+    <span class="k">return</span> <span class="n">backbone_dict</span></div>
+
+
+
+<div class="viewcode-block" id="extract_backbone_dict_from_efficientnet_model">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.extract_backbone_dict_from_efficientnet_model">[docs]</a>
+<span class="k">def</span> <span class="nf">extract_backbone_dict_from_efficientnet_model</span><span class="p">(</span><span class="n">model</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given an EfficientNet model instance, extract conv. (and temporal) backbones</span>
+<span class="sd">    into a dictionary.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Must be an EfficientNet model</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Contains &quot;conv_backbone&quot; and optionally &quot;temporal_backbone&quot;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">EfficientNet</span><span class="p">)</span>
+
+    <span class="n">backbone_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># CASE 1: Remove Linear layer (from forward pass), if exists</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;fc&quot;</span><span class="p">):</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">fc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Identity</span><span class="p">()</span>
+
+    <span class="c1"># CASE 2: Remove LSTM layer (from forward pass), if exists</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;temporal_backbone&quot;</span><span class="p">):</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">temporal_backbone</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Identity</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">&quot;temporal_backbone_forward&quot;</span><span class="p">):</span>
+        <span class="n">identity_module</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Identity</span><span class="p">()</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">temporal_backbone_forward</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">identity_module</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+    <span class="c1"># Verify that conv. layers exist</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">len</span><span class="p">(</span><span class="n">find_layers_in_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Conv2d</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No conv. layers found!&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Get convolutional backbone</span>
+    <span class="n">backbone_dict</span><span class="p">[</span><span class="s2">&quot;conv_backbone&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">model</span>
+
+    <span class="k">return</span> <span class="n">backbone_dict</span></div>
+
+
+
+<div class="viewcode-block" id="create_conv_backbone">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.create_conv_backbone">[docs]</a>
+<span class="k">def</span> <span class="nf">create_conv_backbone</span><span class="p">(</span><span class="n">hparams</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return base EfficientNet convolutional backbone, based on parameters.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Experiment parameters</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.nn.Module</span>
+<span class="sd">        EfficientNet convolutional backbone</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Default value for `hparams`</span>
+    <span class="n">hparams</span> <span class="o">=</span> <span class="n">hparams</span> <span class="ow">or</span> <span class="p">{}</span>
+
+    <span class="c1"># Create conv. backbone</span>
+    <span class="n">conv_backbone</span> <span class="o">=</span> <span class="n">EfficientNet</span><span class="o">.</span><span class="n">from_name</span><span class="p">(</span>
+        <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;effnet_name&quot;</span><span class="p">,</span> <span class="s2">&quot;efficientnet-b0&quot;</span><span class="p">),</span>
+        <span class="n">image_size</span><span class="o">=</span><span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;img_size&quot;</span><span class="p">,</span> <span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">)),</span>
+        <span class="n">include_top</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">conv_backbone</span></div>
+
+
+
+<div class="viewcode-block" id="overwrite_model">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.overwrite_model">[docs]</a>
+<span class="k">def</span> <span class="nf">overwrite_model</span><span class="p">(</span><span class="n">dst_model</span><span class="p">,</span> <span class="n">src_model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">src_state_dict</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a (new) model, overwrite its existing parameters based on a source</span>
+<span class="sd">    model or its provided state dict.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    One of `src_model` or `src_state_dict` must be provided.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dst_model : torch.nn.Module</span>
+<span class="sd">        Model whose weights to overwrite</span>
+<span class="sd">    src_model : torch.nn.Module, optional</span>
+<span class="sd">        Pretrained model whose weights to use in overwriting, by default None</span>
+<span class="sd">    src_state_dict : dict, optional</span>
+<span class="sd">        Pretrained model&#39;s state dict, by default None</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.nn.Module</span>
+<span class="sd">        Model whose weights were overwritten (in-place)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># INPUT: Ensure at least one of `src_model` or `src_state_dict` is provided</span>
+    <span class="k">assert</span> <span class="n">src_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">src_state_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> \
+        <span class="s2">&quot;At least one of `src_model` or `src_state_dict` must be provided!&quot;</span>
+
+    <span class="c1"># Get model state dicts</span>
+    <span class="n">pretrained_weights</span> <span class="o">=</span> <span class="n">src_state_dict</span> <span class="k">if</span> <span class="n">src_state_dict</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> \
+        <span class="k">else</span> <span class="n">src_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+    <span class="n">new_weights</span> <span class="o">=</span> <span class="n">dst_model</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+
+    <span class="c1"># Get names of overlapping weights</span>
+    <span class="n">pretrained_weight_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">pretrained_weights</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">new_weight_names</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">new_weights</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+    <span class="n">overlapping_weights</span> <span class="o">=</span> <span class="n">pretrained_weight_names</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span><span class="n">new_weight_names</span><span class="p">)</span>
+
+    <span class="c1"># Log skipped weights, due to incompatibility</span>
+    <span class="n">missing_weights</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">pretrained_weight_names</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">new_weight_names</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">missing_weights</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Loading pretrained model, where the following weights &quot;</span>
+                       <span class="s2">&quot;were incompatible: </span><span class="se">\n\t</span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                       <span class="s2">&quot;</span><span class="se">\n\t</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">missing_weights</span><span class="p">))</span>
+
+    <span class="c1"># Overwrite overlapping weights with pretrained</span>
+    <span class="k">for</span> <span class="n">weight_name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">overlapping_weights</span><span class="p">):</span>
+        <span class="n">new_weights</span><span class="p">[</span><span class="n">weight_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">pretrained_weights</span><span class="p">[</span><span class="n">weight_name</span><span class="p">]</span>
+
+    <span class="c1"># Update the model&#39;s weights</span>
+    <span class="n">dst_model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">new_weights</span><span class="p">)</span>
+
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Loaded weights from pretrained model successfully!&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">dst_model</span></div>
+
+
+
+<div class="viewcode-block" id="prepend_prefix">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.prepend_prefix">[docs]</a>
+<span class="k">def</span> <span class="nf">prepend_prefix</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">,</span> <span class="n">exclude_regex</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a state dict, prepend prefix to every weight name.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state_dict : dict</span>
+<span class="sd">        Model state dict for a torch.nn.Module object</span>
+<span class="sd">    prefix : str</span>
+<span class="sd">        Prefix to prepend to each weight name</span>
+<span class="sd">    exclude_regex : str, optional</span>
+<span class="sd">        Regex for weights to exclude, by default None</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Modified state dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create copy to avoid in-place modification</span>
+    <span class="n">state_dict</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Compile regex if provided</span>
+    <span class="n">exclude_regex_pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="n">exclude_regex</span><span class="p">)</span>
+
+    <span class="c1"># Prepend prefix, for valid weight names</span>
+    <span class="k">for</span> <span class="n">weight_name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">state_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+        <span class="k">if</span> <span class="n">exclude_regex_pattern</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">weight_name</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">new_weight_name</span> <span class="o">=</span> <span class="n">prefix</span> <span class="o">+</span> <span class="n">weight_name</span>
+        <span class="n">state_dict</span><span class="p">[</span><span class="n">new_weight_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">weight_name</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">state_dict</span></div>
+
+
+
+<div class="viewcode-block" id="remove_prefix">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.remove_prefix">[docs]</a>
+<span class="k">def</span> <span class="nf">remove_prefix</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">prefix</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Given a state dict, remove prefix from every weight name.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state_dict : dict</span>
+<span class="sd">        Model state dict for a torch.nn.Module object</span>
+<span class="sd">    prefix : str</span>
+<span class="sd">        Prefix to remove from each weight name</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Modified state dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create copy to avoid in-place modification</span>
+    <span class="n">state_dict</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Remove prefix, for valid weight names</span>
+    <span class="k">for</span> <span class="n">weight_name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">state_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+        <span class="k">if</span> <span class="n">weight_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">):</span>
+            <span class="n">new_weight_name</span> <span class="o">=</span> <span class="n">weight_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">prefix</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">state_dict</span><span class="p">[</span><span class="n">new_weight_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">weight_name</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">state_dict</span></div>
+
+
+
+<div class="viewcode-block" id="drop_weights_containing">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.drop_weights_containing">[docs]</a>
+<span class="k">def</span> <span class="nf">drop_weights_containing</span><span class="p">(</span><span class="n">state_dict</span><span class="p">,</span> <span class="n">substr</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Drop weights containing specific substring</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state_dict : dict</span>
+<span class="sd">        Model state dict for a torch.nn.Module object</span>
+<span class="sd">    substr : str</span>
+<span class="sd">        Substring of weights to drop</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Modified state dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create copy to avoid in-place modification</span>
+    <span class="n">state_dict</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Remove weights with substring in weight name</span>
+    <span class="k">for</span> <span class="n">weight_name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">state_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+        <span class="k">if</span> <span class="n">substr</span> <span class="ow">in</span> <span class="n">weight_name</span><span class="p">:</span>
+            <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dropping weight: `</span><span class="si">{</span><span class="n">weight_name</span><span class="si">}</span><span class="s2">`&quot;</span><span class="p">)</span>
+            <span class="n">state_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">weight_name</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">state_dict</span></div>
+
+
+
+<div class="viewcode-block" id="get_last_conv_layer">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.get_last_conv_layer">[docs]</a>
+<span class="k">def</span> <span class="nf">get_last_conv_layer</span><span class="p">(</span><span class="n">model</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get last convolutional layer in model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Convolutional model</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    torch.nn.Conv2d</span>
+<span class="sd">        Last convolutional layer</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># CASE 1: Model is an EfficientNetB0</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">EfficientNet</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">_conv_head</span>
+    <span class="c1"># CASE 1: Model is a wrapper, storing a conv. backbone</span>
+    <span class="c1"># NOTE: Deprecated</span>
+    <span class="c1"># elif isinstance(model, (LinearEval, LSTMLinearEval,</span>
+    <span class="c1">#                       EnsembleLinear, EnsembleLSTMLinear)):</span>
+    <span class="c1">#     return get_last_conv_layer(model.conv_backbone)</span>
+
+    <span class="c1"># Raise error, if not found</span>
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+
+<div class="viewcode-block" id="get_exp_dir">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.get_exp_dir">[docs]</a>
+<span class="k">def</span> <span class="nf">get_exp_dir</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">on_error</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get experiment directory, given experiment name.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Experiment name</span>
+<span class="sd">    on_error : str, optional</span>
+<span class="sd">        If &quot;raise&quot;, raises an error, if expected directory does not exist. If</span>
+<span class="sd">        &quot;ignore&quot;, simply returns None, by default &quot;raise&quot;.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Path to experiment directory, where model was trained</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># INPUT: Verify provided `on_error` is valid</span>
+    <span class="k">assert</span> <span class="n">on_error</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;raise&quot;</span><span class="p">,</span> <span class="s2">&quot;ignore&quot;</span><span class="p">),</span> \
+        <span class="s2">&quot;`on_error` must be one of (&#39;raise&#39;, &#39;ignore&#39;)&quot;</span>
+
+    <span class="c1"># Create full path</span>
+    <span class="n">model_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_RESULTS</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">)</span>
+
+    <span class="c1"># Raise error, if model directory does not exist</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">model_dir</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">on_error</span> <span class="o">==</span> <span class="s2">&quot;raise&quot;</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;`exp_name` (</span><span class="si">{</span><span class="n">exp_name</span><span class="si">}</span><span class="s2">) provided does not lead&quot;</span>
+                               <span class="s2">&quot; to a valid model training directory&quot;</span><span class="p">)</span>
+        <span class="n">model_dir</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">model_dir</span></div>
+
+
+
+<div class="viewcode-block" id="find_layers_in_model">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.find_layers_in_model">[docs]</a>
+<span class="k">def</span> <span class="nf">find_layers_in_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">layer_type</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Find specified layers in model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : torch.nn.Module</span>
+<span class="sd">        Model</span>
+<span class="sd">    layer_type : class</span>
+<span class="sd">        Class of layer desired</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    lists</span>
+<span class="sd">        List of model indices containing layer</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">fc_idx</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">idx</span><span class="p">,</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">children</span><span class="p">()):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer</span><span class="p">,</span> <span class="n">layer_type</span><span class="p">):</span>
+            <span class="n">fc_idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fc_idx</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Deprecated                                  #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="rename_torch_module">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.load_model.rename_torch_module">[docs]</a>
+<span class="k">def</span> <span class="nf">rename_torch_module</span><span class="p">(</span><span class="n">ckpt_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Rename module in a saved model checkpoint</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    ckpt_path : str</span>
+<span class="sd">        Path to PyTorch Lightning checkpoint file</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ckpt_dict</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">ckpt_path</span><span class="p">)</span>
+    <span class="n">state_dict</span> <span class="o">=</span> <span class="n">ckpt_dict</span><span class="p">[</span><span class="s2">&quot;state_dict&quot;</span><span class="p">]</span>
+    <span class="n">name_mapping</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;conv_conv_backbone.&quot;</span><span class="p">:</span> <span class="s2">&quot;conv_backbone.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;backbone.&quot;</span><span class="p">:</span> <span class="s2">&quot;conv_backbone.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;backbone_momentum.&quot;</span><span class="p">:</span> <span class="s2">&quot;conv_backbone_momentum.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;lstm_backbone.&quot;</span><span class="p">:</span> <span class="s2">&quot;temporal_backbone.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;_lstm.&quot;</span><span class="p">:</span> <span class="s2">&quot;temporal_backbone.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;_fc.&quot;</span><span class="p">:</span> <span class="s2">&quot;fc.&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">for</span> <span class="n">module_name</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">state_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+        <span class="k">for</span> <span class="n">pre_name</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">name_mapping</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span>
+                               <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">),</span>
+                               <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+            <span class="n">post_name</span> <span class="o">=</span> <span class="n">name_mapping</span><span class="p">[</span><span class="n">pre_name</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">module_name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">pre_name</span><span class="p">):</span>
+                <span class="n">new_module_name</span> <span class="o">=</span> <span class="n">module_name</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">pre_name</span><span class="p">,</span> <span class="n">post_name</span><span class="p">)</span>
+                <span class="n">state_dict</span><span class="p">[</span><span class="n">new_module_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">module_name</span><span class="p">)</span>
+    <span class="n">torch</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">ckpt_dict</span><span class="p">,</span> <span class="n">ckpt_path</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

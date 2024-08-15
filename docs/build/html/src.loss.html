@@ -95,14 +95,252 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 </section>
-<section id="src-loss-gradcam-loss-module">
-<h2>src.loss.gradcam_loss module<a class="headerlink" href="#src-loss-gradcam-loss-module" title="Link to this heading"></a></h2>
+<section id="module-src.loss.gradcam_loss">
+<span id="src-loss-gradcam-loss-module"></span><h2>src.loss.gradcam_loss module<a class="headerlink" href="#module-src.loss.gradcam_loss" title="Link to this heading"></a></h2>
+<p>gradcam_loss.py</p>
+<dl class="simple">
+<dt>Description: Implementation of segmentation-guided GradCAM loss. This loss</dt><dd><p>penalizes gradients that fall outside of given segmentations.
+Code adapted from original repository linked below.</p>
+</dd>
+<dt>Warning: GradCAMLoss currently is not compatible with the following:</dt><dd><ol class="arabic simple">
+<li><p>Gradient accumulation; gradient zero-ing is needed,</p></li>
+<li><p>Freezing weights; the gradient need to be computed across weights,</p></li>
+<li><p>Video models;</p></li>
+</ol>
+</dd>
+</dl>
+<p>Source Repo: <a class="reference external" href="https://github.com/MeriDK/segmentation-guided-attention/tree/master">https://github.com/MeriDK/segmentation-guided-attention/tree/master</a></p>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.ClassifierOutputAllTargets">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.loss.gradcam_loss.</span></span><span class="sig-name descname"><span class="pre">ClassifierOutputAllTargets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">category</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#ClassifierOutputAllTargets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.ClassifierOutputAllTargets" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ClassifierOutputTarget</span></code></p>
+<p>A sub-class of ClassifierOutputTarget to extract gradients related to
+all the classes.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This means that the GradCAM will be for all classes.</p>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.ClassifierOutputNegativeTarget">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.loss.gradcam_loss.</span></span><span class="sig-name descname"><span class="pre">ClassifierOutputNegativeTarget</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">category</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#ClassifierOutputNegativeTarget"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.ClassifierOutputNegativeTarget" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ClassifierOutputTarget</span></code></p>
+<p>A sub-class of ClassifierOutputTarget to extract gradients related to
+all the negative classes.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This may be useful if the positive and negative classes shouldn’t have
+gradients that overlap their segmented regions.</p>
+</div>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableActivationsAndGradients">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.loss.gradcam_loss.</span></span><span class="sig-name descname"><span class="pre">DifferentiableActivationsAndGradients</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_layers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reshape_transform</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableActivationsAndGradients"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableActivationsAndGradients" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ActivationsAndGradients</span></code></p>
+<p>Sub-class of ActivationsAndGradients that can be back-propagated.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_activation">
+<span class="sig-name descname"><span class="pre">save_activation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableActivationsAndGradients.save_activation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_activation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_gradient">
+<span class="sig-name descname"><span class="pre">save_gradient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableActivationsAndGradients.save_gradient"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_gradient" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableGradCAM">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.loss.gradcam_loss.</span></span><span class="sig-name descname"><span class="pre">DifferentiableGradCAM</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_layers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reshape_transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableGradCAM"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableGradCAM" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">GradCAM</span></code></p>
+<p>Sub-class of GradCAM that can be back-propagated.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableGradCAM.aggregate_multi_layers">
+<span class="sig-name descname"><span class="pre">aggregate_multi_layers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam_per_target_layer</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableGradCAM.aggregate_multi_layers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableGradCAM.aggregate_multi_layers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableGradCAM.compute_cam_per_layer">
+<span class="sig-name descname"><span class="pre">compute_cam_per_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">targets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eigen_smooth</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableGradCAM.compute_cam_per_layer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableGradCAM.compute_cam_per_layer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableGradCAM.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableGradCAM.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableGradCAM.forward" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.DifferentiableGradCAM.get_cam_weights">
+<span class="sig-name descname"><span class="pre">get_cam_weights</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_layer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_category</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">activations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grads</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#DifferentiableGradCAM.get_cam_weights"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.DifferentiableGradCAM.get_cam_weights" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.ViewGradCAMLoss">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.loss.gradcam_loss.</span></span><span class="sig-name descname"><span class="pre">ViewGradCAMLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hparams</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#ViewGradCAMLoss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.ViewGradCAMLoss" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>View label - specific GradCAM loss</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.ViewGradCAMLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">X</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#ViewGradCAMLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.ViewGradCAMLoss.forward" title="Link to this definition"></a></dt>
+<dd><p>Compute GradCAM loss.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>X</strong> (<em>torch.Tensor</em>) – Input image/s</p></li>
+<li><p><strong>metadata</strong> (<em>dict</em>) – Contains labels and masks</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GradCAM loss</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.create_cam">
+<span class="sig-prename descclassname"><span class="pre">src.loss.gradcam_loss.</span></span><span class="sig-name descname"><span class="pre">create_cam</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_layers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#create_cam"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.create_cam" title="Link to this definition"></a></dt>
+<dd><p>Create GradCAM instance</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<em>torch.nn.Module</em>) – Arbitrary model</p></li>
+<li><p><strong>target_layers</strong> (<em>list</em><em> of </em><em>torch.nn.Module</em><em>, </em><em>optional</em>) – Specifies layers in model to use, by default None</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>GradCAM instance</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pytorch_grad_cam.GradCAM</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.loss.gradcam_loss.scale_cam_image">
+<span class="sig-prename descclassname"><span class="pre">src.loss.gradcam_loss.</span></span><span class="sig-name descname"><span class="pre">scale_cam_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/gradcam_loss.html#scale_cam_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.gradcam_loss.scale_cam_image" title="Link to this definition"></a></dt>
+<dd><p>Differentiable re-implementation of scaling CAM</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cam</strong> (<em>torch.Tensor</em>) – Computed GradCAM</p></li>
+<li><p><strong>target_size</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Desired size of GradCAM, by default None</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Resized CAM</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-loss-sup-moco-loss-module">
-<h2>src.loss.sup_moco_loss module<a class="headerlink" href="#src-loss-sup-moco-loss-module" title="Link to this heading"></a></h2>
+<section id="module-src.loss.sup_moco_loss">
+<span id="src-loss-sup-moco-loss-module"></span><h2>src.loss.sup_moco_loss module<a class="headerlink" href="#module-src.loss.sup_moco_loss" title="Link to this heading"></a></h2>
+<p>sup_moco_loss.py</p>
+<dl class="simple">
+<dt>Description: Supervised NT-Xent loss implementation, where memory bank does not</dt><dd><p>pull negative samples containing examples from the positive class.</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="src.loss.sup_moco_loss.LabeledMemoryBank">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.loss.sup_moco_loss.</span></span><span class="sig-name descname"><span class="pre">LabeledMemoryBank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_classes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">65536</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/sup_moco_loss.html#LabeledMemoryBank"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.sup_moco_loss.LabeledMemoryBank" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>LabeledMemoryBank class.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Stores labels additional to the embeddings</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.sup_moco_loss.LabeledMemoryBank.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/sup_moco_loss.html#LabeledMemoryBank.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.sup_moco_loss.LabeledMemoryBank.forward" title="Link to this definition"></a></dt>
+<dd><p>Query memory bank for additional negative samples</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The output if the memory bank is of size 0, otherwise the output
+and the entries from the memory bank.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>output</strong> (<em>torch.Tensor</em>) – The output of the model.</p></li>
+<li><p><strong>labels</strong> (<em>torch.Tensor</em>) – Batch labels</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ol class="lowerroman simple">
+<li><p>Output provided</p></li>
+<li><p>Entire memory bank</p></li>
+<li><p>Stored labels for items in memory bank</p></li>
+</ol>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of (torch.Tensor, torch.Tensor, torch.LongTensor)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="src.loss.sup_moco_loss.SupMoCoLoss">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">src.loss.sup_moco_loss.</span></span><span class="sig-name descname"><span class="pre">SupMoCoLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_classes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">temperature</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">memory_bank_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gather_distributed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/sup_moco_loss.html#SupMoCoLoss"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.sup_moco_loss.SupMoCoLoss" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>SupMoCoLoss class.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Implementation of the supervised MoCo loss; a supervised NT-Xent loss with
+a memory bank with embeddings and their labels. “NT-Xent” stands for
+normalized temperature-scaled cross entropy loss.</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="src.loss.sup_moco_loss.SupMoCoLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">out0</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tensor</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/loss/sup_moco_loss.html#SupMoCoLoss.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.loss.sup_moco_loss.SupMoCoLoss.forward" title="Link to this definition"></a></dt>
+<dd><p>Forward pass through Supervised Contrastive Cross-Entropy Loss.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If used with a memory bank, the samples from the memory bank are used
+as negative examples. Otherwise, within-batch samples are used as
+negative samples.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>out0</strong> (<em>torch.FloatTensor</em>) – Output projections of the first set of transformed images.
+Shape: (batch_size, embedding_size)</p></li>
+<li><p><strong>out1</strong> (<em>torch.FloatTensor</em>) – Output projections of the second set of transformed images.
+Shape: (batch_size, embedding_size)</p></li>
+<li><p><strong>labels</strong> (<em>torch.LongTensor</em>) – Labels corresponding to both out0 and out2, which is assumed to be
+the same for both out0 and out1.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Supervised MoCo Loss value.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
-<section id="module-contents">
-<h2>Module contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<section id="module-src.loss">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.loss" title="Link to this heading"></a></h2>
 </section>
 </section>
 

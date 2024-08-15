@@ -99,69 +99,468 @@
 <li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#subpackages">Subpackages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="src.data_prep.scripts.html">src.data_prep.scripts package</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="src.data_prep.scripts.html#submodules">Submodules</a></li>
-<li class="toctree-l4"><a class="reference internal" href="src.data_prep.scripts.html#src-data-prep-scripts-create-metadata-module">src.data_prep.scripts.create_metadata module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="src.data_prep.scripts.html#module-contents">Module contents</a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.scripts.html#module-src.data_prep.scripts.create_metadata">src.data_prep.scripts.create_metadata module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.scripts.html#module-src.data_prep.scripts">Module contents</a></li>
 </ul>
 </li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-byol-dataset-module">src.data_prep.byol_dataset module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-dataset-module">src.data_prep.dataset module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-moco-dataset-module">src.data_prep.moco_dataset module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-segment-dataset-module">src.data_prep.segment_dataset module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-segment-prep-script-module">src.data_prep.segment_prep_script module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-ssl-collate-fn-module">src.data_prep.ssl_collate_fn module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-tclr-dataset-module">src.data_prep.tclr_dataset module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#src-data-prep-utils-module">src.data_prep.utils module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-contents">Module contents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.byol_dataset">src.data_prep.byol_dataset module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.byol_dataset.BYOLDataModule"><code class="docutils literal notranslate"><span class="pre">BYOLDataModule</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.byol_dataset.BYOLDataModule.test_dataloader"><code class="docutils literal notranslate"><span class="pre">BYOLDataModule.test_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.byol_dataset.BYOLDataModule.train_dataloader"><code class="docutils literal notranslate"><span class="pre">BYOLDataModule.train_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.byol_dataset.BYOLDataModule.val_dataloader"><code class="docutils literal notranslate"><span class="pre">BYOLDataModule.val_dataloader()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.dataset">src.data_prep.dataset module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.filter_metadata"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.filter_metadata()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.get_dataloader"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.get_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.get_filtered_dataloader"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.get_filtered_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.get_patient_ids"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.get_patient_ids()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.set_kfold_index"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.set_kfold_index()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.setup"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.setup()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.size"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.size()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.test_dataloader"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.test_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.train_dataloader"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.train_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataModule.val_dataloader"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataModule.val_dataloader()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDataset"><code class="docutils literal notranslate"><span class="pre">UltrasoundDataset</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFrame"><code class="docutils literal notranslate"><span class="pre">UltrasoundDatasetDataFrame</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFrame.get_segmentation_mask"><code class="docutils literal notranslate"><span class="pre">UltrasoundDatasetDataFrame.get_segmentation_mask()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFrame.get_sequence"><code class="docutils literal notranslate"><span class="pre">UltrasoundDatasetDataFrame.get_sequence()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDataFramePair"><code class="docutils literal notranslate"><span class="pre">UltrasoundDatasetDataFramePair</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDir"><code class="docutils literal notranslate"><span class="pre">UltrasoundDatasetDir</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.UltrasoundDatasetDir.get_sequence"><code class="docutils literal notranslate"><span class="pre">UltrasoundDatasetDir.get_sequence()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.load_dataset_from_dataframe"><code class="docutils literal notranslate"><span class="pre">load_dataset_from_dataframe()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.dataset.load_dataset_from_dir"><code class="docutils literal notranslate"><span class="pre">load_dataset_from_dir()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.moco_dataset">src.data_prep.moco_dataset module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.moco_dataset.MoCoDataModule"><code class="docutils literal notranslate"><span class="pre">MoCoDataModule</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.moco_dataset.MoCoDataModule.test_dataloader"><code class="docutils literal notranslate"><span class="pre">MoCoDataModule.test_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.moco_dataset.MoCoDataModule.train_dataloader"><code class="docutils literal notranslate"><span class="pre">MoCoDataModule.train_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.moco_dataset.MoCoDataModule.val_dataloader"><code class="docutils literal notranslate"><span class="pre">MoCoDataModule.val_dataloader()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.segment_dataset">src.data_prep.segment_dataset module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_dataset.SegmentedUSDataset"><code class="docutils literal notranslate"><span class="pre">SegmentedUSDataset</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_dataset.SegmentedUSDataset.get_sequence"><code class="docutils literal notranslate"><span class="pre">SegmentedUSDataset.get_sequence()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_dataset.SegmentedUSDataset.load_masked_image"><code class="docutils literal notranslate"><span class="pre">SegmentedUSDataset.load_masked_image()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_dataset.SegmentedUSModule"><code class="docutils literal notranslate"><span class="pre">SegmentedUSModule</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_dataset.SegmentedUSModule.setup"><code class="docutils literal notranslate"><span class="pre">SegmentedUSModule.setup()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_dataset.SegmentedUSModule.train_dataloader"><code class="docutils literal notranslate"><span class="pre">SegmentedUSModule.train_dataloader()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_dataset.custom_collate_fn"><code class="docutils literal notranslate"><span class="pre">custom_collate_fn()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.segment_prep_script">src.data_prep.segment_prep_script module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_prep_script.get_fg_and_bg_of_segmentation"><code class="docutils literal notranslate"><span class="pre">get_fg_and_bg_of_segmentation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_prep_script.get_segmented_type"><code class="docutils literal notranslate"><span class="pre">get_segmented_type()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_prep_script.get_source_to_segmented_filenames"><code class="docutils literal notranslate"><span class="pre">get_source_to_segmented_filenames()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.segment_prep_script.load_metadata_with_segmentation"><code class="docutils literal notranslate"><span class="pre">load_metadata_with_segmentation()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.ssl_collate_fn">src.data_prep.ssl_collate_fn module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.BYOLSameLabelCollateFunction"><code class="docutils literal notranslate"><span class="pre">BYOLSameLabelCollateFunction</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.BYOLSameLabelCollateFunction.forward"><code class="docutils literal notranslate"><span class="pre">BYOLSameLabelCollateFunction.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.MoCoSameLabelCollateFunction"><code class="docutils literal notranslate"><span class="pre">MoCoSameLabelCollateFunction</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.MoCoSameLabelCollateFunction.forward"><code class="docutils literal notranslate"><span class="pre">MoCoSameLabelCollateFunction.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.SimCLRCollateFunction"><code class="docutils literal notranslate"><span class="pre">SimCLRCollateFunction</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.SimCLRCollateFunction.forward"><code class="docutils literal notranslate"><span class="pre">SimCLRCollateFunction.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.TCLRCollateFunction"><code class="docutils literal notranslate"><span class="pre">TCLRCollateFunction</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.ssl_collate_fn.TCLRCollateFunction.forward"><code class="docutils literal notranslate"><span class="pre">TCLRCollateFunction.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.tclr_dataset">src.data_prep.tclr_dataset module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.tclr_dataset.TCLRDataModule"><code class="docutils literal notranslate"><span class="pre">TCLRDataModule</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.tclr_dataset.TCLRDataModule.train_dataloader"><code class="docutils literal notranslate"><span class="pre">TCLRDataModule.train_dataloader()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.data_prep.html#src.data_prep.tclr_dataset.TCLRDataModule.val_dataloader"><code class="docutils literal notranslate"><span class="pre">TCLRDataModule.val_dataloader()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep.utils">src.data_prep.utils module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.argsort_unsort"><code class="docutils literal notranslate"><span class="pre">argsort_unsort()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.assign_split_row"><code class="docutils literal notranslate"><span class="pre">assign_split_row()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.assign_split_table"><code class="docutils literal notranslate"><span class="pre">assign_split_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.assign_split_table_by_dset"><code class="docutils literal notranslate"><span class="pre">assign_split_table_by_dset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.assign_unlabeled_split"><code class="docutils literal notranslate"><span class="pre">assign_unlabeled_split()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.contains_overlapping_vals"><code class="docutils literal notranslate"><span class="pre">contains_overlapping_vals()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.cross_validation_by_patient"><code class="docutils literal notranslate"><span class="pre">cross_validation_by_patient()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.exclude_from_any_split"><code class="docutils literal notranslate"><span class="pre">exclude_from_any_split()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.extract_data_from_filename"><code class="docutils literal notranslate"><span class="pre">extract_data_from_filename()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.extract_data_from_filename_and_join"><code class="docutils literal notranslate"><span class="pre">extract_data_from_filename_and_join()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.extract_from_label"><code class="docutils literal notranslate"><span class="pre">extract_from_label()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.extract_hn_labels"><code class="docutils literal notranslate"><span class="pre">extract_hn_labels()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.get_from_path"><code class="docutils literal notranslate"><span class="pre">get_from_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.get_from_paths"><code class="docutils literal notranslate"><span class="pre">get_from_paths()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.get_label_boundaries"><code class="docutils literal notranslate"><span class="pre">get_label_boundaries()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.get_labels_for_filenames"><code class="docutils literal notranslate"><span class="pre">get_labels_for_filenames()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.get_machine_for_filenames"><code class="docutils literal notranslate"><span class="pre">get_machine_for_filenames()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.has_seg_mask"><code class="docutils literal notranslate"><span class="pre">has_seg_mask()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.identify_not_in_label_group"><code class="docutils literal notranslate"><span class="pre">identify_not_in_label_group()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.is_null"><code class="docutils literal notranslate"><span class="pre">is_null()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.left_join_filtered_to_source"><code class="docutils literal notranslate"><span class="pre">left_join_filtered_to_source()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.load_metadata"><code class="docutils literal notranslate"><span class="pre">load_metadata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.make_side_label_relative"><code class="docutils literal notranslate"><span class="pre">make_side_label_relative()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.prep_augmentations"><code class="docutils literal notranslate"><span class="pre">prep_augmentations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.preprocess_image"><code class="docutils literal notranslate"><span class="pre">preprocess_image()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.preprocess_image_dir"><code class="docutils literal notranslate"><span class="pre">preprocess_image_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.remove_only_unlabeled_seqs"><code class="docutils literal notranslate"><span class="pre">remove_only_unlabeled_seqs()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.restrict_seq_len"><code class="docutils literal notranslate"><span class="pre">restrict_seq_len()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.split_by_ids"><code class="docutils literal notranslate"><span class="pre">split_by_ids()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_prep.html#src.data_prep.utils.vals_is_subset"><code class="docutils literal notranslate"><span class="pre">vals_is_subset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_prep.html#module-src.data_prep">Module contents</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="src.data_viz.html">src.data_viz package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#src-data-viz-eda-module">src.data_viz.eda module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#src-data-viz-grad-cam-module">src.data_viz.grad_cam module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#src-data-viz-plot-umap-module">src.data_viz.plot_umap module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#src-data-viz-utils-module">src.data_viz.utils module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#module-src.data_viz.eda">src.data_viz.eda module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.are_labels_strictly_ordered"><code class="docutils literal notranslate"><span class="pre">are_labels_strictly_ordered()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.get_transition_matrix"><code class="docutils literal notranslate"><span class="pre">get_transition_matrix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.get_unique_label_sequences"><code class="docutils literal notranslate"><span class="pre">get_unique_label_sequences()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.load_image"><code class="docutils literal notranslate"><span class="pre">load_image()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.patient_imgs_to_gif"><code class="docutils literal notranslate"><span class="pre">patient_imgs_to_gif()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.plot_hist_num_images_per_patient"><code class="docutils literal notranslate"><span class="pre">plot_hist_num_images_per_patient()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.plot_hist_of_view_labels"><code class="docutils literal notranslate"><span class="pre">plot_hist_of_view_labels()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.plot_hn_dist_by_side"><code class="docutils literal notranslate"><span class="pre">plot_hn_dist_by_side()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.plot_img_histogram_per_dset"><code class="docutils literal notranslate"><span class="pre">plot_img_histogram_per_dset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.plot_pixels_along_axis"><code class="docutils literal notranslate"><span class="pre">plot_pixels_along_axis()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.plot_pixels_histogram_by_label"><code class="docutils literal notranslate"><span class="pre">plot_pixels_histogram_by_label()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.plot_ssl_augmentations"><code class="docutils literal notranslate"><span class="pre">plot_ssl_augmentations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.eda.show_dist_of_ith_view"><code class="docutils literal notranslate"><span class="pre">show_dist_of_ith_view()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#module-src.data_viz.grad_cam">src.data_viz.grad_cam module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.grad_cam.explain_model_for_images_with_label"><code class="docutils literal notranslate"><span class="pre">explain_model_for_images_with_label()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.grad_cam.explain_model_on_dset"><code class="docutils literal notranslate"><span class="pre">explain_model_on_dset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.grad_cam.extract_gradcams"><code class="docutils literal notranslate"><span class="pre">extract_gradcams()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.grad_cam.get_n_images_per_label"><code class="docutils literal notranslate"><span class="pre">get_n_images_per_label()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.grad_cam.init"><code class="docutils literal notranslate"><span class="pre">init()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#module-src.data_viz.plot_umap">src.data_viz.plot_umap module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.cluster_by_density"><code class="docutils literal notranslate"><span class="pre">cluster_by_density()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.get_label_order"><code class="docutils literal notranslate"><span class="pre">get_label_order()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.get_umap_embeddings"><code class="docutils literal notranslate"><span class="pre">get_umap_embeddings()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.init"><code class="docutils literal notranslate"><span class="pre">init()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.plot_images_in_umap_clusters"><code class="docutils literal notranslate"><span class="pre">plot_images_in_umap_clusters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.plot_umap"><code class="docutils literal notranslate"><span class="pre">plot_umap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.plot_umap_all_patients"><code class="docutils literal notranslate"><span class="pre">plot_umap_all_patients()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.plot_umap_by_machine"><code class="docutils literal notranslate"><span class="pre">plot_umap_by_machine()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.plot_umap_by_view"><code class="docutils literal notranslate"><span class="pre">plot_umap_by_view()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.plot_umap_for_n_patient"><code class="docutils literal notranslate"><span class="pre">plot_umap_for_n_patient()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.plot_umap.plot_umap_for_one_patient_seq"><code class="docutils literal notranslate"><span class="pre">plot_umap_for_one_patient_seq()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#module-src.data_viz.utils">src.data_viz.utils module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.utils.gridplot_images"><code class="docutils literal notranslate"><span class="pre">gridplot_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.utils.gridplot_images_from_paths"><code class="docutils literal notranslate"><span class="pre">gridplot_images_from_paths()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.utils.grouped_barplot"><code class="docutils literal notranslate"><span class="pre">grouped_barplot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.utils.plot_confidence_histogram"><code class="docutils literal notranslate"><span class="pre">plot_confidence_histogram()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.utils.plot_reliability_diagram"><code class="docutils literal notranslate"><span class="pre">plot_reliability_diagram()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.utils.print_table"><code class="docutils literal notranslate"><span class="pre">print_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.data_viz.html#src.data_viz.utils.set_theme"><code class="docutils literal notranslate"><span class="pre">set_theme()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="src.data_viz.html#module-src.data_viz">Module contents</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="src.loss.html">src.loss package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="src.loss.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.loss.html#src-loss-gradcam-loss-module">src.loss.gradcam_loss module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.loss.html#src-loss-sup-moco-loss-module">src.loss.sup_moco_loss module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.loss.html#module-contents">Module contents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.loss.html#module-src.loss.gradcam_loss">src.loss.gradcam_loss module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.ClassifierOutputAllTargets"><code class="docutils literal notranslate"><span class="pre">ClassifierOutputAllTargets</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.ClassifierOutputNegativeTarget"><code class="docutils literal notranslate"><span class="pre">ClassifierOutputNegativeTarget</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableActivationsAndGradients"><code class="docutils literal notranslate"><span class="pre">DifferentiableActivationsAndGradients</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_activation"><code class="docutils literal notranslate"><span class="pre">DifferentiableActivationsAndGradients.save_activation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableActivationsAndGradients.save_gradient"><code class="docutils literal notranslate"><span class="pre">DifferentiableActivationsAndGradients.save_gradient()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM"><code class="docutils literal notranslate"><span class="pre">DifferentiableGradCAM</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.aggregate_multi_layers"><code class="docutils literal notranslate"><span class="pre">DifferentiableGradCAM.aggregate_multi_layers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.compute_cam_per_layer"><code class="docutils literal notranslate"><span class="pre">DifferentiableGradCAM.compute_cam_per_layer()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.forward"><code class="docutils literal notranslate"><span class="pre">DifferentiableGradCAM.forward()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.DifferentiableGradCAM.get_cam_weights"><code class="docutils literal notranslate"><span class="pre">DifferentiableGradCAM.get_cam_weights()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.ViewGradCAMLoss"><code class="docutils literal notranslate"><span class="pre">ViewGradCAMLoss</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.ViewGradCAMLoss.forward"><code class="docutils literal notranslate"><span class="pre">ViewGradCAMLoss.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.create_cam"><code class="docutils literal notranslate"><span class="pre">create_cam()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.gradcam_loss.scale_cam_image"><code class="docutils literal notranslate"><span class="pre">scale_cam_image()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.loss.html#module-src.loss.sup_moco_loss">src.loss.sup_moco_loss module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.sup_moco_loss.LabeledMemoryBank"><code class="docutils literal notranslate"><span class="pre">LabeledMemoryBank</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.sup_moco_loss.LabeledMemoryBank.forward"><code class="docutils literal notranslate"><span class="pre">LabeledMemoryBank.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.loss.html#src.loss.sup_moco_loss.SupMoCoLoss"><code class="docutils literal notranslate"><span class="pre">SupMoCoLoss</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.loss.html#src.loss.sup_moco_loss.SupMoCoLoss.forward"><code class="docutils literal notranslate"><span class="pre">SupMoCoLoss.forward()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.loss.html#module-src.loss">Module contents</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="src.models.html">src.models package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="src.models.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.models.html#src-models-byol-module">src.models.byol module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.models.html#src-models-efficientnet-pl-module">src.models.efficientnet_pl module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.models.html#src-models-moco-module">src.models.moco module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.models.html#module-contents">Module contents</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.models.html#module-src.models.byol">src.models.byol module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.models.html#src.models.byol.BYOL"><code class="docutils literal notranslate"><span class="pre">BYOL</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.byol.BYOL.byol_forward"><code class="docutils literal notranslate"><span class="pre">BYOL.byol_forward()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.byol.BYOL.byol_forward_momentum"><code class="docutils literal notranslate"><span class="pre">BYOL.byol_forward_momentum()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.byol.BYOL.configure_optimizers"><code class="docutils literal notranslate"><span class="pre">BYOL.configure_optimizers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.byol.BYOL.extract_embeds"><code class="docutils literal notranslate"><span class="pre">BYOL.extract_embeds()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.byol.BYOL.load_imagenet_weights"><code class="docutils literal notranslate"><span class="pre">BYOL.load_imagenet_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.byol.BYOL.on_train_epoch_end"><code class="docutils literal notranslate"><span class="pre">BYOL.on_train_epoch_end()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.byol.BYOL.training_step"><code class="docutils literal notranslate"><span class="pre">BYOL.training_step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.models.html#module-src.models.efficientnet_pl">src.models.efficientnet_pl module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.configure_optimizers"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.configure_optimizers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.extract_embeds"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.extract_embeds()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.load_imagenet_weights"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.load_imagenet_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.on_before_optimizer_step"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.on_before_optimizer_step()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.on_test_epoch_end"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.on_test_epoch_end()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.on_train_epoch_end"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.on_train_epoch_end()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.on_train_epoch_start"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.on_train_epoch_start()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.on_validation_epoch_end"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.on_validation_epoch_end()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.prep_conv_weights"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.prep_conv_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.test_step"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.test_step()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.training_step"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.training_step()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.efficientnet_pl.EfficientNetPL.validation_step"><code class="docutils literal notranslate"><span class="pre">EfficientNetPL.validation_step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.models.html#module-src.models.moco">src.models.moco module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.models.html#src.models.moco.MoCo"><code class="docutils literal notranslate"><span class="pre">MoCo</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.moco.MoCo.configure_optimizers"><code class="docutils literal notranslate"><span class="pre">MoCo.configure_optimizers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.moco.MoCo.extract_embeds"><code class="docutils literal notranslate"><span class="pre">MoCo.extract_embeds()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.moco.MoCo.load_imagenet_weights"><code class="docutils literal notranslate"><span class="pre">MoCo.load_imagenet_weights()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.moco.MoCo.on_train_epoch_end"><code class="docutils literal notranslate"><span class="pre">MoCo.on_train_epoch_end()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.moco.MoCo.on_validation_epoch_end"><code class="docutils literal notranslate"><span class="pre">MoCo.on_validation_epoch_end()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.moco.MoCo.training_step"><code class="docutils literal notranslate"><span class="pre">MoCo.training_step()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.models.html#src.models.moco.MoCo.validation_step"><code class="docutils literal notranslate"><span class="pre">MoCo.validation_step()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.models.html#module-src.models">Module contents</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="src.scripts.html">src.scripts package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="src.scripts.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-collect-results-module">src.scripts.collect_results module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-embed-module">src.scripts.embed module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-grid-search-module">src.scripts.grid_search module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-load-data-module">src.scripts.load_data module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-load-model-module">src.scripts.load_model module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.collect_results">src.scripts.collect_results module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.add_space_between_dsets"><code class="docutils literal notranslate"><span class="pre">add_space_between_dsets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.barplot_all_models"><code class="docutils literal notranslate"><span class="pre">barplot_all_models()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.compute_r2_scores_between_dsets"><code class="docutils literal notranslate"><span class="pre">compute_r2_scores_between_dsets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.create_eval_model_dir"><code class="docutils literal notranslate"><span class="pre">create_eval_model_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.get_eval_metrics"><code class="docutils literal notranslate"><span class="pre">get_eval_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.init"><code class="docutils literal notranslate"><span class="pre">init()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.parse_all_prettified_metric_cols"><code class="docutils literal notranslate"><span class="pre">parse_all_prettified_metric_cols()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.parse_prettified_metric_col"><code class="docutils literal notranslate"><span class="pre">parse_prettified_metric_col()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.plot_all_models_on_dsets"><code class="docutils literal notranslate"><span class="pre">plot_all_models_on_dsets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.collect_results.prettify_metric"><code class="docutils literal notranslate"><span class="pre">prettify_metric()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.embed">src.scripts.embed module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.embed.ImageEmbedder"><code class="docutils literal notranslate"><span class="pre">ImageEmbedder</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.embed.ImageEmbedder.embed"><code class="docutils literal notranslate"><span class="pre">ImageEmbedder.embed()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.embed.ImageEmbedder.embed_tf_batch"><code class="docutils literal notranslate"><span class="pre">ImageEmbedder.embed_tf_batch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.embed.ImageEmbedder.embed_torch"><code class="docutils literal notranslate"><span class="pre">ImageEmbedder.embed_torch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.embed.ImageEmbedder.embed_torch_batch"><code class="docutils literal notranslate"><span class="pre">ImageEmbedder.embed_torch_batch()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.embed.extract_embeds"><code class="docutils literal notranslate"><span class="pre">extract_embeds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.embed.get_embeds"><code class="docutils literal notranslate"><span class="pre">get_embeds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.embed.get_save_path"><code class="docutils literal notranslate"><span class="pre">get_save_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.embed.init"><code class="docutils literal notranslate"><span class="pre">init()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.embed.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.grid_search">src.scripts.grid_search module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch"><code class="docutils literal notranslate"><span class="pre">GridSearch</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch.find_best_models"><code class="docutils literal notranslate"><span class="pre">GridSearch.find_best_models()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch.get_tested_hyperparams"><code class="docutils literal notranslate"><span class="pre">GridSearch.get_tested_hyperparams()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch.get_training_dirs"><code class="docutils literal notranslate"><span class="pre">GridSearch.get_training_dirs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch.is_hyperparam_used"><code class="docutils literal notranslate"><span class="pre">GridSearch.is_hyperparam_used()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch.perform_grid_search"><code class="docutils literal notranslate"><span class="pre">GridSearch.perform_grid_search()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch.sample_hyperparams"><code class="docutils literal notranslate"><span class="pre">GridSearch.sample_hyperparams()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.GridSearch.save_grid_search_results"><code class="docutils literal notranslate"><span class="pre">GridSearch.save_grid_search_results()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.aggregate_fold_histories"><code class="docutils literal notranslate"><span class="pre">aggregate_fold_histories()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.grid_search.get_hyperparams"><code class="docutils literal notranslate"><span class="pre">get_hyperparams()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.load_data">src.scripts.load_data module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_data.create_dataloader_from_metadata_table"><code class="docutils literal notranslate"><span class="pre">create_dataloader_from_metadata_table()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_data.create_eval_hparams"><code class="docutils literal notranslate"><span class="pre">create_eval_hparams()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_data.setup_data_module"><code class="docutils literal notranslate"><span class="pre">setup_data_module()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_data.setup_default_data_module_for_dset"><code class="docutils literal notranslate"><span class="pre">setup_default_data_module_for_dset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_data.setup_default_dataloader_for_dset"><code class="docutils literal notranslate"><span class="pre">setup_default_dataloader_for_dset()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.load_model">src.scripts.load_model module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.create_conv_backbone"><code class="docutils literal notranslate"><span class="pre">create_conv_backbone()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.drop_weights_containing"><code class="docutils literal notranslate"><span class="pre">drop_weights_containing()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.extract_backbone_dict_from_efficientnet_model"><code class="docutils literal notranslate"><span class="pre">extract_backbone_dict_from_efficientnet_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.extract_backbone_dict_from_ssl_model"><code class="docutils literal notranslate"><span class="pre">extract_backbone_dict_from_ssl_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.extract_backbones_from_ssl"><code class="docutils literal notranslate"><span class="pre">extract_backbones_from_ssl()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.extract_backbones_from_ssl_single"><code class="docutils literal notranslate"><span class="pre">extract_backbones_from_ssl_single()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.find_best_ckpt_path"><code class="docutils literal notranslate"><span class="pre">find_best_ckpt_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.find_last_ckpt_path"><code class="docutils literal notranslate"><span class="pre">find_last_ckpt_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.find_layers_in_model"><code class="docutils literal notranslate"><span class="pre">find_layers_in_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.get_exp_dir"><code class="docutils literal notranslate"><span class="pre">get_exp_dir()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.get_hyperparameters"><code class="docutils literal notranslate"><span class="pre">get_hyperparameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.get_last_conv_layer"><code class="docutils literal notranslate"><span class="pre">get_last_conv_layer()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.get_model_cls"><code class="docutils literal notranslate"><span class="pre">get_model_cls()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.load_model"><code class="docutils literal notranslate"><span class="pre">load_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.load_pretrained_from_exp_name"><code class="docutils literal notranslate"><span class="pre">load_pretrained_from_exp_name()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.overwrite_model"><code class="docutils literal notranslate"><span class="pre">overwrite_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.prepend_prefix"><code class="docutils literal notranslate"><span class="pre">prepend_prefix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.remove_prefix"><code class="docutils literal notranslate"><span class="pre">remove_prefix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.load_model.rename_torch_module"><code class="docutils literal notranslate"><span class="pre">rename_torch_module()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-model-applied-eval-module">src.scripts.model_applied_eval module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-model-eval-module">src.scripts.model_eval module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-model-training-module">src.scripts.model_training module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#src-scripts-ssl-model-eval-module">src.scripts.ssl_model_eval module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.model_eval">src.scripts.model_eval module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.analyze_dset_preds"><code class="docutils literal notranslate"><span class="pre">analyze_dset_preds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.bootstrap_metric"><code class="docutils literal notranslate"><span class="pre">bootstrap_metric()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.calculate_accuracy"><code class="docutils literal notranslate"><span class="pre">calculate_accuracy()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.calculate_exp_metrics"><code class="docutils literal notranslate"><span class="pre">calculate_exp_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.calculate_hn_corr"><code class="docutils literal notranslate"><span class="pre">calculate_hn_corr()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.calculate_metric_by_groups"><code class="docutils literal notranslate"><span class="pre">calculate_metric_by_groups()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.calculate_metrics"><code class="docutils literal notranslate"><span class="pre">calculate_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.calculate_per_seq_silhouette_score"><code class="docutils literal notranslate"><span class="pre">calculate_per_seq_silhouette_score()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.check_misclassifications"><code class="docutils literal notranslate"><span class="pre">check_misclassifications()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.check_others_pred_progression"><code class="docutils literal notranslate"><span class="pre">check_others_pred_progression()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.check_rel_side_pred_progression"><code class="docutils literal notranslate"><span class="pre">check_rel_side_pred_progression()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.compare_prediction_similarity"><code class="docutils literal notranslate"><span class="pre">compare_prediction_similarity()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.create_save_dir_by_flags"><code class="docutils literal notranslate"><span class="pre">create_save_dir_by_flags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.create_save_path"><code class="docutils literal notranslate"><span class="pre">create_save_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.embed_dset"><code class="docutils literal notranslate"><span class="pre">embed_dset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.eval_calculate_all_metrics"><code class="docutils literal notranslate"><span class="pre">eval_calculate_all_metrics()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.eval_create_plots"><code class="docutils literal notranslate"><span class="pre">eval_create_plots()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.extract_from_label"><code class="docutils literal notranslate"><span class="pre">extract_from_label()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.filter_most_confident"><code class="docutils literal notranslate"><span class="pre">filter_most_confident()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.get_da_transform"><code class="docutils literal notranslate"><span class="pre">get_da_transform()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.get_highest_loss_samples"><code class="docutils literal notranslate"><span class="pre">get_highest_loss_samples()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.get_local_groups"><code class="docutils literal notranslate"><span class="pre">get_local_groups()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.get_new_seq_numbers"><code class="docutils literal notranslate"><span class="pre">get_new_seq_numbers()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.identify_repeating_same_label_in_video"><code class="docutils literal notranslate"><span class="pre">identify_repeating_same_label_in_video()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.identify_repeating_segments"><code class="docutils literal notranslate"><span class="pre">identify_repeating_segments()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.infer_dset"><code class="docutils literal notranslate"><span class="pre">infer_dset()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.init"><code class="docutils literal notranslate"><span class="pre">init()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.load_image"><code class="docutils literal notranslate"><span class="pre">load_image()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.load_side_plane_view_predictions"><code class="docutils literal notranslate"><span class="pre">load_side_plane_view_predictions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.load_view_predictions"><code class="docutils literal notranslate"><span class="pre">load_view_predictions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.multi_predict_on_sequences"><code class="docutils literal notranslate"><span class="pre">multi_predict_on_sequences()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.plot_acc_over_sequence"><code class="docutils literal notranslate"><span class="pre">plot_acc_over_sequence()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.plot_confusion_matrix"><code class="docutils literal notranslate"><span class="pre">plot_confusion_matrix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.plot_image_count_over_sequence"><code class="docutils literal notranslate"><span class="pre">plot_image_count_over_sequence()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.plot_pred_probability_by_views"><code class="docutils literal notranslate"><span class="pre">plot_pred_probability_by_views()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.plot_prob_over_sequence"><code class="docutils literal notranslate"><span class="pre">plot_prob_over_sequence()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.plot_rolling_accuracy"><code class="docutils literal notranslate"><span class="pre">plot_rolling_accuracy()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.predict_on_images"><code class="docutils literal notranslate"><span class="pre">predict_on_images()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.predict_on_sequences"><code class="docutils literal notranslate"><span class="pre">predict_on_sequences()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.print_confusion_matrix"><code class="docutils literal notranslate"><span class="pre">print_confusion_matrix()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.scale_and_round"><code class="docutils literal notranslate"><span class="pre">scale_and_round()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.show_example_side_predictions"><code class="docutils literal notranslate"><span class="pre">show_example_side_predictions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.store_example_classifications"><code class="docutils literal notranslate"><span class="pre">store_example_classifications()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_eval.transform_image"><code class="docutils literal notranslate"><span class="pre">transform_image()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.model_training">src.scripts.model_training module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_training.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_training.run"><code class="docutils literal notranslate"><span class="pre">run()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.model_training.set_seed"><code class="docutils literal notranslate"><span class="pre">set_seed()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts.ssl_model_eval">src.scripts.ssl_model_eval module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.analyze_eval_model_preds"><code class="docutils literal notranslate"><span class="pre">analyze_eval_model_preds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.analyze_preds"><code class="docutils literal notranslate"><span class="pre">analyze_preds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.find_best_ckpt_path"><code class="docutils literal notranslate"><span class="pre">find_best_ckpt_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.init"><code class="docutils literal notranslate"><span class="pre">init()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.prep_eval_exp_hparams"><code class="docutils literal notranslate"><span class="pre">prep_eval_exp_hparams()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.train_eval_model"><code class="docutils literal notranslate"><span class="pre">train_eval_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.scripts.html#src.scripts.ssl_model_eval.train_eval_models"><code class="docutils literal notranslate"><span class="pre">train_eval_models()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="src.scripts.html#module-src.scripts">Module contents</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="src.utils.html">src.utils package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="src.utils.html#submodules">Submodules</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.utils.html#src-utils-config-module">src.utils.config module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.utils.html#src-utils-efficientnet-pytorch-utils-module">src.utils.efficientnet_pytorch_utils module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.utils.html#src-utils-grokfast-module">src.utils.grokfast module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.utils.html#src-utils-influence-module">src.utils.influence module</a></li>
-<li class="toctree-l2"><a class="reference internal" href="src.utils.html#src-utils-logging-module">src.utils.logging module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.utils.html#module-src.utils.config">src.utils.config module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.config.flatten_nested_dict"><code class="docutils literal notranslate"><span class="pre">flatten_nested_dict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.config.load_config"><code class="docutils literal notranslate"><span class="pre">load_config()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.utils.html#module-src.utils.efficientnet_pytorch_utils">src.utils.efficientnet_pytorch_utils module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.efficientnet_pytorch_utils.load_pretrained_weights"><code class="docutils literal notranslate"><span class="pre">load_pretrained_weights()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.utils.html#module-src.utils.grokfast">src.utils.grokfast module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.grokfast.gradfilter_ema"><code class="docutils literal notranslate"><span class="pre">gradfilter_ema()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.utils.html#module-src.utils.influence">src.utils.influence module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.influence.MyCrossEntropyLoss"><code class="docutils literal notranslate"><span class="pre">MyCrossEntropyLoss</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.utils.html#src.utils.influence.MyCrossEntropyLoss.test_loss"><code class="docutils literal notranslate"><span class="pre">MyCrossEntropyLoss.test_loss()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.utils.html#src.utils.influence.MyCrossEntropyLoss.train_loss_on_outputs"><code class="docutils literal notranslate"><span class="pre">MyCrossEntropyLoss.train_loss_on_outputs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.utils.html#src.utils.influence.MyCrossEntropyLoss.train_outputs"><code class="docutils literal notranslate"><span class="pre">MyCrossEntropyLoss.train_outputs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.utils.html#src.utils.influence.MyCrossEntropyLoss.train_regularization"><code class="docutils literal notranslate"><span class="pre">MyCrossEntropyLoss.train_regularization()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.influence.get_image_from_index"><code class="docutils literal notranslate"><span class="pre">get_image_from_index()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.influence.plot_most_helpful_harmful_examples"><code class="docutils literal notranslate"><span class="pre">plot_most_helpful_harmful_examples()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.influence.plot_test_helpful_harmful"><code class="docutils literal notranslate"><span class="pre">plot_test_helpful_harmful()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.influence.predict_single_by_index"><code class="docutils literal notranslate"><span class="pre">predict_single_by_index()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.utils.html#module-src.utils.logging">src.utils.logging module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.logging.FriendlyCSVLogger"><code class="docutils literal notranslate"><span class="pre">FriendlyCSVLogger</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.utils.html#src.utils.logging.FriendlyCSVLogger.finalize"><code class="docutils literal notranslate"><span class="pre">FriendlyCSVLogger.finalize()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.utils.html#src.utils.logging.load_comet_logger"><code class="docutils literal notranslate"><span class="pre">load_comet_logger()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="src.utils.html#module-src.utils">Module contents</a></li>
 </ul>
 </li>

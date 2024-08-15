@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.scripts.ssl_model_eval &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.scripts.ssl_model_eval</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.scripts.ssl_model_eval</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">ssl_model_eval.py</span>
+
+<span class="sd">Description: Used to automatically evaluate a SSL-trained model by</span>
+<span class="sd">    (1) Training a Linear model on side and plane, separately</span>
+<span class="sd">    (2) Training a LSTM + Linear model on side and plane, separately</span>
+<span class="sd">    (3) Evaluate each of the 4+ models</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Standard libraries</span>
+<span class="kn">import</span> <span class="nn">argparse</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">Environment</span>
+
+<span class="c1"># Custom libraries</span>
+<span class="kn">from</span> <span class="nn">src.data</span> <span class="kn">import</span> <span class="n">constants</span>
+<span class="kn">from</span> <span class="nn">src.scripts</span> <span class="kn">import</span> <span class="n">load_data</span><span class="p">,</span> <span class="n">load_model</span><span class="p">,</span> <span class="n">model_eval</span><span class="p">,</span> <span class="n">model_training</span>
+<span class="kn">from</span> <span class="nn">src.utils</span> <span class="kn">import</span> <span class="n">config</span> <span class="k">as</span> <span class="n">config_utils</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Constants                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="c1"># Set up logger</span>
+<span class="n">LOGGER</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">LOGGER</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="c1"># Label parts to evaluate</span>
+<span class="n">LABEL_PARTS</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;plane&quot;</span><span class="p">]</span>  <span class="c1"># side, plane, None</span>
+
+<span class="c1"># Model types to evaluate</span>
+<span class="n">MODEL_TYPES</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;linear&quot;</span><span class="p">]</span>   <span class="c1"># linear, linear_lstm</span>
+
+<span class="c1"># Options to train eval. models with/without fine-tuning backbones</span>
+<span class="n">FREEZE_WEIGHTS</span> <span class="o">=</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span>    <span class="c1"># True, False</span>
+
+<span class="c1"># Flag to perform Linear Probing - Fine-tuning</span>
+<span class="n">LP_FT</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="c1"># Template for experiment name of a SSL evaluation model</span>
+<span class="n">EVAL_EXP_NAME</span> <span class="o">=</span> \
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;{{ exp_name }}{{ exp_name_suffix }}-{{ model_type }}-{{ label_part }}</span>
+<span class="sd">        {%- if lp_ft -%}</span>
+<span class="sd">            -lp_ft</span>
+<span class="sd">        {%- elif freeze_weights -%}</span>
+<span class="sd">            -lp</span>
+<span class="sd">        {%- else -%}</span>
+<span class="sd">            -ft</span>
+<span class="sd">        {%- endif -%}</span>
+<span class="sd">        {%- if augment_training is defined and augment_training -%}</span>
+<span class="sd">            -aug</span>
+<span class="sd">        {%- endif -%}</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<span class="n">TEMPLATE_EVAL_EXP_NAME</span> <span class="o">=</span> <span class="n">Environment</span><span class="p">()</span><span class="o">.</span><span class="n">from_string</span><span class="p">(</span><span class="n">EVAL_EXP_NAME</span><span class="p">)</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Functions                                   #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="init">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.init">[docs]</a>
+<span class="k">def</span> <span class="nf">init</span><span class="p">(</span><span class="n">parser</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initialize ArgumentParser</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    parser : argparse.ArgumentParser</span>
+<span class="sd">        ArgumentParser object</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">arg_help</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;exp_names&quot;</span><span class="p">:</span> <span class="s2">&quot;Experiment names of SSL-pretrained models to evaluate&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dsets&quot;</span><span class="p">:</span> <span class="s2">&quot;List of dataset split or test dataset name to evaluate&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;config&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;Name of configuration file under `</span><span class="si">{</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_CONFIG</span><span class="si">}</span><span class="s2">` &quot;</span>
+                  <span class="s2">&quot;to overwrite SSL pre-training parameters.&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span>
+        <span class="s2">&quot;-c&quot;</span><span class="p">,</span> <span class="s2">&quot;--config&quot;</span><span class="p">,</span>
+        <span class="nb">type</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;config&quot;</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--exp_names&quot;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;exp_names&quot;</span><span class="p">],</span>
+                        <span class="n">nargs</span><span class="o">=</span><span class="s2">&quot;+&quot;</span><span class="p">,</span>
+                        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">parser</span><span class="o">.</span><span class="n">add_argument</span><span class="p">(</span><span class="s2">&quot;--dsets&quot;</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="p">[</span><span class="n">constants</span><span class="o">.</span><span class="n">DEFAULT_EVAL_SPLIT</span><span class="p">],</span>
+                        <span class="n">nargs</span><span class="o">=</span><span class="s1">&#39;+&#39;</span><span class="p">,</span>
+                        <span class="n">help</span><span class="o">=</span><span class="n">arg_help</span><span class="p">[</span><span class="s2">&quot;dsets&quot;</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="train_eval_model">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.train_eval_model">[docs]</a>
+<span class="k">def</span> <span class="nf">train_eval_model</span><span class="p">(</span><span class="n">hparams</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Train single evaluation model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Contains updated hyperparameters to train SSL-eval model. Arguments</span>
+<span class="sd">        will be passed into `model_training.main`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Log, if exists</span>
+    <span class="n">exp_eval_name</span> <span class="o">=</span> <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;exp_name&quot;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_RESULTS</span><span class="p">,</span> <span class="n">exp_eval_name</span><span class="p">)):</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;`</span><span class="si">{</span><span class="n">exp_eval_name</span><span class="si">}</span><span class="s2">` already exists! Attempting to resume...&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Attempt training</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">model_training</span><span class="o">.</span><span class="n">main</span><span class="p">(</span><span class="n">hparams</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error_msg</span><span class="p">:</span>
+        <span class="c1"># On exception, delete folder</span>
+        <span class="c1"># TODO: Reconsider if this is necessary</span>
+        <span class="c1"># exp_dir = load_model.get_exp_dir(exp_eval_name, on_error=&quot;ignore&quot;)</span>
+        <span class="c1"># if exp_dir:</span>
+        <span class="c1">#     shutil.rmtree(exp_dir)</span>
+
+        <span class="c1"># Re-raise error</span>
+        <span class="k">raise</span> <span class="n">error_msg</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;`</span><span class="si">{</span><span class="n">exp_eval_name</span><span class="si">}</span><span class="s2">` successfully created!&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="train_eval_models">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.train_eval_models">[docs]</a>
+<span class="k">def</span> <span class="nf">train_eval_models</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="o">**</span><span class="n">overwrite_hparams</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Train all possible evaluation models</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Base SSL experiment name</span>
+<span class="sd">    **overwrite_hparams : dict, optional</span>
+<span class="sd">        Hyperparameters to overwrite SSL training hyperparams to pass into</span>
+<span class="sd">        `model_training.main()`</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># 0. Get experiment directory, where model was trained</span>
+    <span class="n">model_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">DIR_RESULTS</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">model_dir</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;`exp_name` (</span><span class="si">%s</span><span class="s2">) provided does not lead to a valid &quot;</span>
+                           <span class="s2">&quot;model training directory&quot;</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">)</span>
+
+    <span class="c1"># 1. Get path to base experiment best model checkpoint</span>
+    <span class="n">ckpt_path</span> <span class="o">=</span> <span class="n">find_best_ckpt_path</span><span class="p">(</span><span class="n">model_dir</span><span class="p">)</span>
+
+    <span class="c1"># 2. Get experiment hyperparameters</span>
+    <span class="n">hparams</span> <span class="o">=</span> <span class="n">load_model</span><span class="o">.</span><span class="n">get_hyperparameters</span><span class="p">(</span><span class="n">model_dir</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># 3. Determine SSL model type</span>
+    <span class="n">ssl_model</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ssl_model&quot;</span><span class="p">,</span> <span class="s2">&quot;moco&quot;</span><span class="p">)</span>
+    <span class="c1"># 3.1 Update model type, if loaded model was an eval model</span>
+    <span class="k">if</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ssl_eval_linear&quot;</span><span class="p">):</span>
+        <span class="n">ssl_model</span> <span class="o">=</span> <span class="s2">&quot;linear&quot;</span>
+        <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;tags&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;from_ssl_eval&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ssl_eval_linear_lstm&quot;</span><span class="p">):</span>
+        <span class="n">ssl_model</span> <span class="o">=</span> <span class="s2">&quot;linear_lstm&quot;</span>
+        <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;tags&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;from_ssl_eval&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;tags&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;from_ssl_pretrain&quot;</span><span class="p">)</span>
+
+    <span class="c1"># 4. Train models on side/plane prediction with/without fine-tuning</span>
+    <span class="k">for</span> <span class="n">model_type</span> <span class="ow">in</span> <span class="n">MODEL_TYPES</span><span class="p">:</span>
+        <span class="n">curr_hparams</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">curr_hparams</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">overwrite_hparams</span><span class="p">)</span>
+
+        <span class="c1"># 4.0 Update keyword arguments to pass in, to specify model to load</span>
+        <span class="n">curr_hparams</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;ssl_eval_</span><span class="si">{</span><span class="n">model_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">for</span> <span class="n">label_part</span> <span class="ow">in</span> <span class="n">LABEL_PARTS</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">freeze_weights</span> <span class="ow">in</span> <span class="n">FREEZE_WEIGHTS</span><span class="p">:</span>
+                <span class="c1"># Create new SSL eval exp. hyperparameters</span>
+                <span class="n">curr_hparams</span> <span class="o">=</span> <span class="n">prep_eval_exp_hparams</span><span class="p">(</span>
+                    <span class="n">curr_hparams</span><span class="p">,</span>
+                    <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
+                    <span class="n">label_part</span><span class="o">=</span><span class="n">label_part</span><span class="p">,</span>
+                    <span class="n">ssl_model</span><span class="o">=</span><span class="n">ssl_model</span><span class="p">,</span>
+                    <span class="n">ssl_ckpt_path</span><span class="o">=</span><span class="n">ckpt_path</span><span class="p">,</span>
+                    <span class="n">model_type</span><span class="o">=</span><span class="n">model_type</span><span class="p">,</span>
+                    <span class="n">freeze_weights</span><span class="o">=</span><span class="n">freeze_weights</span><span class="p">,</span>
+                    <span class="n">lp_ft</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="p">)</span>
+
+                <span class="c1"># Attempt to train model type with specified label part</span>
+                <span class="n">train_eval_model</span><span class="p">(</span><span class="n">curr_hparams</span><span class="p">)</span>
+
+                <span class="c1"># Skip, if not doing LP-FT (fine-tuning after linear probing)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">freeze_weights</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">LP_FT</span><span class="p">:</span>
+                    <span class="k">continue</span>
+
+                <span class="c1"># Prepare arguments for loading linear-probing (LP) model</span>
+                <span class="c1"># NOTE: Just-trained model should&#39;ve been an LP model</span>
+                <span class="n">lp_ft_hparams</span> <span class="o">=</span> <span class="n">curr_hparams</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">lp_ft_hparams</span><span class="p">[</span><span class="s2">&quot;from_ssl_eval&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="n">lp_ft_hparams</span><span class="p">[</span><span class="s2">&quot;ssl_ckpt_path&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">load_model</span><span class="o">.</span><span class="n">find_best_ckpt_path</span><span class="p">(</span>
+                    <span class="n">exp_name</span><span class="o">=</span><span class="n">lp_ft_hparams</span><span class="p">[</span><span class="s2">&quot;exp_name&quot;</span><span class="p">],</span>
+                <span class="p">)</span>
+
+                <span class="c1"># Create the LP-FT eval experiment name</span>
+                <span class="n">lp_ft_hparams</span> <span class="o">=</span> <span class="n">prep_eval_exp_hparams</span><span class="p">(</span><span class="n">lp_ft_hparams</span><span class="p">)</span>
+
+                <span class="c1"># Attempt to train fine-tuned model from linear-probed (LP) model</span>
+                <span class="n">train_eval_model</span><span class="p">(</span><span class="n">lp_ft_hparams</span><span class="p">)</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Analyze Results                                #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="analyze_eval_model_preds">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.analyze_eval_model_preds">[docs]</a>
+<span class="k">def</span> <span class="nf">analyze_eval_model_preds</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">dset</span><span class="p">,</span> <span class="n">model_type</span><span class="o">=</span><span class="s2">&quot;linear_lstm&quot;</span><span class="p">,</span>
+                             <span class="n">label_part</span><span class="o">=</span><span class="s2">&quot;side&quot;</span><span class="p">,</span> <span class="n">freeze_weights</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                             <span class="n">augment_training</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                             <span class="n">lp_ft</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Evaluate single evaluation model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Name of SSL experiment</span>
+<span class="sd">    dset : str or list, optional</span>
+<span class="sd">        Name of evaluation split / dataset to perform inference on, by default</span>
+<span class="sd">        constants.DEFAULT_EVAL_SPLIT</span>
+<span class="sd">    model_type : str, optional</span>
+<span class="sd">        One of (&quot;linear&quot;, &quot;linear_lstm&quot;), by default &quot;linear_lstm&quot;</span>
+<span class="sd">    label_part : str, optional</span>
+<span class="sd">        One of (&quot;side&quot;, &quot;plane&quot;), by default &quot;side&quot;</span>
+<span class="sd">    freeze_weights : bool, optional</span>
+<span class="sd">        If True, freezes convolutional weights during training, by default False</span>
+<span class="sd">    augment_training : bool, optional</span>
+<span class="sd">        If True, adds augmentation during linear probing / fine-tuning, by</span>
+<span class="sd">        default False</span>
+<span class="sd">    lp_ft : bool, optional</span>
+<span class="sd">        If True, trains eval. model via fine-tuning starting FROM an eval. model</span>
+<span class="sd">        that was created via linear probing, by default False.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">exp_eval_name</span> <span class="o">=</span> <span class="n">TEMPLATE_EVAL_EXP_NAME</span><span class="o">.</span><span class="n">render</span><span class="p">(</span>
+            <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
+            <span class="n">model_type</span><span class="o">=</span><span class="n">model_type</span><span class="p">,</span>
+            <span class="n">label_part</span><span class="o">=</span><span class="n">label_part</span><span class="p">,</span>
+            <span class="n">freeze_weights</span><span class="o">=</span><span class="n">freeze_weights</span><span class="p">,</span>
+            <span class="n">lp_ft</span><span class="o">=</span><span class="n">lp_ft</span><span class="p">,</span>
+            <span class="n">augment_training</span><span class="o">=</span><span class="n">augment_training</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">dsets</span> <span class="o">=</span> <span class="p">[</span><span class="n">dset</span><span class="p">]</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dset</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="n">dset</span>
+    <span class="k">for</span> <span class="n">dset</span> <span class="ow">in</span> <span class="n">dsets</span><span class="p">:</span>
+        <span class="c1"># Correctly convert to dset and split</span>
+        <span class="n">curr_dset</span> <span class="o">=</span> <span class="n">dset</span>
+        <span class="n">curr_split</span> <span class="o">=</span> <span class="s2">&quot;test&quot;</span>
+        <span class="k">if</span> <span class="n">dset</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">):</span>
+            <span class="n">curr_dset</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">curr_split</span> <span class="o">=</span> <span class="n">dset</span>
+
+        <span class="c1"># Create overwriting parameters, if external dataset desired</span>
+        <span class="n">eval_hparams</span> <span class="o">=</span> <span class="n">load_data</span><span class="o">.</span><span class="n">create_eval_hparams</span><span class="p">(</span><span class="n">curr_dset</span><span class="p">,</span> <span class="n">curr_split</span><span class="p">)</span>
+
+        <span class="c1"># 1. Perform inference on dataset</span>
+        <span class="n">model_eval</span><span class="o">.</span><span class="n">infer_dset</span><span class="p">(</span>
+            <span class="n">exp_eval_name</span><span class="p">,</span>
+            <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">eval_hparams</span><span class="p">)</span>
+
+        <span class="c1"># 2. Embed dataset</span>
+        <span class="n">model_eval</span><span class="o">.</span><span class="n">embed_dset</span><span class="p">(</span>
+            <span class="n">exp_eval_name</span><span class="p">,</span>
+            <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">eval_hparams</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># 3. Analyze predictions separately</span>
+        <span class="n">model_eval</span><span class="o">.</span><span class="n">analyze_dset_preds</span><span class="p">(</span>
+            <span class="n">exp_eval_name</span><span class="p">,</span>
+            <span class="n">dsets</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+            <span class="n">log_to_comet</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># 4. Create UMAP together</span>
+    <span class="n">model_eval</span><span class="o">.</span><span class="n">analyze_dset_preds</span><span class="p">(</span>
+        <span class="n">exp_eval_name</span><span class="p">,</span>
+        <span class="n">dsets</span><span class="o">=</span><span class="n">dsets</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="analyze_preds">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.analyze_preds">[docs]</a>
+<span class="k">def</span> <span class="nf">analyze_preds</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">augment_training</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                  <span class="n">dset</span><span class="o">=</span><span class="n">constants</span><span class="o">.</span><span class="n">DEFAULT_EVAL_SPLIT</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Perform test prediction analysis from `model_eval` on trained evaluations</span>
+<span class="sd">    models</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_name : str</span>
+<span class="sd">        Base SSL experiment name</span>
+<span class="sd">    augment_training : bool, optional</span>
+<span class="sd">        If True, check evaluation models fine-tuned WITH augmentation, by</span>
+<span class="sd">        default False.</span>
+<span class="sd">    dset : str or list, optional</span>
+<span class="sd">        Name of evaluation split / dataset to perform inference on, by default</span>
+<span class="sd">        constants.DEFAULT_EVAL_SPLIT</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Evaluate each model separately</span>
+    <span class="k">for</span> <span class="n">model_type</span> <span class="ow">in</span> <span class="n">MODEL_TYPES</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">label_part</span> <span class="ow">in</span> <span class="n">LABEL_PARTS</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">freeze_weights</span> <span class="ow">in</span> <span class="n">FREEZE_WEIGHTS</span><span class="p">:</span>
+                <span class="n">analyze_eval_model_preds</span><span class="p">(</span>
+                    <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
+                    <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+                    <span class="n">model_type</span><span class="o">=</span><span class="n">model_type</span><span class="p">,</span>
+                    <span class="n">label_part</span><span class="o">=</span><span class="n">label_part</span><span class="p">,</span>
+                    <span class="n">freeze_weights</span><span class="o">=</span><span class="n">freeze_weights</span><span class="p">,</span>
+                    <span class="n">augment_training</span><span class="o">=</span><span class="n">augment_training</span><span class="p">,</span>
+                    <span class="n">lp_ft</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="c1"># Skip, if not doing LP-FT (fine-tuning after linear probing)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">LP_FT</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="c1"># Attempt to train fine-tuned model from linear-probed model</span>
+            <span class="n">analyze_eval_model_preds</span><span class="p">(</span>
+                <span class="n">exp_name</span><span class="o">=</span><span class="n">exp_name</span><span class="p">,</span>
+                <span class="n">dset</span><span class="o">=</span><span class="n">dset</span><span class="p">,</span>
+                <span class="n">model_type</span><span class="o">=</span><span class="n">model_type</span><span class="p">,</span>
+                <span class="n">label_part</span><span class="o">=</span><span class="n">label_part</span><span class="p">,</span>
+                <span class="n">freeze_weights</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">lp_ft</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">augment_training</span><span class="o">=</span><span class="n">augment_training</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                               Helper Functions                               #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="find_best_ckpt_path">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.find_best_ckpt_path">[docs]</a>
+<span class="k">def</span> <span class="nf">find_best_ckpt_path</span><span class="p">(</span><span class="n">path_exp_dir</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Finds the path to the best model checkpoint.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path_exp_dir : str</span>
+<span class="sd">        Path to a trained model directory</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        Path to PyTorch Lightning best model checkpoint</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    RuntimeError</span>
+<span class="sd">        If no valid ckpt files found</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ckpt_paths</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">path_exp_dir</span><span class="si">}</span><span class="s2">/0/*.ckpt&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Remove last checkpoint. NOTE: The other checkpoint is for the best epoch</span>
+    <span class="n">ckpt_paths</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">ckpt_paths</span> <span class="k">if</span> <span class="s2">&quot;last.ckpt&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">path</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ckpt_paths</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;No best epoch model checkpoint (.ckpt) found!&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ckpt_paths</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">LOGGER</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;More than 1 checkpoint file (.ckpt) found besides &quot;</span>
+                       <span class="s2">&quot;last.ckpt!&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ckpt_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="prep_eval_exp_hparams">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.prep_eval_exp_hparams">[docs]</a>
+<span class="k">def</span> <span class="nf">prep_eval_exp_hparams</span><span class="p">(</span><span class="n">hparams</span><span class="p">,</span> <span class="o">**</span><span class="n">overwrite_hparams</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Prepare hyperparameters for training SSL linear probe / fine-tuning.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Contains all hyperparameters of the experiment</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Updated dictionary of hyperparameters for SSL eval model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create copy of hyperparameters</span>
+    <span class="n">hparams</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Update hparams</span>
+    <span class="n">hparams</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">overwrite_hparams</span><span class="p">)</span>
+
+    <span class="c1"># Remove comet ML key</span>
+    <span class="n">hparams</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;comet_exp_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="c1"># Get experiment name suffix</span>
+    <span class="n">exp_name_suffix</span> <span class="o">=</span> <span class="n">hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;exp_name_suffix&quot;</span><span class="p">)</span>
+    <span class="n">exp_name_suffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;-</span><span class="si">{</span><span class="n">exp_name_suffix</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">exp_name_suffix</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+
+    <span class="c1"># Create new eval exp. name</span>
+    <span class="n">exp_eval_name</span> <span class="o">=</span> <span class="n">TEMPLATE_EVAL_EXP_NAME</span><span class="o">.</span><span class="n">render</span><span class="p">(</span>
+        <span class="n">exp_name</span><span class="o">=</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;exp_name&quot;</span><span class="p">],</span>
+        <span class="n">exp_name_suffix</span><span class="o">=</span><span class="n">exp_name_suffix</span><span class="p">,</span>
+        <span class="n">model_type</span><span class="o">=</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;model_type&quot;</span><span class="p">],</span>
+        <span class="n">label_part</span><span class="o">=</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;label_part&quot;</span><span class="p">],</span>
+        <span class="n">freeze_weights</span><span class="o">=</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;freeze_weights&quot;</span><span class="p">],</span>
+        <span class="n">lp_ft</span><span class="o">=</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;lp_ft&quot;</span><span class="p">],</span>
+        <span class="n">augment_training</span><span class="o">=</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;augment_training&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+
+    <span class="c1"># If new eval exp. name already exists, store the Comet ML experiment key</span>
+    <span class="c1"># NOTE: Useful for resuming failed SSL eval experiments</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">old_hparams</span> <span class="o">=</span> <span class="n">load_model</span><span class="o">.</span><span class="n">get_hyperparameters</span><span class="p">(</span><span class="n">exp_name</span><span class="o">=</span><span class="n">exp_eval_name</span><span class="p">,</span>
+                                                 <span class="n">on_error</span><span class="o">=</span><span class="s2">&quot;raise&quot;</span><span class="p">)</span>
+        <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;comet_exp_key&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">old_hparams</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;comet_exp_key&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="c1"># Ensure number of classes is as expected</span>
+    <span class="n">label_part</span> <span class="o">=</span> <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;label_part&quot;</span><span class="p">]</span>
+    <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;num_classes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">constants</span><span class="o">.</span><span class="n">LABEL_PART_TO_CLASSES</span><span class="p">[</span><span class="n">label_part</span><span class="p">][</span><span class="s2">&quot;classes&quot;</span><span class="p">])</span>
+
+    <span class="c1"># Update experiment name</span>
+    <span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;exp_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">exp_eval_name</span>
+
+    <span class="k">return</span> <span class="n">hparams</span></div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Main Flow                                   #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../src.scripts.html#src.scripts.ssl_model_eval.main">[docs]</a>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">exp_names</span><span class="p">,</span> <span class="n">dsets</span><span class="p">,</span> <span class="n">hparams</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Perform evaluation of SSL model.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    exp_names : list</span>
+<span class="sd">        List of experiments to evaluate</span>
+<span class="sd">    dsets : list</span>
+<span class="sd">        List of datasets to evaluate</span>
+<span class="sd">    hparams : dict</span>
+<span class="sd">        Arguments for training SSL evaluation model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># For each base SSL experiment name provided,</span>
+    <span class="k">for</span> <span class="n">exp_name</span> <span class="ow">in</span> <span class="n">exp_names</span><span class="p">:</span>
+        <span class="c1"># Check that exp_name leads to a valid directory</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="n">constants</span><span class="o">.</span><span class="n">DIR_RESULTS</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;`exp_name` (</span><span class="si">%s</span><span class="s2">) provided does not lead to a &quot;</span>
+                               <span class="s2">&quot;SSL-trained model directory!&quot;</span><span class="p">,</span> <span class="n">exp_name</span><span class="p">)</span>
+
+        <span class="c1"># Train all evaluation models for pretrained SSL model</span>
+        <span class="n">train_eval_models</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="o">**</span><span class="n">hparams</span><span class="p">)</span>
+
+        <span class="c1"># Analyze results of evaluation models</span>
+        <span class="n">analyze_preds</span><span class="p">(</span><span class="n">exp_name</span><span class="p">,</span> <span class="n">dset</span><span class="o">=</span><span class="n">dsets</span><span class="p">,</span>
+                      <span class="n">augment_training</span><span class="o">=</span><span class="n">hparams</span><span class="p">[</span><span class="s2">&quot;augment_training&quot;</span><span class="p">])</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="c1"># 0. Initialize ArgumentParser</span>
+    <span class="n">PARSER</span> <span class="o">=</span> <span class="n">argparse</span><span class="o">.</span><span class="n">ArgumentParser</span><span class="p">()</span>
+    <span class="n">init</span><span class="p">(</span><span class="n">PARSER</span><span class="p">)</span>
+
+    <span class="c1"># 1. Get arguments</span>
+    <span class="n">ARGS</span> <span class="o">=</span> <span class="n">PARSER</span><span class="o">.</span><span class="n">parse_args</span><span class="p">()</span>
+
+    <span class="c1"># 2. Load shared training configurations</span>
+    <span class="n">CONF</span> <span class="o">=</span> <span class="n">config_utils</span><span class="o">.</span><span class="n">load_config</span><span class="p">(</span><span class="vm">__file__</span><span class="p">,</span> <span class="n">ARGS</span><span class="o">.</span><span class="n">config</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">LOGGER</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">################################################################################</span>
+<span class="s2">#                       Starting `ssl_model_eval` Script                       #</span>
+<span class="s2">################################################################################&quot;&quot;&quot;</span><span class="p">)</span>
+
+    <span class="c1"># 2.1 Process configuration parameters</span>
+    <span class="c1"># Flatten nesting in configuration file</span>
+    <span class="n">HPARAMS</span> <span class="o">=</span> <span class="n">config_utils</span><span class="o">.</span><span class="n">flatten_nested_dict</span><span class="p">(</span><span class="n">CONF</span><span class="p">)</span>
+
+    <span class="c1"># 3. Run main</span>
+    <span class="n">main</span><span class="p">(</span><span class="n">ARGS</span><span class="o">.</span><span class="n">exp_names</span><span class="p">,</span> <span class="n">ARGS</span><span class="o">.</span><span class="n">dsets</span><span class="p">,</span> <span class="n">HPARAMS</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

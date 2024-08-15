@@ -96,11 +96,199 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 </section>
-<section id="src-data-prep-scripts-create-metadata-module">
-<h2>src.data_prep.scripts.create_metadata module<a class="headerlink" href="#src-data-prep-scripts-create-metadata-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.scripts.create_metadata">
+<span id="src-data-prep-scripts-create-metadata-module"></span><h2>src.data_prep.scripts.create_metadata module<a class="headerlink" href="#module-src.data_prep.scripts.create_metadata" title="Link to this heading"></a></h2>
+<p>Script to create metadata file for UIowa and CHOP for view labeling</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.clean_image_dsets_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">clean_image_dsets_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#clean_image_dsets_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.clean_image_dsets_metadata" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Preprocess metadata for image datasets:</dt><dd><ol class="arabic simple">
+<li><p>SickKids Silent Trial</p></li>
+<li><p>Stanford (image)</p></li>
+<li><p>UIowa</p></li>
+<li><p>CHOP</p></li>
+</ol>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Not a lot to be done because they were created through this script as well.</p>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.clean_sickkids_video_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">clean_sickkids_video_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#clean_sickkids_video_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.clean_sickkids_video_metadata" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Preprocesses raw SickKids (video) to:</dt><dd><ol class="loweralpha simple">
+<li><p>extract view label and its sub-parts plane and side,</p></li>
+<li><p>add unlabeled data</p></li>
+</ol>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.clean_stanford_video_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">clean_stanford_video_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#clean_stanford_video_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.clean_stanford_video_metadata" title="Link to this definition"></a></dt>
+<dd><p>Preprocess raw Stanford (video) metadata</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.create_chop_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">create_chop_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#create_chop_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.create_chop_metadata" title="Link to this definition"></a></dt>
+<dd><p>Based on folder structure and image names, create metadata table with
+relative image paths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dir_data</strong> (<em>str</em>) – Path to CHOP folder</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, save metadata table to file path</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table containing <cite>filename</cite>, <cite>label</cite>, <cite>id</cite>, <cite>visit</cite> and
+<cite>seq_number</cite></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.create_sickkids_silent_trial_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">create_sickkids_silent_trial_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#create_sickkids_silent_trial_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.create_sickkids_silent_trial_metadata" title="Link to this definition"></a></dt>
+<dd><p>Based on folder structure and image names, create metadata table with
+relative image paths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dir_data</strong> (<em>str</em>) – Path to SickKids Silent Trial folder</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, save metadata table to file path</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table containing <cite>filename</cite>, <cite>label</cite>, <cite>id</cite>, <cite>visit</cite> and
+<cite>seq_number</cite></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.create_stanford_image_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">create_stanford_image_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#create_stanford_image_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.create_stanford_image_metadata" title="Link to this definition"></a></dt>
+<dd><p>Based on folder structure and image names, create metadata table with
+relative image paths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dir_data</strong> (<em>str</em>) – Path to Stanford Non-Sequence folder</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, save metadata table to file path</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table containing <cite>filename</cite>, <cite>label</cite>, <cite>id</cite>, <cite>visit</cite> and
+<cite>seq_number</cite></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.create_uiowa_metadata_from_src">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">create_uiowa_metadata_from_src</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dir_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#create_uiowa_metadata_from_src"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.create_uiowa_metadata_from_src" title="Link to this definition"></a></dt>
+<dd><p>Based on folder structure and image names, create metadata table with
+relative image paths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dir_data</strong> (<em>str</em>) – Path to UIowa folder</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, save metadata table to file path</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Metadata table containing <cite>filename</cite>, <cite>label</cite>, <cite>id</cite>, <cite>visit</cite> and
+<cite>seq_number</cite></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pandas.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.main_clean_metadata">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">main_clean_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#main_clean_metadata"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.main_clean_metadata" title="Link to this definition"></a></dt>
+<dd><p>Create clean metadata files for video and image datasets.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.main_correct_labels">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">main_correct_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ref_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'corrected_view_labels.xlsx'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'plane'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#main_correct_labels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.main_correct_labels" title="Link to this definition"></a></dt>
+<dd><p>Correct labels for each dataset based on a reference file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ref_path</strong> (<em>str</em>) – Path to XLSX file containing modified labels and
+(dset, id, visit, seq_number) for every image that needs correction</p></li>
+<li><p><strong>label_col</strong> (<em>str</em>) – Name of column whose label is corrected</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.main_prepare_image_datasets">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">main_prepare_image_datasets</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#main_prepare_image_datasets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.main_prepare_image_datasets" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Prepare image datasets, specifically:</dt><dd><ol class="arabic simple">
+<li><p>Create CHOP metadata</p></li>
+<li><p>Prepare UIowa data and create metadata</p></li>
+<li><p>Create Stanford (image) metadata</p></li>
+<li><p>Create SickKids Silent Trial metadata</p></li>
+</ol>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.preprocess_uiowa_data">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">preprocess_uiowa_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/hpf/largeprojects/ccmbio/shua/data/ViewLabeling/UIowa'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/hpf/largeprojects/ccmbio/shua/data/ViewLabeling/UIowa/'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#preprocess_uiowa_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.preprocess_uiowa_data" title="Link to this definition"></a></dt>
+<dd><p>Preprocesses UIowa Data and places it into the ViewLabeling data directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>src_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Source directory containined nested data, by default
+SRC_DIR_UIOWA_DATA</p></li>
+<li><p><strong>dst_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Destination directory to store preprocessed images, where patient ID
+is prepended to the original filename, by default
+constants.DSET_TO_IMG_SUBDIR_FULL[“uiowa”]</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_prep.scripts.create_metadata.print_basic_data_stats">
+<span class="sig-prename descclassname"><span class="pre">src.data_prep.scripts.create_metadata.</span></span><span class="sig-name descname"><span class="pre">print_basic_data_stats</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_prep/scripts/create_metadata.html#print_basic_data_stats"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_prep.scripts.create_metadata.print_basic_data_stats" title="Link to this definition"></a></dt>
+<dd><p>Print basic stats about the data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_metadata</strong> (<em>pd.DataFrame</em>) – Each row is metadata for an US image</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="module-contents">
-<h2>Module contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<section id="module-src.data_prep.scripts">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.data_prep.scripts" title="Link to this heading"></a></h2>
 </section>
 </section>
 

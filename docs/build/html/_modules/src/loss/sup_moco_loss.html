@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src.loss.sup_moco_loss &mdash; Renal View Labeling 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="../../../_static/documentation_options.js?v=8d563738"></script>
+        <script src="../../../_static/doctools.js?v=9a2dae69"></script>
+        <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            Renal View Labeling
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../modules.html">src</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">Renal View Labeling</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">src.loss.sup_moco_loss</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for src.loss.sup_moco_loss</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">sup_moco_loss.py</span>
+
+<span class="sd">Description: Supervised NT-Xent loss implementation, where memory bank does not</span>
+<span class="sd">             pull negative samples containing examples from the positive class.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c1"># Non-standard libraries</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">lightly.utils</span> <span class="kn">import</span> <span class="n">dist</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">distributed</span> <span class="k">as</span> <span class="n">torch_dist</span>
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                   Classes                                    #</span>
+<span class="c1">################################################################################</span>
+<div class="viewcode-block" id="SupMoCoLoss">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.sup_moco_loss.SupMoCoLoss">[docs]</a>
+<span class="k">class</span> <span class="nc">SupMoCoLoss</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    SupMoCoLoss class.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Implementation of the supervised MoCo loss; a supervised NT-Xent loss with</span>
+<span class="sd">    a memory bank with embeddings and their labels. &quot;NT-Xent&quot; stands for</span>
+<span class="sd">    normalized temperature-scaled cross entropy loss.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">num_classes</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="n">temperature</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">memory_bank_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">gather_distributed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize NTXentLoss object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        num_classes : int, optional</span>
+<span class="sd">            Number of classes, by default 3</span>
+<span class="sd">        temperature : float, optional</span>
+<span class="sd">            Temperature to scale logits, by default 0.5</span>
+<span class="sd">        memory_bank_size : int, optional</span>
+<span class="sd">            Size of desired memory bank, by default 0</span>
+<span class="sd">        gather_distributed : bool, optional</span>
+<span class="sd">            If True, training on multiple GPUs, by default False</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span> <span class="o">=</span> <span class="n">num_classes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span> <span class="o">=</span> <span class="n">temperature</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gather_distributed</span> <span class="o">=</span> <span class="n">gather_distributed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">CrossEntropyLoss</span><span class="p">(</span><span class="n">reduction</span><span class="o">=</span><span class="s2">&quot;mean&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eps</span> <span class="o">=</span> <span class="mf">1e-8</span>
+
+        <span class="c1"># Create a memory bank that stores past batches and their labels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">memory_bank</span> <span class="o">=</span> <span class="n">LabeledMemoryBank</span><span class="p">(</span><span class="n">num_classes</span><span class="p">,</span> <span class="n">memory_bank_size</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">eps</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;Illegal temperature: abs(</span><span class="si">{}</span><span class="s2">) &lt; 1e-8&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">temperature</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">gather_distributed</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">torch_dist</span><span class="o">.</span><span class="n">is_available</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;gather_distributed is True but torch.distributed is not available. &quot;</span>
+                <span class="s2">&quot;Please set gather_distributed=False or install a torch version with &quot;</span>
+                <span class="s2">&quot;distributed support.&quot;</span>
+            <span class="p">)</span>
+
+
+<div class="viewcode-block" id="SupMoCoLoss.forward">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.sup_moco_loss.SupMoCoLoss.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">out0</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">out1</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">labels</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Forward pass through Supervised Contrastive Cross-Entropy Loss.</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        If used with a memory bank, the samples from the memory bank are used</span>
+<span class="sd">        as negative examples. Otherwise, within-batch samples are used as</span>
+<span class="sd">        negative samples.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        out0 : torch.FloatTensor</span>
+<span class="sd">            Output projections of the first set of transformed images.</span>
+<span class="sd">            Shape: (batch_size, embedding_size)</span>
+<span class="sd">        out1 : torch.FloatTensor</span>
+<span class="sd">            Output projections of the second set of transformed images.</span>
+<span class="sd">            Shape: (batch_size, embedding_size)</span>
+<span class="sd">        labels : torch.LongTensor</span>
+<span class="sd">            Labels corresponding to both out0 and out2, which is assumed to be</span>
+<span class="sd">            the same for both out0 and out1.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        torch.Tensor</span>
+<span class="sd">            Supervised MoCo Loss value.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">device</span> <span class="o">=</span> <span class="n">out0</span><span class="o">.</span><span class="n">device</span>
+        <span class="n">batch_size</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">out0</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="c1"># normalize the output to length 1</span>
+        <span class="n">out0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">out0</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">out1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="n">out1</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># ask memory bank for negative samples and extend it with out1 if</span>
+        <span class="c1"># out1 requires a gradient, otherwise keep the same vectors in the</span>
+        <span class="c1"># memory bank (this allows for keeping the memory bank constant e.g.</span>
+        <span class="c1"># for evaluating the loss on the test set)</span>
+        <span class="c1"># out1: shape: (batch_size, embedding_size)</span>
+        <span class="c1"># negatives: shape: (embedding_size, memory_bank_size)</span>
+        <span class="n">out1</span><span class="p">,</span> <span class="n">mem_bank_samples</span><span class="p">,</span> <span class="n">mem_bank_labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">memory_bank</span><span class="o">.</span><span class="n">forward</span><span class="p">(</span>
+            <span class="n">out1</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">update</span><span class="o">=</span><span class="n">out0</span><span class="o">.</span><span class="n">requires_grad</span>
+        <span class="p">)</span>
+
+        <span class="c1"># We use the cosine similarity, which is a dot product (einsum) here,</span>
+        <span class="c1"># as all vectors are already normalized to unit length.</span>
+        <span class="c1"># Notation in einsum: n = batch_size, c = embedding_size and k = memory_bank_size.</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                      CASE 1: Using Memory Bank                       #</span>
+        <span class="c1">########################################################################</span>
+        <span class="c1"># CASE 1: Memory bank provided examples</span>
+        <span class="k">if</span> <span class="n">mem_bank_samples</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># use negatives from memory bank</span>
+            <span class="n">mem_bank_samples</span> <span class="o">=</span> <span class="n">mem_bank_samples</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+
+            <span class="c1"># sim_pos is of shape (batch_size, 1) and sim_pos[i] denotes the similarity</span>
+            <span class="c1"># of the i-th sample in the batch to its positive pair</span>
+            <span class="n">sim_pos</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nc,nc-&gt;n&quot;</span><span class="p">,</span> <span class="n">out0</span><span class="p">,</span> <span class="n">out1</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="c1"># sim_neg is of shape (batch_size, memory_bank_size) and sim_neg[i,j] denotes the similarity</span>
+            <span class="c1"># of the i-th sample to the j-th negative sample</span>
+            <span class="n">sim_neg</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nc,ck-&gt;nk&quot;</span><span class="p">,</span> <span class="n">out0</span><span class="p">,</span> <span class="n">mem_bank_samples</span><span class="p">)</span>
+
+            <span class="c1"># For each sample, get negative memory bank samples of different labels</span>
+            <span class="c1"># NOTE: Each could be of varying lengths</span>
+            <span class="n">same_label_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">labels</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="n">mem_bank_labels</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+            <span class="n">accum_loss</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+                <span class="n">curr_not_label_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">same_label_mask</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:]</span>
+                <span class="n">curr_neg_samples</span> <span class="o">=</span> <span class="n">sim_neg</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:][</span><span class="n">curr_not_label_mask</span><span class="p">]</span>
+                <span class="c1"># NOTE: First element is always the positive sample</span>
+                <span class="n">logits</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">sim_pos</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">curr_neg_samples</span><span class="p">])</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+                <span class="c1"># Compute loss for each sample, separately</span>
+                <span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">logits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+                <span class="n">accum_loss</span> <span class="o">=</span> <span class="n">accum_loss</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">logits</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+
+            <span class="c1"># Compute loss as mean across samples</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">accum_loss</span> <span class="o">/</span> <span class="n">batch_size</span>
+            <span class="k">return</span> <span class="n">loss</span>
+
+        <span class="c1">########################################################################</span>
+        <span class="c1">#                    CASE 2: Not Using Memory Bank                     #</span>
+        <span class="c1">########################################################################</span>
+        <span class="c1">#  CASE 2: Memory bank is not active or empty</span>
+        <span class="c1"># Raise error, if doing multi-gpu training</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gather_distributed</span> <span class="ow">and</span> <span class="n">dist</span><span class="o">.</span><span class="n">world_size</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">&quot;Not implemented for  multi-GPU training!&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Calculate similiarities</span>
+        <span class="c1"># NOTE: Each matrix is of shape (n, n)</span>
+        <span class="n">logits_00</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nc,mc-&gt;nm&quot;</span><span class="p">,</span> <span class="n">out0</span><span class="p">,</span> <span class="n">out0</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span>
+        <span class="n">logits_01</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nc,mc-&gt;nm&quot;</span><span class="p">,</span> <span class="n">out0</span><span class="p">,</span> <span class="n">out1</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span>
+        <span class="n">logits_10</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nc,mc-&gt;nm&quot;</span><span class="p">,</span> <span class="n">out1</span><span class="p">,</span> <span class="n">out0</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span>
+        <span class="n">logits_11</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;nc,mc-&gt;nm&quot;</span><span class="p">,</span> <span class="n">out1</span><span class="p">,</span> <span class="n">out1</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">temperature</span>
+
+        <span class="c1"># Create diagonal mask</span>
+        <span class="n">diag_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">out0</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+
+        <span class="c1"># Create mask for same label images</span>
+        <span class="n">same_label_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">labels</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="n">labels</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+
+        <span class="c1"># Compute loss on each sample</span>
+        <span class="n">accum_loss</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="c1"># Get mask for the current sample for DIFFERENT label images</span>
+            <span class="n">curr_not_label_mask</span> <span class="o">=</span> <span class="o">~</span><span class="n">same_label_mask</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="c1"># Get mask for same image</span>
+            <span class="n">curr_diag_mask</span> <span class="o">=</span> <span class="n">diag_mask</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:]</span>
+
+            <span class="c1"># Get similarities for the current sample</span>
+            <span class="c1"># 1. Same view</span>
+            <span class="n">curr_00</span> <span class="o">=</span> <span class="n">logits_00</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="n">curr_11</span> <span class="o">=</span> <span class="n">logits_11</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="c1"># 2. Different view</span>
+            <span class="n">curr_01</span> <span class="o">=</span> <span class="n">logits_01</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="n">curr_10</span> <span class="o">=</span> <span class="n">logits_10</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span> <span class="p">:]</span>
+
+            <span class="c1"># Remove same image/label comparisons in same view comparisons</span>
+            <span class="n">curr_00</span> <span class="o">=</span> <span class="n">curr_00</span><span class="p">[</span><span class="n">curr_not_label_mask</span><span class="p">]</span>
+            <span class="n">curr_11</span> <span class="o">=</span> <span class="n">curr_11</span><span class="p">[</span><span class="n">curr_not_label_mask</span><span class="p">]</span>
+
+            <span class="c1"># Extract same image / diff view similarity</span>
+            <span class="n">sim_pos_01</span> <span class="o">=</span> <span class="n">curr_01</span><span class="p">[</span><span class="n">curr_diag_mask</span><span class="p">]</span>
+            <span class="n">sim_pos_10</span> <span class="o">=</span> <span class="n">curr_10</span><span class="p">[</span><span class="n">curr_diag_mask</span><span class="p">]</span>
+
+            <span class="c1"># Remove same image/label comparisons in different view comparison</span>
+            <span class="n">curr_01</span> <span class="o">=</span> <span class="n">curr_01</span><span class="p">[</span><span class="n">curr_not_label_mask</span><span class="p">]</span>
+            <span class="n">curr_10</span> <span class="o">=</span> <span class="n">curr_10</span><span class="p">[</span><span class="n">curr_not_label_mask</span><span class="p">]</span>
+
+            <span class="c1"># Create arrays where first element is the positive sample</span>
+            <span class="n">sim_all_01</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">sim_pos_01</span><span class="p">,</span> <span class="n">curr_01</span><span class="p">,</span> <span class="n">curr_00</span><span class="p">])</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">sim_all_10</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">sim_pos_10</span><span class="p">,</span> <span class="n">curr_10</span><span class="p">,</span> <span class="n">curr_11</span><span class="p">])</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="c1"># Create targets</span>
+            <span class="n">target</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">sim_all_01</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+
+            <span class="c1"># Compute loss two-way from 0-&gt;1 and 1-&gt;0</span>
+            <span class="n">loss_01</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">sim_all_01</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+            <span class="n">loss_10</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">sim_all_10</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+            <span class="n">accum_loss</span> <span class="o">=</span> <span class="n">accum_loss</span> <span class="o">+</span> <span class="n">loss_01</span> <span class="o">+</span> <span class="n">loss_10</span>
+
+        <span class="c1"># Compute loss as mean across samples</span>
+        <span class="n">loss</span> <span class="o">=</span> <span class="n">accum_loss</span> <span class="o">/</span> <span class="n">batch_size</span>
+
+        <span class="k">return</span> <span class="n">loss</span></div>
+</div>
+
+
+
+<span class="c1"># TODO: Do ablation on `first_pass` logic</span>
+<div class="viewcode-block" id="LabeledMemoryBank">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.sup_moco_loss.LabeledMemoryBank">[docs]</a>
+<span class="k">class</span> <span class="nc">LabeledMemoryBank</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    LabeledMemoryBank class.</span>
+
+<span class="sd">    Note</span>
+<span class="sd">    ----</span>
+<span class="sd">    Stores labels additional to the embeddings</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">16</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Illegal memory bank size </span><span class="si">{</span><span class="n">size</span><span class="si">}</span><span class="s2">, must be non-negative.&quot;</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">=</span> <span class="n">size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span> <span class="o">=</span> <span class="n">num_classes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">first_pass</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;bank&quot;</span><span class="p">,</span> <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float</span><span class="p">),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;bank_ptr&quot;</span><span class="p">,</span> <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="c1"># Store integer labels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span>
+            <span class="s2">&quot;labels&quot;</span><span class="p">,</span> <span class="n">tensor</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">),</span> <span class="n">persistent</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">_init_memory_bank</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the memory bank if it&#39;s empty</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dim : int</span>
+<span class="sd">            The dimension of the which are stored in the bank.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># create memory bank</span>
+        <span class="c1"># we could use register buffers like in the moco repo</span>
+        <span class="c1"># https://github.com/facebookresearch/moco but we don&#39;t</span>
+        <span class="c1"># want to pollute our checkpoints</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bank</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">)</span><span class="o">.</span><span class="n">type_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bank</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bank</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">normalize</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bank</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bank_ptr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">type_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bank_ptr</span><span class="p">)</span>
+
+        <span class="c1"># NOTE: Initialize uniformly random labels for memory bank examples</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="n">high</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">,))</span><span class="o">.</span><span class="n">type_as</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">)</span>
+
+
+    <span class="nd">@torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">()</span>
+    <span class="k">def</span> <span class="nf">_dequeue_and_enqueue</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">labels</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Dequeue the oldest batch and add the latest one</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        batch : torch.Tensor</span>
+<span class="sd">            The latest batch of keys to add to the memory bank.</span>
+<span class="sd">        labels : torch.Tensor</span>
+<span class="sd">            Labels associated with each item in the batch</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">ptr</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bank_ptr</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">ptr</span> <span class="o">+</span> <span class="n">batch_size</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+            <span class="c1"># Modify flag to say, the memory bank is completely full</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">first_pass</span> <span class="o">=</span> <span class="kc">False</span>
+
+            <span class="c1"># Handle end of list</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bank</span><span class="p">[:,</span> <span class="n">ptr</span><span class="p">:]</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[:</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="n">ptr</span><span class="p">]</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">ptr</span><span class="p">:]</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[:</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="n">ptr</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bank_ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="c1"># Handle start of list</span>
+            <span class="n">new_ptr</span> <span class="o">=</span> <span class="p">(</span><span class="n">ptr</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">)</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bank</span><span class="p">[:,</span> <span class="p">:</span><span class="n">new_ptr</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="n">ptr</span><span class="p">:]</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[:</span><span class="n">new_ptr</span><span class="p">]</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">-</span> <span class="n">ptr</span><span class="p">:]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bank_ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_ptr</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bank</span><span class="p">[:,</span> <span class="n">ptr</span> <span class="p">:</span> <span class="n">ptr</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">[</span><span class="n">ptr</span> <span class="p">:</span> <span class="n">ptr</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">]</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">bank_ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">ptr</span> <span class="o">+</span> <span class="n">batch_size</span>
+
+
+<div class="viewcode-block" id="LabeledMemoryBank.forward">
+<a class="viewcode-back" href="../../../src.loss.html#src.loss.sup_moco_loss.LabeledMemoryBank.forward">[docs]</a>
+    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span>
+                <span class="n">labels</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                <span class="n">update</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Query memory bank for additional negative samples</span>
+
+<span class="sd">        Note</span>
+<span class="sd">        ----</span>
+<span class="sd">        The output if the memory bank is of size 0, otherwise the output</span>
+<span class="sd">        and the entries from the memory bank.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        output : torch.Tensor</span>
+<span class="sd">            The output of the model.</span>
+<span class="sd">        labels : torch.Tensor</span>
+<span class="sd">            Batch labels</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple of (torch.Tensor, torch.Tensor, torch.LongTensor)</span>
+<span class="sd">            (i) Output provided</span>
+<span class="sd">            (ii) Entire memory bank</span>
+<span class="sd">            (iii) Stored labels for items in memory bank</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c1"># no memory bank, return the output</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">output</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">dim</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">shape</span>
+
+        <span class="c1"># initialize the memory bank if it is not already done</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bank</span><span class="o">.</span><span class="n">nelement</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_init_memory_bank</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span>
+
+        <span class="c1"># query and update memory bank</span>
+        <span class="n">bank</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bank</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+        <span class="c1"># get labels</span>
+        <span class="n">mem_bank_labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span>
+
+        <span class="c1"># Only return memory bank examples/labels that are stored</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">first_pass</span><span class="p">:</span>
+            <span class="n">ptr</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bank_ptr</span><span class="p">)</span>
+
+            <span class="c1"># CASE 1: First time running</span>
+            <span class="k">if</span> <span class="n">ptr</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">bank</span> <span class="o">=</span> <span class="n">mem_bank_labels</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="c1"># CASE 2: There is something in the memory bank, but not entirely</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">bank</span> <span class="o">=</span> <span class="n">bank</span><span class="p">[:,</span> <span class="p">:</span><span class="n">ptr</span><span class="p">]</span>
+                <span class="n">mem_bank_labels</span> <span class="o">=</span> <span class="n">mem_bank_labels</span><span class="p">[:</span><span class="n">ptr</span><span class="p">]</span>
+
+        <span class="c1"># only update memory bank if we later do backward pass (gradient)</span>
+        <span class="k">if</span> <span class="n">update</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dequeue_and_enqueue</span><span class="p">(</span><span class="n">output</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">output</span><span class="p">,</span> <span class="n">bank</span><span class="p">,</span> <span class="n">mem_bank_labels</span></div>
+</div>
+
+
+
+<span class="c1">################################################################################</span>
+<span class="c1">#                                  Debugging                                   #</span>
+<span class="c1">################################################################################</span>
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="c1"># B ::= batch size</span>
+    <span class="c1"># C ::= embedding dimensionality</span>
+    <span class="c1"># P ::= amount of perturbation to mimic 2nd batch</span>
+    <span class="n">B</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">C</span> <span class="o">=</span> <span class="mi">256</span>
+    <span class="n">P</span> <span class="o">=</span> <span class="mf">0.1</span>
+
+    <span class="c1"># Simulate features for 1st augmented batch</span>
+    <span class="n">out0</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># Perform small perturbation to mimic 2nd augmented batch</span>
+    <span class="n">out1</span> <span class="o">=</span> <span class="n">out0</span> <span class="o">-</span> <span class="p">(</span><span class="n">P</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">B</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+    <span class="c1"># Example labels</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">LongTensor</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
+    <span class="c1"># Set up loss function</span>
+    <span class="n">loss_fn</span> <span class="o">=</span> <span class="n">SupMoCoLoss</span><span class="p">(</span><span class="n">num_classes</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">memory_bank_size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+
+    <span class="c1"># Compute loss (without memory bank)</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">out0</span><span class="p">,</span> <span class="n">out1</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The loss is </span><span class="si">{</span><span class="n">loss</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Compute loss (with memory bank)</span>
+    <span class="n">loss</span> <span class="o">=</span> <span class="n">loss_fn</span><span class="p">(</span><span class="n">out0</span><span class="p">,</span> <span class="n">out1</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The loss is </span><span class="si">{</span><span class="n">loss</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, Stanley Hua.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

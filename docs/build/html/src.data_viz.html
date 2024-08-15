@@ -95,17 +95,705 @@
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 </section>
-<section id="src-data-viz-eda-module">
-<h2>src.data_viz.eda module<a class="headerlink" href="#src-data-viz-eda-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_viz.eda">
+<span id="src-data-viz-eda-module"></span><h2>src.data_viz.eda module<a class="headerlink" href="#module-src.data_viz.eda" title="Link to this heading"></a></h2>
+<p>eda.py</p>
+<p>Description: Contains functions to perform exploratory data analysis on dataset.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.are_labels_strictly_ordered">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">are_labels_strictly_ordered</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#are_labels_strictly_ordered"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.are_labels_strictly_ordered" title="Link to this definition"></a></dt>
+<dd><p>Check if each sequence has unidirectional labels.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<dl class="simple">
+<dt>Unidirectional if it follows one of two sequences:</dt><dd><ol class="arabic simple">
+<li><p>Saggital (R), Transverse (R), Bladder, Transverse (L), Saggital (L)</p></li>
+<li><p>Saggital (L), Transverse (L), Bladder, Transverse (R), Saggital (R)</p></li>
+</ol>
+</dd>
+</dl>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>If True, labels never cross back. Otherwise, False.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.get_transition_matrix">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">get_transition_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#get_transition_matrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.get_transition_matrix" title="Link to this definition"></a></dt>
+<dd><p>Print transition matrix</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.get_unique_label_sequences">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">get_unique_label_sequences</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#get_unique_label_sequences"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.get_unique_label_sequences" title="Link to this definition"></a></dt>
+<dd><p>Prints the unique view progression over each US sequence, where each view
+label is encoded as an integer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.load_image">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">load_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#load_image"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.load_image" title="Link to this definition"></a></dt>
+<dd><p>Load image</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>img_path</strong> (<em>str</em>) – Path to image</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Loaded image</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.patient_imgs_to_gif">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">patient_imgs_to_gif</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patient_idx</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">img_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#patient_imgs_to_gif"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.patient_imgs_to_gif" title="Link to this definition"></a></dt>
+<dd><p>Saves a patient’s US sequence to GIF. Patient is specified by their
+positional index in the metadata table.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If predicted label (pred) is provided in df_metadata, includes predicted
+label in the image.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image, and it may include
+the prediction for each image under “pred”.</p></li>
+<li><p><strong>patient_idx</strong> (<em>int</em>) – Relative positional index of unique patient-visit in df_metadata, by
+default 0</p></li>
+<li><p><strong>img_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Path to directory containing images, by default None</p></li>
+<li><p><strong>save_path</strong> (<em>str</em><em>, </em><em>optional</em>) – Path and filename to save gif as, by default
+constants.DIR_FIGURES+”/predictions/us_patient_{id}_visit_{visit}.gif”</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.plot_hist_num_images_per_patient">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">plot_hist_num_images_per_patient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">counts</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#plot_hist_num_images_per_patient"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.plot_hist_num_images_per_patient" title="Link to this definition"></a></dt>
+<dd><p>Plots histogram of number of images per patient.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>counts</strong> (<em>list</em><em> or </em><em>dict</em>) – Number of images per patient, where each list item represents a unique
+patient. Or dict mapping from patient ID to number of occurences.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>matplotlib.axes.Axes</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.plot_hist_of_view_labels">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">plot_hist_of_view_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#plot_hist_of_view_labels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.plot_hist_of_view_labels" title="Link to this definition"></a></dt>
+<dd><p>Plot distribution of view labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>matplotlib.axes.Axes</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.plot_hn_dist_by_side">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">plot_hn_dist_by_side</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'(Side</span> <span class="pre">vs</span> <span class="pre">HN)'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#plot_hn_dist_by_side"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.plot_hn_dist_by_side" title="Link to this definition"></a></dt>
+<dd><p>Creates count plot for number of images with HN vs w/o HN (stratified by
+kidney side)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image. This must include
+side and HN.</p></li>
+<li><p><strong>title</strong> (<em>str</em><em>, </em><em>optional</em>) – Optional title for plot, by default (Side vs HN)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>matplotlib.axes.Axes</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.plot_img_histogram_per_dset">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">plot_img_histogram_per_dset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">da_transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#plot_img_histogram_per_dset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.plot_img_histogram_per_dset" title="Link to this definition"></a></dt>
+<dd><p>Plot image histogram for each dset</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>da_transform</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, perform domain adaptation transform on OOD datasets</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.plot_pixels_along_axis">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">plot_pixels_along_axis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">imgs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#plot_pixels_along_axis"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.plot_pixels_along_axis" title="Link to this definition"></a></dt>
+<dd><p>Plot average pixel intensities across x-axis and y-axis, separately.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>imgs</strong> (<em>np.array</em>) – Array of grayscale images (B, H, W)</p></li>
+<li><p><strong>ax1</strong> (<em>plt.Axes</em>) – Matplotlib axes to plot across x-axis onto</p></li>
+<li><p><strong>ax2</strong> (<em>plt.Axes</em>) – Matplotlib axes to plot across x-axis onto</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.plot_pixels_histogram_by_label">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">plot_pixels_histogram_by_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fname_prefix</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_paths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#plot_pixels_histogram_by_label"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.plot_pixels_histogram_by_label" title="Link to this definition"></a></dt>
+<dd><p>Plot pixel-wise, width-wise (horizontal) and length-wise (vertical) pixel
+distributions, and save to EDA directory</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p></li>
+<li><p><strong>fname_prefix</strong> (<em>str</em>) – Filename prefix</p></li>
+<li><p><strong>src_paths</strong> (<em>list</em>) – List of image paths from source dataset. If provided, transforms images
+to match source domain</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Contains mean and standard deviation across all pixels</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.plot_ssl_augmentations">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">plot_ssl_augmentations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#plot_ssl_augmentations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.plot_ssl_augmentations" title="Link to this definition"></a></dt>
+<dd><p>Plot example images of data augmented during self-supervised model training.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.eda.show_dist_of_ith_view">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.eda.</span></span><span class="sig-name descname"><span class="pre">show_dist_of_ith_view</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">i</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/eda.html#show_dist_of_ith_view"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.eda.show_dist_of_ith_view" title="Link to this definition"></a></dt>
+<dd><p>Prints to the console a summary table of view label distribution of i-th
+view in each sequence.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df_metadata</strong> (<em>pandas.DataFrame</em>) – Each row contains metadata for an ultrasound image.</p></li>
+<li><p><strong>i</strong> (<em>int</em><em>, </em><em>optional</em>) – Index of item in each sequence to check distribution of view label, by
+default 0.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-data-viz-grad-cam-module">
-<h2>src.data_viz.grad_cam module<a class="headerlink" href="#src-data-viz-grad-cam-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_viz.grad_cam">
+<span id="src-data-viz-grad-cam-module"></span><h2>src.data_viz.grad_cam module<a class="headerlink" href="#module-src.data_viz.grad_cam" title="Link to this heading"></a></h2>
+<p>grad_cam.py</p>
+<p>Description: Creates images for model explainability, where GradCAM is layered.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.grad_cam.explain_model_for_images_with_label">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.grad_cam.</span></span><span class="sig-name descname"><span class="pre">explain_model_for_images_with_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_part</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filenames</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/grad_cam.html#explain_model_for_images_with_label"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.grad_cam.explain_model_for_images_with_label" title="Link to this definition"></a></dt>
+<dd><p>Create GradCAM explanations for label-specific images from a dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cam</strong> (<em>pytorch_grad_cam.GradCAM</em>) – GradCAM object loaded with a model</p></li>
+<li><p><strong>dset</strong> (<em>str</em>) – Name of evaluation split/dataset</p></li>
+<li><p><strong>label</strong> (<em>str</em>) – ORIGINAL (unsplit) label to filter for.</p></li>
+<li><p><strong>label_part</strong> (<em>str</em>) – Type of label split from original, that the model was trained on. One of
+(“side”, “plane”)</p></li>
+<li><p><strong>filenames</strong> (<em>list</em><em>, </em><em>optional</em>) – List of filenames to filter for, by default None</p></li>
+<li><p><strong>save_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory to save GradCAM images to, by default None</p></li>
+<li><p><strong>n</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of images to plot in GradCAM, by default 4</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.grad_cam.explain_model_on_dset">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.grad_cam.</span></span><span class="sig-name descname"><span class="pre">explain_model_on_dset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_whitelist</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['Sagittal_Left',</span> <span class="pre">'Sagittal_Right',</span> <span class="pre">'Transverse_Left',</span> <span class="pre">'Transverse_Right',</span> <span class="pre">'Bladder']</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/grad_cam.html#explain_model_on_dset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.grad_cam.explain_model_on_dset" title="Link to this definition"></a></dt>
+<dd><p>Given an experiment name and dataset, extract grad-cam heatmaps for real
+examples and save to directory specified</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Experiment name</p></li>
+<li><p><strong>dset</strong> (<em>str</em>) – Name of data split or evaluation dataset</p></li>
+<li><p><strong>label_whitelist</strong> (<em>list</em><em>, </em><em>optional</em>) – Whitelist of labels to create images, by default SHOW_LABELS</p></li>
+<li><p><strong>save_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory to save images to, by default creates <cite>exp_name/dset</cite>
+subdirectory under <cite>grad_cam</cite> directory</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.grad_cam.extract_gradcams">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.grad_cam.</span></span><span class="sig-name descname"><span class="pre">extract_gradcams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cam</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idx_to_imgs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/grad_cam.html#extract_gradcams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.grad_cam.extract_gradcams" title="Link to this definition"></a></dt>
+<dd><p>Extract class activation maps (CAM) and overlay over images provided.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cam</strong> (<em>pytorch_grad_cam.GradCAM</em>) – GradCAM object loaded with a model</p></li>
+<li><p><strong>idx_to_imgs</strong> (<em>dict</em><em> of </em><em>(</em><em>int</em><em>, </em><em>torch.FloatTensor</em><em>)</em>) – Mapping of prediction index to example images</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>First tuple: Mapping of prediction index to original images
+Second tuple: Mapping of prediction index to GradCAM overlayed image</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple of (dict of (int, np.ndarray))</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.grad_cam.get_n_images_per_label">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.grad_cam.</span></span><span class="sig-name descname"><span class="pre">get_n_images_per_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img_dataloader</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/grad_cam.html#get_n_images_per_label"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.grad_cam.get_n_images_per_label" title="Link to this definition"></a></dt>
+<dd><p>Get N images per label.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>img_dataloader</strong> (<em>torch.DataLoader</em>) – Used to load images and metadata</p></li>
+<li><p><strong>n</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of images to get GradCAMs for per label, by default 4</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>dict of (int</strong> – Mapping of prediction index to image tensor of examples</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.FloatTensor)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.grad_cam.init">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.grad_cam.</span></span><span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parser</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/grad_cam.html#init"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.grad_cam.init" title="Link to this definition"></a></dt>
+<dd><p>Initialize ArgumentParser arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>parser</strong> (<em>argparse.ArgumentParser</em>) – ArgumentParser object</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-data-viz-plot-umap-module">
-<h2>src.data_viz.plot_umap module<a class="headerlink" href="#src-data-viz-plot-umap-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_viz.plot_umap">
+<span id="src-data-viz-plot-umap-module"></span><h2>src.data_viz.plot_umap module<a class="headerlink" href="#module-src.data_viz.plot_umap" title="Link to this heading"></a></h2>
+<p>plot_umap.py</p>
+<p>Description: Plots 2D UMAP embeddings</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.cluster_by_density">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">cluster_by_density</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeds</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#cluster_by_density"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.cluster_by_density" title="Link to this definition"></a></dt>
+<dd><p>Cluster embeddings by density.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>embeds</strong> (<em>pd.Series</em><em> or </em><em>np.array</em>) – Extracted embeddings of the shape: (num_samples, num_features)</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Assigned cluster labels</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.get_label_order">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">get_label_order</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#get_label_order"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.get_label_order" title="Link to this definition"></a></dt>
+<dd><p>Given example labels, return the label.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>labels</strong> (<em>list</em>) – Example labels</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Order of labels, or None, if unable to find the label order</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.get_umap_embeddings">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">get_umap_embeddings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df_embeds</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#get_umap_embeddings"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.get_umap_embeddings" title="Link to this definition"></a></dt>
+<dd><p>Get 2D-UMAP embeddings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df_embeds</strong> (<em>pd.DataFrame</em>) – Contains embeddings for images</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>2-dimensional UMAP embeddings</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>numpy.array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.init">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">init</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">parser</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#init"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.init" title="Link to this definition"></a></dt>
+<dd><p>Initialize ArgumentParser arguments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>parser</strong> (<em>argparse.ArgumentParser</em>) – ArgumentParser object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.main">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'val'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">split</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'all'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">segmented</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reverse_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset_umap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_umap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">highlight_label_boundary</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">one_seq_umap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">machine_umap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_patient_umap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cluster_umap</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">comet_exp_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.main" title="Link to this definition"></a></dt>
+<dd><p>Retrieves embeddings from specified pretrained model. Then plot UMAPs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Name of experiment</p></li>
+<li><p><strong>dset</strong> (<em>str</em><em> or </em><em>list</em><em>, </em><em>optional</em>) – 1+ datasets, whose embeddings to plot</p></li>
+<li><p><strong>split</strong> (<em>str</em><em> or </em><em>list</em><em>, </em><em>optional</em>) – Data split to use for each <cite>dset</cite></p></li>
+<li><p><strong>raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loads embeddings extracted from raw images. Otherwise, uses
+preprocessed images, by default False.</p></li>
+<li><p><strong>segmented</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loads embeddings extracted from segmented images, by default
+False.</p></li>
+<li><p><strong>reverse_mask</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loads embeddings extracted from segmented images where the mask
+is reversed, by default False.</p></li>
+<li><p><strong>comet_exp_key</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, log UMAPs to Comet ML.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.plot_images_in_umap_clusters">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">plot_images_in_umap_clusters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filenames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_embeds_only</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">plot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#plot_images_in_umap_clusters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.plot_images_in_umap_clusters" title="Link to this definition"></a></dt>
+<dd><p>Plots images in UMAP clusters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Name of experiment</p></li>
+<li><p><strong>filenames</strong> (<em>pd.Series</em>) – Contains file name of image whose features were extracted</p></li>
+<li><p><strong>df_embeds_only</strong> (<em>pd.DataFrame</em>) – Extracted deep embeddings. Does not have file paths in any column.</p></li>
+<li><p><strong>raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loaded embeddings extracted from raw images. Otherwise, uses
+preprocessed images, by default False.</p></li>
+<li><p><strong>**plot_kwargs</strong> (Keyword arguments to pass into <cite>plot_umap</cite>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.plot_umap">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">plot_umap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">embeds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">highlight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_order</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">palette</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'tab10'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'/hpf/largeprojects/ccmbio/shua/projects/view_hn/src/data/figures/'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'umap'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename_suffix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">comet_logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">scatterplot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#plot_umap"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.plot_umap" title="Link to this definition"></a></dt>
+<dd><p>Plot 2D U-Map of extracted image embeddings, colored by &lt;labels&gt;.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>embeds</strong> (<em>numpy.array</em>) – A 2-dimensional array of N samples.</p></li>
+<li><p><strong>labels</strong> (<em>list</em>) – Labels to color embeddings by. Must match number of samples (N).</p></li>
+<li><p><strong>highlight</strong> (<em>list</em><em>, </em><em>optional</em>) – List of boolean values, corresponding to N samples. Those marked as
+False will appear softer (lower alpha value).</p></li>
+<li><p><strong>label_order</strong> (<em>list</em><em>, </em><em>optional</em>) – Order of unique label values in legend, by default None.</p></li>
+<li><p><strong>s</strong> (<em>int</em><em>, </em><em>optional</em>) – Size of scatterplot points, by default 5.</p></li>
+<li><p><strong>alpha</strong> (<em>float</em><em>, </em><em>optional</em>) – Transparency of points in [0, 1], where closer to 1 is less transparent,
+by default 0.8</p></li>
+<li><p><strong>line</strong> (<em>bool</em><em>, </em><em>optional</em>) – Connects points in scatterplot sequentially, by default False</p></li>
+<li><p><strong>legend</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, shows legend, by default True.</p></li>
+<li><p><strong>title</strong> (<em>str</em><em>, </em><em>optional</em>) – Plot title, by default “”.</p></li>
+<li><p><strong>palette</strong> (<em>str</em><em>, </em><em>optional</em>) – Seaborn color palette, by default “tab10”.</p></li>
+<li><p><strong>save</strong> (<em>bool</em><em>, </em><em>optional</em>) – Filename , by default False</p></li>
+<li><p><strong>save_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Directory to save plot image in</p></li>
+<li><p><strong>filename</strong> (<em>str</em><em>, </em><em>optional</em>) – Filename to save plot as. Not including extension, by default “umap”</p></li>
+<li><p><strong>filename_suffix</strong> (<em>str</em><em>, </em><em>optional</em>) – If provided, attach as suffix to filename provided, by default “”</p></li>
+<li><p><strong>comet_logger</strong> (<em>comet_ml.Experiment</em><em>, </em><em>optional</em>) – If provided, log figure to Comet ML.</p></li>
+<li><p><strong>**scatterplot_kwargs</strong> (Keyword arguments to pass into <cite>sns.scatterplot</cite>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.plot_umap_all_patients">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">plot_umap_all_patients</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'patient'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">plot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#plot_umap_all_patients"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.plot_umap_all_patients" title="Link to this definition"></a></dt>
+<dd><p>Plots UMAP for all patients, coloring by patient ID.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Name of experiment</p></li>
+<li><p><strong>df_data</strong> (<em>pd.DataFrame</em>) – Contains extracted embeddings, view labels and dset labels.</p></li>
+<li><p><strong>label_col</strong> (<em>str</em>) – Name of label column to color points by “patient” or by “dset”</p></li>
+<li><p><strong>raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loaded embeddings extracted from raw images. Otherwise, uses
+preprocessed images, by default False.</p></li>
+<li><p><strong>**plot_kwargs</strong> (Keyword arguments to pass into <cite>plot_umap</cite>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.plot_umap_by_machine">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">plot_umap_by_machine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">machine_labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filenames</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_embeds_only</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'SickKids'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">plot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#plot_umap_by_machine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.plot_umap_by_machine" title="Link to this definition"></a></dt>
+<dd><p>Plots UMAP for all machine-labeled patients, coloring by machine.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Name of experiment</p></li>
+<li><p><strong>machine_labels</strong> (<em>numpy.array</em>) – Contains machine labels, corresponding to embeddings extracted. Images
+without label (null value) will be excluded</p></li>
+<li><p><strong>filenames</strong> (<em>pd.Series</em>) – Contains file name of image whose features were extracted</p></li>
+<li><p><strong>df_embeds_only</strong> (<em>pd.DataFrame</em>) – Extracted deep embeddings. Does not have file paths in any column.</p></li>
+<li><p><strong>raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loaded embeddings extracted from raw images. Otherwise, uses
+preprocessed images, by default False.</p></li>
+<li><p><strong>dset</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of dset with labels for images. One of (SickKids, Stanford,
+Both), by default “SickKids”.</p></li>
+<li><p><strong>**plot_kwargs</strong> (Keyword arguments to pass into <cite>plot_umap</cite>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.plot_umap_by_view">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">plot_umap_by_view</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'label'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dset_col</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dset'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">highlight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">plot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#plot_umap_by_view"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.plot_umap_by_view" title="Link to this definition"></a></dt>
+<dd><p>Plots UMAP for all view-labeled patients, coloring by view.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Name of experiment</p></li>
+<li><p><strong>df_data</strong> (<em>pd.DataFrame</em>) – Contains extracted embeddings, view labels and dset labels.</p></li>
+<li><p><strong>label_col</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of column in <cite>df_data</cite> with view label, by default “label”.</p></li>
+<li><p><strong>dset_col</strong> (<em>str</em><em>, </em><em>optional</em>) – Name of column in <cite>df_data</cite> with dset label, by default “dset”.</p></li>
+<li><p><strong>highlight</strong> (<em>list</em><em>, </em><em>optional</em>) – List of boolean values, corresponding to N samples. Those marked as
+False will appear softer (lower alpha value).</p></li>
+<li><p><strong>raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loaded embeddings extracted from raw images. Otherwise, uses
+preprocessed images, by default False.</p></li>
+<li><p><strong>**plot_kwargs</strong> (Keyword arguments to pass into <cite>plot_umap</cite>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.plot_umap_for_n_patient">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">plot_umap_for_n_patient</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patients</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_embeds_only</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">plot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#plot_umap_for_n_patient"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.plot_umap_for_n_patient" title="Link to this definition"></a></dt>
+<dd><p>Plots UMAP for images from N chosen patient, colored by patient.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Name of experiment</p></li>
+<li><p><strong>patients</strong> (<em>pd.Series</em>) – Contains all patient IDs</p></li>
+<li><p><strong>df_embeds_only</strong> (<em>pd.DataFrame</em>) – Extracted deep embeddings. Does not have file paths in any column.</p></li>
+<li><p><strong>n</strong> (<em>int</em>) – Number of patients to choose. If negative, show all, by default show all</p></li>
+<li><p><strong>raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loaded embeddings extracted from raw images. Otherwise, uses
+preprocessed images, by default False.</p></li>
+<li><p><strong>**plot_kwargs</strong> (Keyword arguments to pass into <cite>plot_umap</cite>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.plot_umap.plot_umap_for_one_patient_seq">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.plot_umap.</span></span><span class="sig-name descname"><span class="pre">plot_umap_for_one_patient_seq</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patient_visit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">us_nums</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df_embeds_only</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">color</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'us_nums'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">plot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/plot_umap.html#plot_umap_for_one_patient_seq"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.plot_umap.plot_umap_for_one_patient_seq" title="Link to this definition"></a></dt>
+<dd><p>Plots UMAP for a single patient, colored by ultrasound number.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_name</strong> (<em>str</em>) – Name of experiment</p></li>
+<li><p><strong>view_labels</strong> (<em>numpy.array</em>) – Contains view labels, corresponding to embeddings extracted. Images
+without label (null value) will be excluded</p></li>
+<li><p><strong>patient_visit</strong> (<em>pd.Series</em>) – Contains string of (patient ID)_(visit number), which forms a unique
+sequence identifier</p></li>
+<li><p><strong>us_nums</strong> (<em>pd.Series</em>) – Contains number in ultrasound sequence capture</p></li>
+<li><p><strong>df_embeds_only</strong> (<em>pd.DataFrame</em>) – Extracted deep embeddings. Does not have file paths in any column.</p></li>
+<li><p><strong>color</strong> (<em>str</em>) – Option to color by US sequence number or view label. One of “us_nums”
+or “views”, by default “us_nums”.</p></li>
+<li><p><strong>raw</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, loaded embeddings extracted from raw images. Otherwise, uses
+preprocessed images, by default False.</p></li>
+<li><p><strong>**plot_kwargs</strong> (Keyword arguments to pass into <cite>plot_umap</cite>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
-<section id="src-data-viz-utils-module">
-<h2>src.data_viz.utils module<a class="headerlink" href="#src-data-viz-utils-module" title="Link to this heading"></a></h2>
+<section id="module-src.data_viz.utils">
+<span id="src-data-viz-utils-module"></span><h2>src.data_viz.utils module<a class="headerlink" href="#module-src.data_viz.utils" title="Link to this heading"></a></h2>
+<p>utils.py</p>
+<p>Description: Contains general helper functions for data visualization.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.utils.gridplot_images">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.utils.</span></span><span class="sig-name descname"><span class="pre">gridplot_images</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">imgs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/utils.html#gridplot_images"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.utils.gridplot_images" title="Link to this definition"></a></dt>
+<dd><p>Plot example images on a grid plot</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>imgs</strong> (<em>np.array</em>) – Images to visualize</p></li>
+<li><p><strong>labels</strong> (<em>np.array</em><em>, </em><em>optional</em>) – Labels corresponding to images</p></li>
+<li><p><strong>title</strong> (<em>str</em><em>, </em><em>optional</em>) – Plot title, by default None</p></li>
+<li><p><strong>filename</strong> (<em>str</em><em>, </em><em>optional</em>) – Path to save figure to</p></li>
+<li><p><strong>save_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – Path to directory to save images</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Matplotlib Figure</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>plt.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.utils.gridplot_images_from_paths">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.utils.</span></span><span class="sig-name descname"><span class="pre">gridplot_images_from_paths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">paths</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filename</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/utils.html#gridplot_images_from_paths"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.utils.gridplot_images_from_paths" title="Link to this definition"></a></dt>
+<dd><p>Create grid plot from provided list of image paths</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>paths</strong> (<em>list</em>) – List of full paths to images</p></li>
+<li><p><strong>title</strong> (<em>str</em>) – Plot title, by default None</p></li>
+<li><p><strong>filename</strong> (<em>str</em>) – Path to save figure to</p></li>
+<li><p><strong>save_dir</strong> (<em>str</em>) – Path to directory to save images</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Matplotlib Figure</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>plt.Figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.utils.grouped_barplot">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.utils.</span></span><span class="sig-name descname"><span class="pre">grouped_barplot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yerr_low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yerr_high</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">legend</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xlabel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylabel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">plot_kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/utils.html#grouped_barplot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.utils.grouped_barplot" title="Link to this definition"></a></dt>
+<dd><p>Create grouped bar plot with custom confidence intervals.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>pd.DataFrame</em>) – Data</p></li>
+<li><p><strong>x</strong> (<em>str</em>) – Name of primary column to group by</p></li>
+<li><p><strong>y</strong> (<em>str</em>) – Name of column with bar values</p></li>
+<li><p><strong>hue</strong> (<em>str</em>) – Name of secondary column to group by</p></li>
+<li><p><strong>yerr_low</strong> (<em>str</em>) – Name of column to subtract y from to create LOWER bound on confidence
+interval</p></li>
+<li><p><strong>yerr_high</strong> (<em>str</em>) – Name of column to subtract y from to create UPPER bound on confidence
+interval</p></li>
+<li><p><strong>legend</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, add legend to figure, by default False.</p></li>
+<li><p><strong>ax</strong> (<em>matplotlib.pyplot.Axis</em><em>, </em><em>optional</em>) – If provided, draw plot into this Axis instead of creating a new Axis, by
+default None.</p></li>
+<li><p><strong>**plot_kwargs</strong> (keyword arguments to pass into <cite>matplotlib.pyplot.bar</cite>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Grouped bar plot with custom confidence intervals</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>matplotlib.pyplot.Axis.axis</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.utils.plot_confidence_histogram">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.utils.</span></span><span class="sig-name descname"><span class="pre">plot_confidence_histogram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_bins</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/utils.html#plot_confidence_histogram"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.utils.plot_confidence_histogram" title="Link to this definition"></a></dt>
+<dd><p>Plot Confidence Histogram.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Used to see the percentage of calibration samples in each confidence bin.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>confs</strong> (<em>list</em><em> or </em><em>array-like</em>) – Probability of each prediction</p></li>
+<li><p><strong>preds</strong> (<em>list</em><em> or </em><em>array-like</em>) – List of predicted labels</p></li>
+<li><p><strong>labels</strong> (<em>list</em><em> or </em><em>array-like</em>) – List of true labels</p></li>
+<li><p><strong>num_bins</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of bins across probability range (0 to 1), by default 10</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.utils.plot_reliability_diagram">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.utils.</span></span><span class="sig-name descname"><span class="pre">plot_reliability_diagram</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">confs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_bins</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/utils.html#plot_reliability_diagram"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.utils.plot_reliability_diagram" title="Link to this definition"></a></dt>
+<dd><p>Plot Reliability Diagram.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Used to assess if model’s output probabilities accurately represent the
+probability of the outcome in the calibration set (e.g., Does a model
+predict a 70% prob. for an event that occurs 70% of the time?)</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>confs</strong> (<em>list</em><em> or </em><em>array-like</em>) – Probability of each prediction</p></li>
+<li><p><strong>preds</strong> (<em>list</em><em> or </em><em>array-like</em>) – List of predicted labels</p></li>
+<li><p><strong>labels</strong> (<em>list</em><em> or </em><em>array-like</em>) – List of true labels</p></li>
+<li><p><strong>num_bins</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of bins across probability range (0 to 1), by default 10</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.utils.print_table">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.utils.</span></span><span class="sig-name descname"><span class="pre">print_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_cols</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show_index</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/utils.html#print_table"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.utils.print_table" title="Link to this definition"></a></dt>
+<dd><p>Prints table to stdout in a pretty format.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df</strong> (<em>pandas.DataFrame</em>) – A table</p></li>
+<li><p><strong>show_cols</strong> (<em>bool</em>) – If True, prints column names, by default True.</p></li>
+<li><p><strong>show_index</strong> (<em>bool</em>) – If True, prints row index, by default True.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="src.data_viz.utils.set_theme">
+<span class="sig-prename descclassname"><span class="pre">src.data_viz.utils.</span></span><span class="sig-name descname"><span class="pre">set_theme</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">theme</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'light'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/src/data_viz/utils.html#set_theme"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#src.data_viz.utils.set_theme" title="Link to this definition"></a></dt>
+<dd><p>Set matplotlib theme</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>theme</strong> (<em>str</em><em>, </em><em>optional</em>) – One of “light” or “dark”, by default “light”</p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 <section id="module-src.data_viz">
 <span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-src.data_viz" title="Link to this heading"></a></h2>
