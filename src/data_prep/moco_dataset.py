@@ -21,6 +21,17 @@ from src.data_prep.dataset import (UltrasoundDataModule,
 
 
 ################################################################################
+#                                  Constants                                   #
+################################################################################
+# Default parameters for data loader
+DEFAULT_DATALOADER_PARAMS = {
+    "batch_size": 128,
+    "shuffle": True,
+    "num_workers": 7,
+}
+
+
+################################################################################
 #                             Data Module Classes                              #
 ################################################################################
 class MoCoDataModule(UltrasoundDataModule):
@@ -28,7 +39,7 @@ class MoCoDataModule(UltrasoundDataModule):
     Top-level object used to access all data preparation and loading
     functionalities in the self-supervised setting.
     """
-    def __init__(self, dataloader_params=None, df=None, img_dir=None,
+    def __init__(self, df=None, img_dir=None,
                  full_seq=False, mode=3,
                  same_label=False,
                  custom_collate=None,
@@ -45,8 +56,6 @@ class MoCoDataModule(UltrasoundDataModule):
 
         Parameters
         ----------
-        dataloader_params : dict, optional
-            Used to override default parameters for DataLoaders, by default None
         df : pd.DataFrame, optional
             Contains paths to image files and labels for each image, by default
             None
@@ -82,14 +91,6 @@ class MoCoDataModule(UltrasoundDataModule):
                 cross_val_folds : int, 
                     Number of folds to use for cross-validation
         """
-        # Set default DataLoader parameters for self-supervised task
-        default_dataloader_params = {"batch_size": 128,
-                                     "shuffle": True,
-                                     "num_workers": 7,
-                                     "pin_memory": False}
-        if dataloader_params:
-            default_dataloader_params.update(dataloader_params)
-
         # Pair together same-label images, if specified
         self.same_label = same_label
         # If same-label sampling, ensure correct collate function is used
@@ -101,17 +102,20 @@ class MoCoDataModule(UltrasoundDataModule):
             "Invalid `custom_collate` provided! (%s)" % (custom_collate,)
         self.custom_collate = custom_collate
 
+        # Raise error, if imbalanced sampler specified
+        if kwargs.get("imbalanced_sampler"):
+            raise RuntimeError("Imbalanced sampler is not supported for MoCo!")
+
         # NOTE: Sampler conflicts with shuffle=True
         if full_seq:
-            default_dataloader_params["shuffle"] = False
+            kwargs["shuffle"] = False
 
         # Pass UltrasoundDataModule arguments
         super().__init__(
-            default_dataloader_params, df, img_dir, full_seq, mode,
+            df, img_dir, full_seq, mode,
             augment_training=False,
+            default_dl_params=DEFAULT_DATALOADER_PARAMS,
             **kwargs)
-        self.val_dataloader_params["batch_size"] = \
-            default_dataloader_params["batch_size"]
 
         # If specified, turn off augmentations during SSL
         if not augment_training:

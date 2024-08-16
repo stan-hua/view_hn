@@ -666,12 +666,11 @@ def plot_ssl_augmentations():
     """
     # Instantiate data module
     df_metadata = load_metadata("sickkids", prepend_img_dir=True)
-    dataloader_params = {"batch_size": 9}
     data_module = MoCoDataModule(
-        dataloader_params,
         df=df_metadata,
         crop_scale=0.3,
         augment_training=True,
+        batch_size=9,
     )
 
     # Sample 1 batch of images

@@ -5,7 +5,6 @@ Description: Contains functions/classes to load dataset in PyTorch.
 """
 # Standard libraries
 import glob
-import json
 import logging
 import os
 from abc import abstractmethod
@@ -18,6 +17,7 @@ import lightning as L
 import torch
 import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
+from torchsampler import ImbalancedDatasetSampler
 from torchvision.io import read_image, ImageReadMode
 
 # Custom libraries
@@ -39,7 +39,6 @@ DEFAULT_DATALOADER_PARAMS = {
     "batch_size": 16,
     "shuffle": False,
     "num_workers": 4,
-    "pin_memory": False,
 }
 
 # Pre-Computed Mean & Std for SickKids Training Set
@@ -101,10 +100,12 @@ class UltrasoundDataModule(L.LightningDataModule):
     Top-level object used to access all data preparation and loading
     functionalities.
     """
-    def __init__(self, dataloader_params=None, df=None, img_dir=None,
+    def __init__(self, df=None, img_dir=None,
                  full_seq=False, mode=3,
                  full_path=False,
                  augment_training=False,
+                 imbalanced_sampler=False,
+                 default_dl_params=DEFAULT_DATALOADER_PARAMS,
                  **kwargs):
         """
         Initialize UltrasoundDataModule object.
@@ -117,8 +118,6 @@ class UltrasoundDataModule(L.LightningDataModule):
 
         Parameters
         ----------
-        dataloader_params : dict, optional
-            Used to override default parameters for DataLoaders, by default None
         df : pd.DataFrame, optional
             Contains paths to image files and labels for each image, by default
             None
@@ -136,6 +135,11 @@ class UltrasoundDataModule(L.LightningDataModule):
             Otherwise, contains path basename, by default False.
         augment_training : bool, optional
             If True, add random augmentations during training, by default False.
+        imbalanced_sampler : bool, optional
+            If True, perform imbalanced sampling during training to
+            account for label imbalances, by default False
+        default_dl_params : dict, optional
+            Default dataloader parameters
         **kwargs : dict
             Optional keyword arguments:
                 img_size : int or tuple of ints, optional
@@ -164,9 +168,14 @@ class UltrasoundDataModule(L.LightningDataModule):
                 include_unlabeled : bool
                     If True, include unlabeled as part of training set, by
                     default False.
+                batch_size : int
+                    Batch size
+                shuffle : bool
+                    If True, shuffle data during training
+                num_workers : int
+                    Number of CPU data gathering workers
         """
         super().__init__()
-        assert dataloader_params is None or isinstance(dataloader_params, dict)
 
         # General arguments, used to instantiate UltrasoundDataset
         self.df = df
@@ -177,7 +186,6 @@ class UltrasoundDataModule(L.LightningDataModule):
             "mode": mode,
             "img_size": self.img_size,
             "label_part": kwargs.get("label_part"),
-            "split_label": kwargs.get("multi_output", False),
             "full_path": full_path,
             **kwargs,
         }
@@ -221,13 +229,15 @@ class UltrasoundDataModule(L.LightningDataModule):
         ########################################################################
         #                        DataLoader Parameters                         #
         ########################################################################
-        # Parameters for training/validation DataLoaders
-        self.train_dataloader_params = DEFAULT_DATALOADER_PARAMS
-        if dataloader_params:
-            self.train_dataloader_params.update(dataloader_params)
+        # Store parameter for imbalanced sampler
+        self.imbalanced_sampler = imbalanced_sampler
+
+        # Extract parameters for training/validation DataLoaders
+        self.train_dataloader_params = {}
+        for key, default_val in default_dl_params.items():
+            self.train_dataloader_params[key] = kwargs.get(key, default_val)
 
         # NOTE: Shuffle is turned off during validation/test
-        # NOTE: Batch size is set to 1 during validation/test
         self.val_dataloader_params = self.train_dataloader_params.copy()
         self.val_dataloader_params["shuffle"] = False
 
@@ -357,6 +367,12 @@ class UltrasoundDataModule(L.LightningDataModule):
             transforms=self.transforms,
             **self.us_dataset_kwargs,
         )
+
+        # If specified, instantiate imbalanced sampler
+        if self.imbalanced_sampler:
+            sampler = ImbalancedDatasetSampler(train_dataset)
+            self.train_dataloader_params["sampler"] = sampler
+            self.train_dataloader_params["shuffle"] = False
 
         # Create DataLoader with parameters specified
         return DataLoader(train_dataset, **self.train_dataloader_params)
@@ -837,7 +853,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
     Dataset to load images and labels from a DataFrame.
     """
     def __init__(self, df, img_dir=None, full_seq=False, img_size=None, mode=3,
-                 label_part=None, split_label=False,
+                 label_part=None,
                  load_seg_mask=False, include_liver_seg=False,
                  standardize_images=False, transforms=None, full_path=False,
                  **ignore_kwargs,
@@ -871,9 +887,6 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         label_part : str, optional
             Label type. One of ("side", "plane", None). Used to get the correct
             classes and indices, by default None.
-        split_label : bool, optional
-            If True, additionally provide both side/plane separately in metadata
-            dict, by default False.
         load_seg_mask : bool, optional
             If True, load (available) segmentation masks for each image into
             one mask and store in the metadata, by default False
@@ -910,7 +923,6 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         # Get labels
         self.labels = df["label"].to_numpy()
         self.label_part = label_part
-        self.split_label = split_label
 
         # Get all patient IDs
         self.ids = df["id"].to_numpy()
@@ -999,11 +1011,6 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
         # NOTE: This assumes that label part was extracted prior to this
         metadata["label"] = class_to_idx.get(self.labels[index], -1)
-        # If specified, split label into side/plane, and store separately
-        if self.split_label and not self.label_part:
-            for label_part in constants.LABEL_PARTS:
-                metadata[label_part] = utils.extract_from_label(
-                    self.labels[index], label_part)
 
         # Record if has segmentation mask or not
         metadata["has_seg_mask"] = False
@@ -1154,19 +1161,6 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
             "dset": list(dset),
         }
 
-        # 6.1 If specified, split label into side/plane, and store separately
-        if self.split_label and not self.label_part:
-            for label_part in constants.LABEL_PARTS:
-                # Extract side/plane from label
-                extracted_labels = [utils.extract_from_label(label, label_part)
-                    for label in labels]
-                # Encode as an integer
-                class_to_idx = \
-                    constants.LABEL_PART_TO_CLASSES[label_part]["class_to_idx"]
-                encoded_labels = torch.LongTensor(
-                    [class_to_idx.get(label, -1) for label in extracted_labels])
-                metadata[label_part] = encoded_labels
-
         # Early return, if not loading segmentation masks
         if not self.load_seg_mask:
             return X, metadata
@@ -1192,6 +1186,35 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
 
         metadata.update(accum_seg_metadata)
         return X, metadata
+
+
+    def get_labels(self, encoded=False):
+        """
+        Get all labels by index
+
+        Parameters
+        ----------
+        encoded : bool, optional
+            If True, then encode as integer label
+
+        Returns
+        -------
+        list
+            If encoded, return list of integer labels. Otherwise, return
+            list of string labels
+        """
+        # CASE 1: If not encoded
+        if not encoded:
+            return self.labels
+
+        # CASE 2: Encoded
+        # Encode label to integer (-1, if not found)
+        class_to_idx = \
+            constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
+        # NOTE: This assumes that label part was extracted prior to this
+        encoded_labels = [class_to_idx.get(label, -1) for label in self.labels]
+
+        return encoded_labels
 
 
     def __len__(self):

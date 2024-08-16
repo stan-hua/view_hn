@@ -20,7 +20,7 @@ from src.data_prep.dataset import (
     DEFAULT_DATALOADER_PARAMS,
     UltrasoundDataModule, UltrasoundDatasetDataFrame,
 )
-from src.data_prep import BYOLDataModule, MoCoDataModule, TCLRDataModule
+from src.data_prep import BYOLDataModule, MoCoDataModule
 
 
 ################################################################################
@@ -33,7 +33,6 @@ LOGGER = logging.getLogger(__name__)
 SSL_NAME_TO_DATA_MODULE = {
     "byol": BYOLDataModule,
     "moco": MoCoDataModule,
-    "tclr": TCLRDataModule,
 }
 
 # Default hyperparameters
@@ -98,6 +97,10 @@ def setup_data_module(hparams=None, use_defaults=False,
     all_hparams.update(hparams)
     all_hparams.update(overwrite_hparams)
 
+    # If sequence model, batch size must be 1
+    if all_hparams.get("full_seq"):
+        all_hparams["batch_size"] = 1
+
     # 1. Load metadata
     # 1.1 Prepare keyword arguments
     load_meta_config = {
@@ -118,15 +121,9 @@ def setup_data_module(hparams=None, use_defaults=False,
         data_module_cls = SSL_NAME_TO_DATA_MODULE[all_hparams["ssl_model"]]
     else:
         data_module_cls = UltrasoundDataModule
+
     # 2.2 Pass in specified dataloader parameters
-    dataloader_params = {
-        "batch_size": all_hparams["batch_size"]
-                      if not all_hparams.get("full_seq") else 1,
-        "shuffle": all_hparams.get("shuffle", False),
-        "num_workers": all_hparams.get("num_workers", min(os.cpu_count(), 7)),
-        "pin_memory": all_hparams.get("pin_memory", False),
-    }
-    dm = data_module_cls(dataloader_params, df=df_metadata, **all_hparams)
+    dm = data_module_cls(df=df_metadata, **all_hparams)
     dm.setup()
 
     # Modify hyperparameters in-place to store training/val/test set IDs
