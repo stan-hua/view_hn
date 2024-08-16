@@ -97,8 +97,7 @@ class SegmentedUSModule(L.LightningDataModule):
         # Default parameters for data loader
         default_data_params = {'batch_size': 1,
                                'shuffle': False,
-                               'num_workers': 0,
-                               'pin_memory': True}
+                               'num_workers': 0}
 
         # Parameters for training/validation DataLoaders
         self.train_dataloader_params = default_data_params

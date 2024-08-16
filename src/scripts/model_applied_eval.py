@@ -66,7 +66,6 @@ DEFAULT_DATALOADER_PARAMS = {
     "batch_size": 16,
     "shuffle": False,
     "num_workers": 0,
-    "pin_memory": False,
 }
 
 # Filename for HN inference

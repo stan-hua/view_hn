@@ -86,8 +86,7 @@ class TCLRDataModule(UltrasoundDataModule):
         # Set default DataLoader parameters for self-supervised task
         default_dataloader_params = {"batch_size": 128,
                                      "shuffle": True,
-                                     "num_workers": 7,
-                                     "pin_memory": False}
+                                     "num_workers": 7}
         if dataloader_params:
             default_dataloader_params.update(dataloader_params)
 

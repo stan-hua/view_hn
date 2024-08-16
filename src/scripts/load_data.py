@@ -52,7 +52,6 @@ DEFAULT_HPARAMS = {
     "full_seq": False,
     "shuffle": False,
     "num_workers": 8,
-    "pin_memory": False,
 }
 
 
