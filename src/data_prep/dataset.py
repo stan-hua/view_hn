@@ -331,7 +331,7 @@ class UltrasoundDataModule(L.LightningDataModule):
 
             # Remove images in the training set that DONT have a seg. mask
             has_seg_mask = df_train["filename"].map(utils.has_seg_mask)
-            df_train.loc[has_seg_mask, "split"] = None
+            df_train.loc[~has_seg_mask, "split"] = None
 
             # Recombine
             self.df = pd.concat([df_train, df_rest], ignore_index=True)

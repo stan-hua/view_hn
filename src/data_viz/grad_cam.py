@@ -57,7 +57,7 @@ SHOW_LABELS = [
 ################################################################################
 #                                Main Functions                                #
 ################################################################################
-def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
+def explain_model_on_dset(exp_name, dset, split, label_whitelist=SHOW_LABELS,
                           save_dir=None, **kwargs):
     """
     Given an experiment name and dataset, extract grad-cam heatmaps for real
@@ -67,8 +67,10 @@ def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
     ----------
     exp_name : str
         Experiment name
-    dset : str
-        Name of data split or evaluation dataset
+    dset : str, optional
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     label_whitelist : list, optional
         Whitelist of labels to create images, by default SHOW_LABELS
     save_dir : str, optional
@@ -101,7 +103,7 @@ def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
     )
 
     # Load predictions
-    pred_path = model_eval.create_save_path(exp_name=exp_name, dset=dset)
+    pred_path = model_eval.create_save_path(exp_name=exp_name, dset=dset, split=split)
     try:
         df_preds = pd.read_csv(pred_path)
     except Exception as error_msg:
@@ -131,6 +133,7 @@ def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
             explain_model_for_images_with_label(
                 cam=cam,
                 dset=dset,
+                split=split,
                 label=label,
                 label_part=label_part,
                 filenames=filenames,
@@ -138,7 +141,7 @@ def explain_model_on_dset(exp_name, dset, label_whitelist=SHOW_LABELS,
                 **kwargs)
 
 
-def explain_model_for_images_with_label(cam, dset, label, label_part,
+def explain_model_for_images_with_label(cam, dset, split, label, label_part,
                                         filenames=None,
                                         save_dir=None,
                                         n=4):
@@ -149,8 +152,10 @@ def explain_model_for_images_with_label(cam, dset, label, label_part,
     ----------
     cam : pytorch_grad_cam.GradCAM
         GradCAM object loaded with a model
-    dset : str
-        Name of evaluation split/dataset
+    dset : str, optional
+        Name of dataset
+    split : str, optional
+        Specific split of dataset. One of (train/val/test)
     label : str
         ORIGINAL (unsplit) label to filter for.
     label_part : str
@@ -175,6 +180,7 @@ def explain_model_for_images_with_label(cam, dset, label, label_part,
     # Create image dataloader, filtering for the right labels
     img_dataloader = load_data.setup_default_dataloader_for_dset(
         dset=dset,
+        split=split,
         filters=filters,
         label_part=label_part,
         full_seq=False,
@@ -356,18 +362,52 @@ def init(parser):
         ArgumentParser object
     """
     arg_help = {
-        "exp_name": "Name of experiment",
-        "dset": "Name of evaluation splits or datasets",
+        "exp_names": "Name/s of experiment/s (to evaluate)",
+        "dsets": "List of dataset names to evaluate",
+        "splits": "Name of data splits for each `dset` to evaluate",
         "label_whitelist": "Whitelist of labels to get GradCAMs for",
     }
 
-    parser.add_argument("--exp_name", required=True, nargs="+",
-                        help=arg_help["exp_name"])
-    parser.add_argument("--dset", required=True, nargs="+",
-                        help=arg_help["dset"])
+    parser.add_argument("--exp_names", required=True,
+                        nargs='+',
+                        help=arg_help["exp_names"])
+    parser.add_argument("--dsets", default=["sickkids"],
+                        nargs='+',
+                        help=arg_help["dsets"])
+    parser.add_argument("--splits", default=["test"],
+                        nargs='+',
+                        help=arg_help["splits"])
     parser.add_argument("--label_whitelist", nargs="+",
                         default=SHOW_LABELS,
                         help=arg_help["label_whitelist"])
+
+
+def main(args):
+    """
+    Extract GradCAMs for each dataset and split
+    """
+    exp_names = args.exp_names
+    dsets = args.dsets
+    splits = args.splits
+    # If only one of dset/split is > 1, assume it's meant to be broadcast
+    if len(dsets) == 1 and len(splits) > 1:
+        LOGGER.info("Only 1 `dset` provided! Assuming same `dset` for all `splits`...")
+        dsets = dsets * len(splits)
+    if len(splits) == 1 and len(dsets) > 1:
+        LOGGER.info("Only 1 `split` provided! Assuming same `split` for all `dsets`...")
+        splits = splits * len(dsets)
+
+    # 2. Extract GradCAM for all specified experiments and datasets
+    for exp_name in exp_names:
+        for idx, curr_dset in enumerate(dsets):
+            curr_split = splits[idx]
+            explain_model_on_dset(
+                exp_name=exp_name,
+                dset=curr_dset,
+                split=curr_split,
+                label_whitelist=args.label_whitelist,
+            )
+
 
 
 if __name__ == "__main__":
@@ -378,11 +418,5 @@ if __name__ == "__main__":
     # 1. Get arguments
     ARGS = PARSER.parse_args()
 
-    # 2. Extract GradCAM for all specified experiments and datasets
-    for EXP_NAME in ARGS.exp_name:
-        for DSET in ARGS.dset:
-            explain_model_on_dset(
-                exp_name=EXP_NAME,
-                dset=DSET,
-                label_whitelist=ARGS.label_whitelist,
-            )
+    # 2. Run main
+    main(ARGS)

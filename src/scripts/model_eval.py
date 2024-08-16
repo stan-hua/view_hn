@@ -2189,7 +2189,7 @@ def load_view_predictions(exp_name, dset, split, **infer_kwargs):
         Each row is an image with a view label (plane/side) predicted.
     """
     # 1. Specify path to inference file
-    save_path = create_save_path(exp_name, dset=dset, **infer_kwargs)
+    save_path = create_save_path(exp_name, dset=dset, split=split, **infer_kwargs)
     # Raise error, if predictions not found
     if not os.path.exists(save_path):
         raise RuntimeError(f"Predictions not found on dataset {dset}-{split}!\n"
