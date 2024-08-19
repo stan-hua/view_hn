@@ -5,6 +5,9 @@ Description: Contains collate functions to augment image batches for
              self-supervised pretraining.
 """
 
+# Standard libraries
+from collections import defaultdict
+
 # Non-standard libraries
 import lightly
 import numpy as np
@@ -335,6 +338,101 @@ class MoCoSameLabelCollateFunction(lightly.data.collate.BaseCollateFunction):
         return X_transformed_paired, metadata_accum
 
 
+class TCLCollateFunction(torch.nn.Module):
+    """
+    TCLCollateFunction.
+
+    Note
+    ----
+    Used to prepare 1 weak and 2 strong augmented views
+    MixUp is done during training
+    """
+
+    def __init__(self, weak_transform, strong_transform):
+        """
+        Initialize TCLCollateFunction object.
+
+        Parameters
+        ----------
+        weak_transform : torchvision.transforms.Compose
+            Weak image transform
+        strong_transform : torchvision.transforms.Compose
+            Strong image transform
+        """
+        self.weak_transform = weak_transform
+        self.strong_transform = strong_transform
+
+
+    def forward(self, batch):
+        """
+        For each image in the batch, creates two random augmentations on the
+        same image and pairs them.
+
+        Parameters
+        ----------
+            batch: tuple of (torch.Tensor, dict)
+                Tuple of image tensors and metadata dict (containing filenames,
+                etc.)
+
+        Returns
+        -------
+            tuple of ((torch.Tensor, torch.Tensor), dict).
+                The two tensors consist of corresponding images transformed from
+                the original batch.
+        """
+        batch_size = len(batch)
+
+        # Raise error, if loading US sequences
+        if len(batch) == 1 and len(batch[0][0]) > 1:
+            raise RuntimeError("Not currently supported for US sequences!")
+
+        # Accumulate lists for keys in metadata dicts
+        metadata_accum = defaultdict(list)
+        for item in batch:
+            # NOTE: Dataset should return metadata dict as second item
+            metadata = item[1]
+            for key, val in metadata.items():
+                if not isinstance(val, str):
+                    try:
+                        metadata_accum[key].extend(val)
+                    except:
+                        metadata_accum[key].append(val)
+                else:
+                    metadata_accum[key].append(val)
+        metadata_accum = dict(metadata_accum)
+
+        # Convert metadata lists to torch tensors
+        for key, val_list in metadata_accum.items():
+            try:
+                metadata_accum[key] = torch.Tensor(val_list)
+            except:
+                metadata_accum[key] = np.array(val_list)
+
+        # Get images
+        imgs = [data[0] for data in batch]
+
+        # Perform weak augmentation on each image once
+        X_weak_transformed = [self.weak_transform(imgs[i]).unsqueeze_(0) for i in range(batch_size)]
+
+        # Perform strong augmentation on each image twice
+        X_strong_transformed = [
+            self.strong_transform(imgs[i % batch_size]).unsqueeze_(0)
+            for i in range(2 * batch_size)
+        ]
+
+        # Tuple of 1 weak aug. view and 2 strong aug. views
+        X_transformed = (
+            torch.cat(X_weak_transformed, 0),
+            torch.cat(X_strong_transformed[:batch_size], 0),
+            torch.cat(X_strong_transformed[batch_size:], 0)
+        )
+
+        return X_transformed, metadata_accum
+
+
+################################################################################
+#                                  Deprecated                                  #
+################################################################################
 class TCLRCollateFunction(lightly.data.collate.BaseCollateFunction):
     """
     TCLRCollateFunction class
