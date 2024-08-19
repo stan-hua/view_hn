@@ -19,7 +19,6 @@ from tqdm import tqdm
 # Custom libraries
 from src.data import constants
 from src.data_prep.dataset import UltrasoundDataModule
-from src.data_prep.segment_dataset import SegmentedUSModule
 from src.scripts import load_data, load_model
 
 

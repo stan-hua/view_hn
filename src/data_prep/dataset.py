@@ -270,7 +270,7 @@ class UltrasoundDataModule(L.LightningDataModule):
         #                            Augmentations                             #
         ########################################################################
         # Standard augmentations used for all training
-        self.augmentations = utils.prep_augmentations(
+        self.augmentations = utils.prep_strong_augmentations(
             img_size=self.img_size,
             crop_scale=kwargs.get("crop_scale", 0.5))
 
@@ -370,6 +370,7 @@ class UltrasoundDataModule(L.LightningDataModule):
 
         # If specified, instantiate imbalanced sampler
         if self.imbalanced_sampler:
+            LOGGER.info("Using imbalanced sampler for training!")
             sampler = ImbalancedDatasetSampler(train_dataset)
             self.train_dataloader_params["sampler"] = sampler
             self.train_dataloader_params["shuffle"] = False
@@ -667,6 +668,8 @@ class UltrasoundDataset(torch.utils.data.Dataset):
             "visit": visit,
             "seq_number": seq_number,
             "dset": dset,
+            # Store dataset index as well
+            "dataset_idx": index,
         }
 
         return X, metadata

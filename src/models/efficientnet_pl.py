@@ -9,7 +9,6 @@ import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
-from torch.nn import functional as F
 from torchvision.transforms import v2
 
 # Custom libraries

@@ -488,6 +488,7 @@ def extract_backbones_from_ssl_single(hparams, model_cls):
     # If loading another SSL eval model, instantiate required conv. backbones
     extra_model_kwargs = {}
     if hparams.get("from_ssl_eval"):
+        raise NotImplementedError("Changed to use load pre-trained weights directly...")
         extra_model_kwargs["conv_backbone"] = create_conv_backbone(hparams)
 
     # Load pretrained model

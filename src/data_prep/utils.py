@@ -1214,9 +1214,9 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     return processed_img
 
 
-def prep_augmentations(img_size=(256, 256), crop_scale=0.5):
+def prep_strong_augmentations(img_size=(256, 256), crop_scale=0.5):
     """
-    Prepare training augmentations.
+    Prepare strong training augmentations.
 
     Parameters
     ----------
@@ -1239,6 +1239,34 @@ def prep_augmentations(img_size=(256, 256), crop_scale=0.5):
         T.RandomRotation(15),
         T.RandomResizedCrop(img_size, scale=(crop_scale, 1)),
         T.RandomZoomOut(fill=0, side_range=(1.0,  2.0), p=0.25),
+        T.Resize(img_size),
+    ])
+    return transforms
+
+
+def prep_weak_augmentations(img_size=(256, 256)):
+    """
+    Prepare weak training augmentations.
+
+    Parameters
+    ----------
+    img_size : tuple, optional
+        Expected image size post-augmentations
+
+    Returns
+    -------
+    dict
+        Maps from texture/geometric to training transforms
+    """
+    transforms = {}
+    transforms["texture"] = T.Compose([
+        T.RandomAdjustSharpness(1.25, p=0.25),
+        T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
+    ])
+    transforms["geometric"] = T.Compose([
+        T.RandomRotation(7),
+        T.RandomResizedCrop(img_size, scale=(0.8, 1)),
+        T.RandomZoomOut(fill=0, side_range=(1.0,  1.1), p=0.5),
         T.Resize(img_size),
     ])
     return transforms
