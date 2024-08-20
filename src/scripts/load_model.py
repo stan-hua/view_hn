@@ -36,6 +36,7 @@ logging.basicConfig(level=logging.INFO)
 SSL_NAME_TO_MODEL_CLS = {
     "moco": models.MoCo,
     "byol": models.BYOL,
+    "tcl": models.TCL
 
     # Deprecated models
     # "tclr": TCLR,
