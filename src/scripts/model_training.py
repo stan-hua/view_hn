@@ -28,7 +28,6 @@ from src.data import constants
 from src.scripts import load_data, load_model
 from src.utils import config as config_utils
 from src.utils.logging import FriendlyCSVLogger
-from src.utils.influence import plot_most_helpful_harmful_examples
 
 
 ################################################################################
@@ -240,25 +239,6 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     # 2. Perform testing
     if test:
         trainer.test(model=model, dataloaders=dm.test_dataloader())
-
-    # 3. Use influence functions to find harmful training images
-    # TODO: Consider dumping to a file, if comet not available
-    if hparams.get("use_influence_function") and hparams.get("use_comet_logger"):
-        LOGGER.info("Now using influence functions to compute the most helpful/harmful training examples")
-        # For each label, get the most helpful/harmful training examples across
-        # all misclassified examples
-        fig = plot_most_helpful_harmful_examples(
-            model, hparams,
-            train_loader=dm.train_dataloader(),
-            test_loader=dm.val_dataloader(),
-        )
-
-        # Log figures
-        comet_logger.experiment.log_figure(
-            figure_name=f"Influential Training Examples for Worst Misclassified Validation Set Images",
-            figure=fig,
-            overwrite=True,
-        )
 
 
 def main(conf):

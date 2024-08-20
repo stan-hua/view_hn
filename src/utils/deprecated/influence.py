@@ -1,12 +1,12 @@
 """
 influence_function.py
 
-Description: This 
+Description: This file contains a wrapper over influence functions for model
+             debugging
 """
 
 # Standard libraries
 import random
-from collections import Counter, defaultdict
 
 # Non-standard libaries
 import matplotlib.pyplot as plt

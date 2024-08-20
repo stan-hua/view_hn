@@ -17,12 +17,12 @@ import lightning as L
 import torch
 import torchvision.transforms.v2 as T
 from torch.utils.data import DataLoader
-from torchsampler import ImbalancedDatasetSampler
 from torchvision.io import read_image, ImageReadMode
 
 # Custom libraries
 from src.data import constants
 from src.data_prep import utils
+from src.data_prep.sampler import ImbalancedDatasetSampler
 
 
 ################################################################################
