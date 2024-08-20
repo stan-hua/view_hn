@@ -85,7 +85,9 @@ class TCLDataModule(UltrasoundDataModule):
 
         # Pass UltrasoundDataModule arguments
         super().__init__(
-            df, img_dir, mode,
+            df,
+            img_dir=img_dir,
+            mode=mode,
             augment_training=False,
             default_dl_params=DEFAULT_DATALOADER_PARAMS,
             **kwargs)
@@ -96,7 +98,7 @@ class TCLDataModule(UltrasoundDataModule):
         # CASE 1: If augmenting, instantiate weak and strong transforms
         if augment_training:
             weak_transform = T.Compose(list(utils.prep_weak_augmentations(
-                img_size=self.img_size)))
+                img_size=self.img_size).values()))
             strong_transform = T.Compose(list(utils.prep_strong_augmentations(
                 img_size=self.img_size,
                 crop_scale=kwargs.get("crop_scale", 0.5)).values()))

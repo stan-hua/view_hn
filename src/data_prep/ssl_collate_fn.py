@@ -359,6 +359,7 @@ class TCLCollateFunction(torch.nn.Module):
         strong_transform : torchvision.transforms.Compose
             Strong image transform
         """
+        super().__init__()
         self.weak_transform = weak_transform
         self.strong_transform = strong_transform
 

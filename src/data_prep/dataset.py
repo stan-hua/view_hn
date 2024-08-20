@@ -206,7 +206,7 @@ class UltrasoundDataModule(L.LightningDataModule):
                 missing_paths = "\n\t".join(df[~exists_mask]["filename"].tolist())
                 LOGGER.warning(f"{num_missing} image files in table don't exist "
                                f"at path! Skipping...\n\t{missing_paths}")
-                df = df[exists_mask]
+                self.df = df[exists_mask]
         # CASE 2: Only image directory is provided
         else:
             # Get images in directory
@@ -1013,7 +1013,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         class_to_idx = \
             constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
         # NOTE: This assumes that label part was extracted prior to this
-        metadata["label"] = class_to_idx.get(self.labels[index], -1)
+        metadata["label"] = int(class_to_idx.get(self.labels[index], -1))
 
         # Record if has segmentation mask or not
         metadata["has_seg_mask"] = False
@@ -1215,7 +1215,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         class_to_idx = \
             constants.LABEL_PART_TO_CLASSES[self.label_part]["class_to_idx"]
         # NOTE: This assumes that label part was extracted prior to this
-        encoded_labels = [class_to_idx.get(label, -1) for label in self.labels]
+        encoded_labels = [int(class_to_idx.get(label, -1)) for label in self.labels]
 
         return encoded_labels
 

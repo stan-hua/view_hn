@@ -20,7 +20,7 @@ from src.data_prep.dataset import (
     DEFAULT_DATALOADER_PARAMS,
     UltrasoundDataModule, UltrasoundDatasetDataFrame,
 )
-from src.data_prep import BYOLDataModule, MoCoDataModule
+from src.data_prep import BYOLDataModule, MoCoDataModule, TCLDataModule
 
 
 ################################################################################
@@ -33,6 +33,7 @@ LOGGER = logging.getLogger(__name__)
 SSL_NAME_TO_DATA_MODULE = {
     "byol": BYOLDataModule,
     "moco": MoCoDataModule,
+    "tcl": TCLDataModule,
 }
 
 # Default hyperparameters
