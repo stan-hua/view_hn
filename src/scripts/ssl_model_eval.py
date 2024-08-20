@@ -73,7 +73,8 @@ def init(parser):
     """
     arg_help = {
         "exp_names": "Experiment names of SSL-pretrained models to evaluate",
-        "dsets": "List of dataset split or test dataset name to evaluate",
+        "dsets": "List of dataset names to evaluate",
+        "splits": "Name of data splits for each `dset` to evaluate",
         "config": f"Name of configuration file under `{constants.DIR_CONFIG}` "
                   "to overwrite SSL pre-training parameters.",
     }
@@ -86,10 +87,12 @@ def init(parser):
     parser.add_argument("--exp_names", help=arg_help["exp_names"],
                         nargs="+",
                         required=True)
-    parser.add_argument("--dsets", default=[constants.DEFAULT_EVAL_SPLIT],
+    parser.add_argument("--dsets", default=["sickkids"],
                         nargs='+',
                         help=arg_help["dsets"])
-
+    parser.add_argument("--splits", default=["test"],
+                        nargs='+',
+                        help=arg_help["splits"])
 
 def train_eval_model(hparams):
     """
@@ -188,14 +191,7 @@ def train_eval_models(exp_name, **overwrite_hparams):
 
                 # Prepare arguments for loading linear-probing (LP) model
                 # NOTE: Just-trained model should've been an LP model
-                lp_ft_hparams = curr_hparams.copy()
-                lp_ft_hparams["from_ssl_eval"] = True
-                lp_ft_hparams["ssl_ckpt_path"] = load_model.find_best_ckpt_path(
-                    exp_name=lp_ft_hparams["exp_name"],
-                )
-
-                # Create the LP-FT eval experiment name
-                lp_ft_hparams = prep_eval_exp_hparams(lp_ft_hparams)
+                lp_ft_hparams = prep_eval_exp_hparams(curr_hparams, from_ssl_eval=True)
 
                 # Attempt to train fine-tuned model from linear-probed (LP) model
                 train_eval_model(lp_ft_hparams)
@@ -204,83 +200,56 @@ def train_eval_models(exp_name, **overwrite_hparams):
 ################################################################################
 #                               Analyze Results                                #
 ################################################################################
-def analyze_eval_model_preds(exp_name, dset, model_type="linear_lstm",
-                             label_part="side", freeze_weights=False,
-                             augment_training=False,
-                             lp_ft=False):
+def analyze_eval_model_preds(hparams, dsets, splits):
     """
     Evaluate single evaluation model.
 
     Parameters
     ----------
-    exp_name : str
-        Name of SSL experiment
-    dset : str or list, optional
-        Name of evaluation split / dataset to perform inference on, by default
-        constants.DEFAULT_EVAL_SPLIT
-    model_type : str, optional
-        One of ("linear", "linear_lstm"), by default "linear_lstm"
-    label_part : str, optional
-        One of ("side", "plane"), by default "side"
-    freeze_weights : bool, optional
-        If True, freezes convolutional weights during training, by default False
-    augment_training : bool, optional
-        If True, adds augmentation during linear probing / fine-tuning, by
-        default False
-    lp_ft : bool, optional
-        If True, trains eval. model via fine-tuning starting FROM an eval. model
-        that was created via linear probing, by default False.
+    hparams : dict
+        Eval. experiment  and evaluation hyperparameters
+    dsets : str or list, optional
+        Name of evaluation dataset/s
+    splits : str or list, optional
+        Name of splits corresponding to each dataset to evaluate
     """
-    exp_eval_name = TEMPLATE_EVAL_EXP_NAME.render(
-            exp_name=exp_name,
-            model_type=model_type,
-            label_part=label_part,
-            freeze_weights=freeze_weights,
-            lp_ft=lp_ft,
-            augment_training=augment_training,
-    )
+    dsets = [dsets] if isinstance(dsets, str) else dsets
+    splits = [splits] if isinstance(splits, str) else splits
 
-    dsets = [dset] if isinstance(dset, str) else dset
-    for dset in dsets:
-        # Correctly convert to dset and split
-        curr_dset = dset
-        curr_split = "test"
-        if dset in ("train", "val", "test"):
-            curr_dset = None
-            curr_split = dset
+    for idx, curr_dset in enumerate(dsets):
+        curr_split = splits[idx]
 
         # Create overwriting parameters, if external dataset desired
         eval_hparams = load_data.create_eval_hparams(curr_dset, curr_split)
 
         # 1. Perform inference on dataset
         model_eval.infer_dset(
-            exp_eval_name,
-            dset=dset,
+            hparams["exp_name"],
+            dset=curr_dset,
+            split=curr_split,
             **eval_hparams)
 
         # 2. Embed dataset
         model_eval.embed_dset(
-            exp_eval_name,
-            dset=dset,
+            hparams["exp_name"],
+            dset=curr_dset,
+            split=curr_split,
             **eval_hparams,
         )
 
         # 3. Analyze predictions separately
         model_eval.analyze_dset_preds(
-            exp_eval_name,
-            dsets=dset,
+            hparams["exp_name"],
+            dsets=curr_dset,
+            splits=curr_split,
             log_to_comet=True,
         )
 
     # 4. Create UMAP together
-    model_eval.analyze_dset_preds(
-        exp_eval_name,
-        dsets=dsets,
-    )
+    model_eval.analyze_dset_preds(hparams["exp_name"], dsets=dsets, splits=splits)
 
 
-def analyze_preds(exp_name, augment_training=False,
-                  dset=constants.DEFAULT_EVAL_SPLIT):
+def analyze_preds(exp_name, hparams, dsets="sickkids", splits="val",):
     """
     Perform test prediction analysis from `model_eval` on trained evaluations
     models
@@ -289,39 +258,40 @@ def analyze_preds(exp_name, augment_training=False,
     ----------
     exp_name : str
         Base SSL experiment name
-    augment_training : bool, optional
-        If True, check evaluation models fine-tuned WITH augmentation, by
-        default False.
-    dset : str or list, optional
-        Name of evaluation split / dataset to perform inference on, by default
-        constants.DEFAULT_EVAL_SPLIT
+    hparams : dict
+        Eval experiment hyperparameters
+    dsets : str or list, optional
+        Name of evaluation dataset/s
+    splits : str or list, optional
+        Name of splits corresponding to each dataset to evaluate
     """
     # Evaluate each model separately
     for model_type in MODEL_TYPES:
         for label_part in LABEL_PARTS:
             for freeze_weights in FREEZE_WEIGHTS:
-                analyze_eval_model_preds(
+                # Create hyperparameters
+                curr_hparams = prep_eval_exp_hparams(
+                    hparams,
                     exp_name=exp_name,
-                    dset=dset,
-                    model_type=model_type,
                     label_part=label_part,
+                    model_type=model_type,
                     freeze_weights=freeze_weights,
-                    augment_training=augment_training,
-                    lp_ft=False)
-            # Skip, if not doing LP-FT (fine-tuning after linear probing)
-            if not LP_FT:
-                continue
+                    lp_ft=False,
+                )
+                # Analyze predictions of SSL eval model
+                analyze_eval_model_preds(curr_hparams, dsets=dsets, splits=splits)
 
-            # Attempt to train fine-tuned model from linear-probed model
-            analyze_eval_model_preds(
-                exp_name=exp_name,
-                dset=dset,
-                model_type=model_type,
-                label_part=label_part,
-                freeze_weights=False,
-                lp_ft=True,
-                augment_training=augment_training,
-            )
+
+                # Skip, if not doing LP-FT (fine-tuning after linear probing)
+                if not freeze_weights or not LP_FT:
+                    continue
+
+                # Prepare arguments for loading linear-probing (LP) model
+                # NOTE: Just-trained model should've been an LP model
+                lp_ft_hparams = prep_eval_exp_hparams(curr_hparams, from_ssl_eval=True)
+
+                # Analyze predictions of (LP-FT) SSL eval model
+                analyze_eval_model_preds(lp_ft_hparams, dsets=dsets, splits=splits)
 
 
 ################################################################################
@@ -412,6 +382,9 @@ def prep_eval_exp_hparams(hparams, **overwrite_hparams):
     label_part = hparams["label_part"]
     hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[label_part]["classes"])
 
+    # Specify to load pretrained weights
+    hparams["from_exp_name"] = hparams["exp_name"]
+
     # Update experiment name
     hparams["exp_name"] = exp_eval_name
 
@@ -421,7 +394,7 @@ def prep_eval_exp_hparams(hparams, **overwrite_hparams):
 ################################################################################
 #                                  Main Flow                                   #
 ################################################################################
-def main(exp_names, dsets, hparams):
+def main(args, hparams):
     """
     Perform evaluation of SSL model.
 
@@ -434,6 +407,18 @@ def main(exp_names, dsets, hparams):
     hparams : dict
         Arguments for training SSL evaluation model
     """
+    # Get dataset and splits
+    exp_names = args.exp_names
+    dsets = args.dsets
+    splits = args.splits
+    # If only one of dset/split is > 1, assume it's meant to be broadcast
+    if len(dsets) == 1 and len(splits) > 1:
+        LOGGER.info("Only 1 `dset` provided! Assuming same `dset` for all `splits`...")
+        dsets = dsets * len(splits)
+    if len(splits) == 1 and len(dsets) > 1:
+        LOGGER.info("Only 1 `split` provided! Assuming same `split` for all `dsets`...")
+        splits = splits * len(dsets)
+
     # For each base SSL experiment name provided,
     for exp_name in exp_names:
         # Check that exp_name leads to a valid directory
@@ -446,8 +431,8 @@ def main(exp_names, dsets, hparams):
         train_eval_models(exp_name, **hparams)
 
         # Analyze results of evaluation models
-        analyze_preds(exp_name, dset=dsets,
-                      augment_training=hparams["augment_training"])
+        analyze_preds(exp_name, dsets=dsets, splits=splits,
+                      hparams=hparams)
 
 
 if __name__ == "__main__":
@@ -470,4 +455,4 @@ if __name__ == "__main__":
     HPARAMS = config_utils.flatten_nested_dict(CONF)
 
     # 3. Run main
-    main(ARGS.exp_names, ARGS.dsets, HPARAMS)
+    main(ARGS, HPARAMS)

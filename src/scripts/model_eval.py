@@ -12,7 +12,6 @@ import os
 import random
 import sys
 from collections import OrderedDict
-from colorama import Fore, Style
 from functools import partial
 
 # Non-standard libraries
@@ -25,6 +24,7 @@ import torch
 import torchvision.transforms.v2 as T
 from arch.bootstrap import IIDBootstrap
 from albumentations.pytorch.transforms import ToTensorV2
+from colorama import Fore, Style
 from scipy.stats import pearsonr
 from sklearn import metrics as skmetrics
 from torchvision.io import read_image, ImageReadMode
@@ -753,7 +753,7 @@ def plot_image_count_over_sequence(df_pred, update_seq_num=False):
         col = "seq_number_new"
 
     # Create plot
-    df_count = df_pred.groupby(by=[col]).apply(lambda df: len(df))
+    df_count = df_pred.groupby(by=[col]).apply(len)
     df_count.name = "count"
     df_count = df_count.reset_index()
     sns.barplot(data=df_count, x=col, y="count")
@@ -827,7 +827,7 @@ def check_others_pred_progression(df_pred):
     # Get unique label sequences per patient
     df_seqs = df_pred.groupby(by=["id", "visit"])
     label_seqs = df_seqs.apply(_get_label_sequence)
-    label_seqs = label_seqs.map(lambda x: "".join(x))
+    label_seqs = label_seqs.map("".join)
     label_seq_counts = label_seqs.value_counts().reset_index().rename(
         columns={"index": "Label Sequence", 0: "Count"})
 
@@ -910,7 +910,7 @@ def check_rel_side_pred_progression(df_pred):
     # Get unique label sequences per patient
     df_seqs = df_pred.groupby(by=["id", "visit"])
     label_seqs = df_seqs.apply(_get_label_sequence)
-    label_seqs = label_seqs.map(lambda x: "".join(x))
+    label_seqs = label_seqs.map("".join)
     label_seq_counts = label_seqs.value_counts().reset_index().rename(
         columns={"index": "Label Sequence", 0: "Count"})
 
@@ -1627,7 +1627,7 @@ def transform_image(img, augment=False, n=1, hparams=None):
 
     # If specified, add training augmentations
     if augment:
-        transforms.append(T.Compose(list(utils.prep_augmentations(
+        transforms.append(T.Compose(list(utils.prep_strong_augmentations(
             img_size=img_size,
             crop_scale=crop_scale).values())))
     transforms = T.Compose(transforms)
@@ -1962,7 +1962,7 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False,
     if label_part == "side":
         side_func = lambda x: side_to_idx[x]
     else:
-        LOGGER.warning(f"Invalid `label_part` provided in `show_example_side_predictions`! Skipping...")
+        LOGGER.warning("Invalid `label_part` provided in `show_example_side_predictions`! Skipping...")
         return
 
     # Apply function above to labels/preds
@@ -2221,7 +2221,7 @@ def load_view_predictions(exp_name, dset, split, **infer_kwargs):
     return df_pred
 
 
-def load_side_plane_view_predictions(side_exp_name, plane_exp_name, dset,
+def load_side_plane_view_predictions(side_exp_name, plane_exp_name, dset, split,
                                      mask_bladder=False):
     """
     Load view label predictions for side and plane model.
@@ -2233,7 +2233,9 @@ def load_side_plane_view_predictions(side_exp_name, plane_exp_name, dset,
     plane_exp_name : str
         Name of plane experiment
     dset : str
-        Name of evaluation split or test dataset
+        Name of evaluation dataset
+    split : str
+        Name of data split corresponding to dataset
     mask_bladder : bool, optional
         If True, bladder predictions are masked out, by default False
 
@@ -2245,7 +2247,7 @@ def load_side_plane_view_predictions(side_exp_name, plane_exp_name, dset,
     # Load side predictions
     if side_exp_name != "canonical":
         df_side_preds = load_view_predictions(
-            side_exp_name, dset, mask_bladder=mask_bladder)
+            side_exp_name, dset=dset, split=split, mask_bladder=mask_bladder)
         # Rename columns
         df_side_preds = df_side_preds.rename(columns={
             "label": "side",
@@ -2261,7 +2263,7 @@ def load_side_plane_view_predictions(side_exp_name, plane_exp_name, dset,
     # Load plane predictions
     if plane_exp_name != "canonical":
         df_plane_preds = load_view_predictions(
-            plane_exp_name, dset, mask_bladder=mask_bladder)
+            plane_exp_name, dset=dset, split=split, mask_bladder=mask_bladder)
         # Rename columns
         df_plane_preds = df_plane_preds.rename(columns={
             "label": "plane",
