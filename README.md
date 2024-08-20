@@ -15,26 +15,22 @@ Repository contains code for:
 
 ## Quick Setup
 
-#### Go to project directory
+#### Clone directory
 ```
-# Go to `view_hn` repo directory
-cd PATH/TO/DIRECTORY
-```
-
-#### 0. (Optional) Create virtual environmeent
-```
-# Create environment
-python -m venv VIEW_HN
-
-# Activate environment
-# 1. In Windows
-VIEW_HN\Scripts\activate
-# 2. In Linux
-source VIEW_HN/bin/activate
+git clone https://github.com/stan-hua/view_hn.git
+cd view_hn
 ```
 
 #### 1. Install dependencies
 ```
+# Conda
+conda create --name view python=3.9.19
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+conda install -f environment.yml
+
+# Pip and Venv
+python -m venv view
+source view/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -50,18 +46,8 @@ ln -s /PATH/TO/DATA/DIRECTORY ./src/data
 
 #### 3. Set up Comet ML for Online Logging
 ```
-# pip install comet_ml
 comet init                  # create account, if not already
 ```
-
-#### (Optional) 4. Set up influence functions
-```
-# Install to a package directory of your choice
-git clone https://github.com/alstonlo/torch-influence
-cd torch-influence
-pip install -e .
-```
-
 
 ---
 
@@ -74,7 +60,7 @@ pip install -e .
 ```
 .
 └── src
-    ├── drivers                     (scripts for training/evaluation/embedding)
+    ├── scripts                     (scripts for training/evaluation/embedding)
     │   ├── model_training.py       (to train models)
     │   ├── load_model.py           (to load models)
     │   ├── model_eval.py           (to evaluate models)
@@ -99,6 +85,6 @@ pip install -e .
     │   └── ...
     ├── loss                        (for experimental contrastive losses)
     │   └── ...
-    └── utilities                   (for easier logging)
+    └── utils                       (for utilities)
         └── ...
 ```
