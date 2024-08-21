@@ -1448,10 +1448,6 @@ def calculate_exp_metrics(exp_name, dset, split, hparams=None,
         # 5. Create plots for visual evaluation
         eval_create_plots(df_pred, hparams, inference_dir, dset=dset, split=split)
 
-        # Revert temporary changes
-        hparams["label_part"] = orig_label_part
-        df_pred = df_pred.drop(columns=["label", "pred", "prob", "out"])
-
 
 def store_example_classifications(exp_name, dset, split, mask_bladder=False,
                                   save_dir=constants.DIR_FIGURES_PRED):
