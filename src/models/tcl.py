@@ -235,8 +235,9 @@ class TCL(L.LightningModule):
         labels = torch.zeros((train_set_size, ))
         cluster_labels = torch.zeros((train_set_size, self.hparams["num_classes"]))
         for (x_weak, _, _), metadata in train_dataloader:
-            dataset_idx = metadata["dataset_idx"].to(int)
-            labels[dataset_idx] = metadata["label"]
+            x_weak = x_weak.to(self.device)
+            dataset_idx = metadata["dataset_idx"].to(int).to(self.device)
+            labels[dataset_idx] = metadata["label"].to(self.device)
             with torch.no_grad():
                 out = self.conv_backbone(x_weak).flatten(start_dim=1)
                 # Get cluster label
@@ -342,10 +343,10 @@ class TCL(L.LightningModule):
         )
 
         # Get number of samples for each of (x_weak, x_1, x_2, x_m)
-        lengths = [x_i.size(0) for x_i in (x_weak, x_1, x_2, x_mixup)]
+        x_lst = [x_weak, x_1, x_2, x_mixup]
+        lengths = [x_i.size(0) for x_i in x_lst]
 
         # Extract convolutional features
-        x_lst = [x_weak, x_1, x_2, x_mixup]
         # out = torch.cat([self.conv_backbone(x).flatten(start_dim=1) for x in x_lst])
         out = self.conv_backbone(torch.cat(x_lst)).flatten(start_dim=1)
 
@@ -404,6 +405,11 @@ class TCL(L.LightningModule):
     def compute_entropy_loss(self, y_pred):
         """
         Compute entropy regularization loss
+
+        Note
+        -----
+        Original implementation may be wrong. See
+        https://github.com/Hzzone/TCL/blob/master/models/tcl/tcl_wrapper.py#L80
 
         Parameters
         ----------
