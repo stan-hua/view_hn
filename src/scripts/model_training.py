@@ -87,8 +87,7 @@ def set_seed(seed=SEED, include_algos=False):
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
-def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
-        checkpoint=True, early_stopping=False, exp_name="1"):
+def run(hparams, dm, results_dir, fold=0):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
 
@@ -101,25 +100,13 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
         Data module, which already called .setup()
     results_dir : str
         Path to directory containing trained model and/or test results
-    train : bool, optional
-        If True, trains a model and saves it to results_dir, by default True
-    test : bool, optional
-        If True, performs evaluation on trained/existing model and saves results
-        to results_dir, by default True
     fold : int, optional
         If performing cross-validation, supplies fold index. Index ranges
         between 0 to (num_folds - 1). If train-val-test split, remains 0, by
         default 0.
-    swa : bool, optional
-        If True, perform Stochastic Weight Averaging (SWA), by default True.
-    checkpoint : bool, optional
-        If True, saves model (last epoch) to checkpoint, by default True
-    early_stopping : bool, optional
-        If True, performs early stopping on plateau of val loss, by default
-        False.
-    exp_name : str, optional
-        Name of experiment, by default "1"
     """
+    exp_name = hparams["exp_name"]
+
     # Create parent directory if not exists
     if not os.path.exists(f"{results_dir}/{exp_name}"):
         os.makedirs(f"{results_dir}/{exp_name}")
@@ -178,15 +165,18 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     # Callbacks
     callbacks = []
     # 1. Model checkpointing
-    if checkpoint:
+    if hparams["checkpoint"]:
+        LOGGER.info("Storing model checkpoints...")
         callbacks.append(
             ModelCheckpoint(dirpath=experiment_dir, save_last=True,
                             monitor="val_loss" if includes_val else None))
     # 2. Stochastic Weight Averaging
-    if swa:
+    if hparams["swa"]:
+        LOGGER.info("Performing stochastic weight averaging (SWA)...")
         callbacks.append(StochasticWeightAveraging(swa_lrs=1e-2))
     # 3. Early stopping
-    if early_stopping:
+    if hparams["early_stopping"]:
+        LOGGER.info("Performing early stopping on validation loss...")
         callbacks.append(EarlyStopping(monitor="val_loss", mode="min"))
 
     # Initialize Trainer
@@ -198,7 +188,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
                       precision=hparams["precision"],
                       gradient_clip_val=hparams["grad_clip_norm"],
                       max_epochs=hparams["stop_epoch"],
-                      enable_checkpointing=checkpoint,
+                      enable_checkpointing=hparams["checkpoint"],
                       callbacks=callbacks,
                       logger=loggers,
                       fast_dev_run=hparams["debug"],
@@ -214,7 +204,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
     model = load_model.load_model(hparams=hparams)
 
     # 1. Perform training
-    if train:
+    if hparams["train"]:
         # If resuming training
         ckpt_path = None
         if run_exists:
@@ -237,7 +227,7 @@ def run(hparams, dm, results_dir, train=True, test=True, fold=0, swa=True,
             exit(1)
 
     # 2. Perform testing
-    if test:
+    if hparams["test"]:
         trainer.test(model=model, dataloaders=dm.test_dataloader())
 
 
@@ -262,14 +252,6 @@ def main(conf):
     # 0. Set random seed
     set_seed(hparams.get("seed"))
 
-    # 0. Arguments for experiment
-    experiment_hparams = {
-        "train": hparams["train"],
-        "test": hparams["test"],
-        "checkpoint": hparams["checkpoint"],
-        "exp_name": hparams["exp_name"],
-    }
-
     # May run out of memory on full videos, so accumulate over single batches instead
     if hparams["full_seq"]:
         hparams["accum_batches"] = hparams["batch_size"]
@@ -285,13 +267,12 @@ def main(conf):
 
     # 2.1 Run experiment
     if hparams["cross_val_folds"] == 1:
-        run(hparams, dm, constants.DIR_RESULTS, **experiment_hparams)
+        run(hparams, dm, constants.DIR_RESULTS)
     # 2.2 Run experiment w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)
-            run(hparams, dm, constants.DIR_RESULTS, fold=fold_idx,
-                **experiment_hparams)
+            run(hparams, dm, constants.DIR_RESULTS, fold=fold_idx)
 
 
 if __name__ == "__main__":
