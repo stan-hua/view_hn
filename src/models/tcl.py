@@ -14,13 +14,14 @@ import logging
 import numpy as np
 import lightly
 import lightning as L
-from sklearn.mixture import GaussianMixture
 import torch
 import torch.nn.functional as F
 import torchmetrics
 from efficientnet_pytorch import EfficientNet
 from lightly.models.utils import (batch_shuffle, batch_unshuffle,
                                   deactivate_requires_grad, update_momentum)
+from sklearn.mixture import GaussianMixture
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 
 # Custom libraries
 from src.utils import efficientnet_pytorch_utils as effnet_utils
@@ -126,16 +127,17 @@ class TCL(L.LightningModule):
         self.ce_loss = torch.nn.CrossEntropyLoss(reduction="mean")
         self.contrastive_loss = lightly.loss.NTXentLoss(
             temperature=self.hparams.temperature,
-            memory_bank_size=self.hparams.memory_bank_size)
+            memory_bank_size=(self.hparams.memory_bank_size, self.head_hidden_dim),
+        )
 
         # Store metrics, just for validation set
         # NOTE: Split validation set into clean and noisy labels based on GMM
-        self.dset_to_acc = {
+        self.dset_to_acc = torch.nn.ModuleDict({
             dset: torchmetrics.Accuracy(
                 num_classes=self.hparams.num_classes,
                 task='multiclass')
             for dset in ("val", "val_clean", "val_noisy")
-        }
+        })
 
         # Store outputs
         self.dset_to_outputs = {"train": [], "val": [], "test": []}
@@ -158,9 +160,10 @@ class TCL(L.LightningModule):
 
         Returns
         -------
-        torch.optim.Optimizer
-            Initialized optimizer.
+        dict
+            Contains optimizer and LR scheduler
         """
+        # Create optimizer
         if self.hparams.optimizer == "adamw":
             optimizer = torch.optim.AdamW(self.parameters(),
                                           lr=self.hparams.lr,
@@ -170,7 +173,18 @@ class TCL(L.LightningModule):
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
-        return optimizer
+
+        # Prepare return
+        ret = {
+            "optimizer": optimizer,
+        }
+
+        # Set up LR Scheduler
+        if self.hparams.get("lr_scheduler") == "cosine_annealing":
+            lr_scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+            ret["lr_scheduler"] = lr_scheduler
+
+        return ret
 
 
     def init_buffers(self, train_set_size):
@@ -186,12 +200,13 @@ class TCL(L.LightningModule):
         # 1. Cluster means
         self.register_buffer(
             "cluster_means",
-            torch.randn((self.hparams["num_classes"], self.head_hidden_dim)),
+            torch.randn((self.hparams["num_classes"], self.head_hidden_dim),
+                        device=self.device),
         )
         # 2. Clean label probabilities
         self.register_buffer(
             "is_clean_prob",
-            torch.rand((train_set_size,)),
+            torch.rand((train_set_size,), device=self.device),
         )
 
 
@@ -216,23 +231,21 @@ class TCL(L.LightningModule):
         # 1. Use classifier head to get cluster predictions
         # 2. Use projector head to get normalized features
         # NOTE: In the original paper, they use train images w/o augmentation
+        features = torch.zeros((train_set_size, self.head_hidden_dim))
+        labels = torch.zeros((train_set_size, ))
+        cluster_labels = torch.zeros((train_set_size, self.hparams["num_classes"]))
+        for (x_weak, _, _), metadata in train_dataloader:
+            dataset_idx = metadata["dataset_idx"].to(int)
+            labels[dataset_idx] = metadata["label"]
+            with torch.no_grad():
+                out = self.conv_backbone(x_weak).flatten(start_dim=1)
+                # Get cluster label
+                cluster_labels[dataset_idx] = F.softmax(self.prediction_head(out), dim=1).detach().cpu()
+                # Get normalized features
+                features[dataset_idx] = F.normalize(self.projection_head(out)).detach().cpu()
 
-        # TODO: Revert
-        # features = torch.zeros((train_set_size, self.head_hidden_dim))
-        # labels = torch.zeros((train_set_size, ))
-        # cluster_labels = torch.zeros((train_set_size, self.hparams["num_classes"]))
-        # for (x_weak, _, _), metadata in train_dataloader:
-        #     dataset_idx = metadata["dataset_idx"].to(int)
-        #     labels[dataset_idx] = metadata["label"]
-        #     with torch.no_grad():
-        #         out = self.conv_backbone(x_weak).flatten(start_dim=1)
-        #         # Get cluster label
-        #         cluster_labels[dataset_idx] = F.softmax(self.prediction_head(out), dim=1).detach().cpu()
-        #         # Get normalized features
-        #         features[dataset_idx] = F.normalize(self.projection_head(out)).detach().cpu()
-
-        # # Use GMM to detect if label is clean/noisy
-        # ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
+        # Use GMM to detect if label is clean/noisy
+        ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
 
         ret = {
             "cluster_means": torch.randn((self.hparams["num_classes"], self.head_hidden_dim)),
@@ -314,14 +327,6 @@ class TCL(L.LightningModule):
         labels = metadata["label"].to(int)
         dataset_idx = metadata["dataset_idx"].to(int)
 
-        # TODO: Uncomment and revert
-        # assert False, (
-        #     metadata["label"].device,
-        #     metadata["dataset_idx"].device,
-        #     labels.device,
-        #     dataset_idx.device
-        # )
-
         # Get label weight (how clean is each label?)
         is_clean_prob = self.is_clean_prob[dataset_idx]
         # Get cluster centres/prototypes
@@ -341,7 +346,8 @@ class TCL(L.LightningModule):
 
         # Extract convolutional features
         x_lst = [x_weak, x_1, x_2, x_mixup]
-        out = torch.cat([self.conv_backbone(x).flatten(start_dim=1) for x in x_lst])
+        # out = torch.cat([self.conv_backbone(x).flatten(start_dim=1) for x in x_lst])
+        out = self.conv_backbone(torch.cat(x_lst)).flatten(start_dim=1)
 
         # 1. Predict cluster/class (logits)
         logit_weak, logit_1, logit_2, logit_mixup = self.prediction_head(out).split(lengths)
@@ -487,9 +493,9 @@ class TCL(L.LightningModule):
         with torch.no_grad():
             out = self.conv_backbone(x_weak).flatten(start_dim=1)
             # Get cluster label
-            cluster_labels = F.softmax(self.prediction_head(out), dim=1).detach().cpu()
+            cluster_labels = F.softmax(self.prediction_head(out), dim=1).detach()
             # Get normalized features
-            features = F.normalize(self.projection_head(out)).detach().cpu()
+            features = F.normalize(self.projection_head(out)).detach()
 
         # Use GMM to detect if label is clean/noisy
         ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
@@ -524,7 +530,7 @@ class TCL(L.LightningModule):
         """
         outputs = self.dset_to_outputs["train"]
         loss = torch.stack([d['loss'] for d in outputs]).mean()
-        self.log('epoch_train_loss', loss)
+        self.log('epoch_train_loss', loss, batch_size=self.hparams.get("batch_size"))
 
         # Clean stored output
         self.dset_to_outputs["train"].clear()
@@ -607,16 +613,8 @@ class TCL(L.LightningModule):
         nll_loss = nll_loss.cpu().numpy()[:, np.newaxis]
         epsilon = 1e-10
         nll_loss = (nll_loss - nll_loss.min()) / (epsilon + nll_loss.max() - nll_loss.min())
-        # TODO: Remove
-        print(f"nll_loss (2): {nll_loss}")
 
-        # TODO: Remove
-        if np.isnan(nll_loss).any():
-            raise RuntimeError("NLL loss contains null!")
-
-        # Convert to numpy array
-        labels = labels.cpu().numpy()
-
+        # TODO: Consider separate GMM for each label
         # Fit (OOD) GMM to detect clean/noisy labels
         gm = GaussianMixture(n_components=2, random_state=0).fit(nll_loss)
         # Predict probability of being in cluster 1/2
@@ -624,7 +622,7 @@ class TCL(L.LightningModule):
         # Get probability that label belongs in clean cluster
         # NOTE: Cluster with lower avg. negative log-likelihood is the clean cluster
         is_clean_prob = gm_probs[:, np.argmin(gm.means_)]
-        is_clean_prob = torch.tensor(is_clean_prob, dtype=float).to(self.device)
+        is_clean_prob = torch.tensor(is_clean_prob, dtype=float)
 
         # Store values
         ret_dict = {
@@ -632,7 +630,7 @@ class TCL(L.LightningModule):
             # Soft cluster assignments
             "cluster_assignments": cluster_assignments,
             # Prob. that label is in clean cluster
-            "is_clean_prob": is_clean_prob
+            "is_clean_prob": is_clean_prob.to(self.device),
         }
 
         return ret_dict

@@ -9,6 +9,7 @@ import lightning as L
 import torch
 import torchmetrics
 from efficientnet_pytorch import EfficientNet, get_model_params
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torchvision.transforms import v2
 
 # Custom libraries
@@ -137,21 +138,31 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         Returns
         -------
-        torch.optim.Optimizer
-            Initialized optimizer.
+        dict
+            Contains optimizer and LR scheduler
         """
-        # Instantiate optimizer
-        params = self.parameters()
+        # Create optimizer
         if self.hparams.optimizer == "adamw":
-            optimizer = torch.optim.AdamW(params,
+            optimizer = torch.optim.AdamW(self.parameters(),
                                           lr=self.hparams.lr,
                                           weight_decay=self.hparams.weight_decay)
         elif self.hparams.optimizer == "sgd":
-            optimizer = torch.optim.SGD(params,
+            optimizer = torch.optim.SGD(self.parameters(),
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
-        return optimizer
+
+        # Prepare return
+        ret = {
+            "optimizer": optimizer,
+        }
+
+        # Set up LR Scheduler
+        if self.hparams.get("lr_scheduler") == "cosine_annealing":
+            lr_scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+            ret["lr_scheduler"] = lr_scheduler
+
+        return ret
 
 
     def load_imagenet_weights(self):
