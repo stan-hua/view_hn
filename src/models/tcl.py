@@ -139,6 +139,14 @@ class TCL(L.LightningModule):
             for dset in ("val", "val_clean", "val_noisy")
         })
 
+        # Register buffers
+        self.register_buffer(
+            "cluster_means",
+            torch.randn((self.hparams["num_classes"], self.head_hidden_dim)),
+        )
+        # 2. Clean label probabilities
+        self.is_clean_prob = None
+
         # Store outputs
         self.dset_to_outputs = {"train": [], "val": [], "test": []}
 
@@ -187,29 +195,6 @@ class TCL(L.LightningModule):
         return ret
 
 
-    def init_buffers(self, train_set_size):
-        """
-        Initialize buffers.
-
-        Parameters
-        ----------
-        train_set_size : int
-            Number of samples in training set
-        """
-        # Stored attributes, updated at the start of every epoch
-        # 1. Cluster means
-        self.register_buffer(
-            "cluster_means",
-            torch.randn((self.hparams["num_classes"], self.head_hidden_dim),
-                        device=self.device),
-        )
-        # 2. Clean label probabilities
-        self.register_buffer(
-            "is_clean_prob",
-            torch.rand((train_set_size,), device=self.device),
-        )
-
-
     ############################################################################
     #                             Epoch Hooks                                  #
     ############################################################################
@@ -223,10 +208,6 @@ class TCL(L.LightningModule):
         train_dataloader = self.trainer.train_dataloader
         train_set_size = len(train_dataloader.dataset)
 
-        # If first epoch, initialize buffer
-        if self.current_epoch == 0:
-            self.init_buffers(train_set_size)
-
         # For each of the weakly augmented images,
         # 1. Use classifier head to get cluster predictions
         # 2. Use projector head to get normalized features
@@ -234,7 +215,7 @@ class TCL(L.LightningModule):
         # NOTE: Below tensors are on CPU only
         features = torch.zeros((train_set_size, self.head_hidden_dim))
         labels = torch.zeros((train_set_size, )).to(int)
-        cluster_labels = torch.zeros((train_set_size, self.hparams["num_classes"])).to(int)
+        cluster_labels = torch.zeros((train_set_size, self.hparams["num_classes"])).to(torch.float32)
         for (x_weak, _, _), metadata in train_dataloader:
             x_weak = x_weak.to(self.device)
             dataset_idx = metadata["dataset_idx"].to(int)
@@ -250,8 +231,8 @@ class TCL(L.LightningModule):
         ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
 
         # Modify buffers
-        self.cluster_means[:] = ret["cluster_means"]
-        self.is_clean_prob[:] = ret["is_clean_prob"]
+        self.cluster_means = ret["cluster_means"].type_as(self.cluster_means)
+        self.is_clean_prob = ret["is_clean_prob"]
 
 
     ############################################################################
@@ -325,7 +306,8 @@ class TCL(L.LightningModule):
         dataset_idx = metadata["dataset_idx"].to(int)
 
         # Get label weight (how clean is each label?)
-        is_clean_prob = self.is_clean_prob[dataset_idx]
+        # NOTE: Reshape to (train_set_size, 1) to handle later broadcasting
+        is_clean_prob = self.is_clean_prob[dataset_idx].unsqueeze(1)
         # Get cluster centres/prototypes
         cluster_means = self.cluster_means
 
@@ -379,10 +361,11 @@ class TCL(L.LightningModule):
 
                 # [Alignment Loss]
                 # Create targets for alignment loss (for MixUp images only)
-                # Labels := avg. estimated labels for mixed up image pairs
-                t_bar = (t_1 + t_2).mean()
+                # Labels := avg. estimated labels for strongly augmented views
+                t_bar = (t_1 + t_2) / 2
                 # Repeat 3 time since `len(x_mixup) = 3 * len(x_weak)`
                 t_bar = t_bar.repeat((3, 1))
+
                 # Interpolate with corresponding mixed up images
                 t_mixup = interpolate(t_bar, t_bar[mixup_idx], mixup_coef)
 
@@ -770,7 +753,7 @@ def interpolate(x_1, x_2, lam):
         Arbitrary variable
     x_2 : Any
         Arbitrary variable
-    lam : float
+    lam : float or np.array
         Interpolation parameter between 0 and 1
 
     Returns
