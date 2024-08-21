@@ -351,6 +351,34 @@ class UltrasoundDataModule(L.LightningDataModule):
         if exclude_filename_json:
             self.df = utils.exclude_from_any_split(self.df, exclude_filename_json)
 
+        # If specified, downsample training set proportion
+        downsample_train_prop = self.us_dataset_kwargs.get("downsample_train_prop", 1.)
+        if downsample_train_prop and downsample_train_prop < 1:
+            df_train = self.df[self.df["split"] == "train"]
+            df_rest = self.df[self.df["split"] != "train"]
+
+            # Stratified split on label
+            # 0. Set seed
+            rng_state = np.random.get_state()
+            np.random.seed(42)
+
+            # 1. Randomly assign samples to keep based on downsample train prop.
+            train_sampled_mask = df_train.groupby(by=["label"], group_keys=False).apply(
+                lambda df_label: np.random.choice(
+                    a=[True, False],
+                    size=len(df_label),
+                    p=(downsample_train_prop, 1-downsample_train_prop),
+                )
+            )
+            # 2. Assign traing
+            df_train.loc[train_sampled_mask, "split"] = None
+
+            # 3. Recombine
+            self.df = pd.concat([df_train, df_rest], ignore_index=True)
+
+            # Restore random state
+            np.random.set_state(rng_state)
+
 
     def train_dataloader(self):
         """
