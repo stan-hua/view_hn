@@ -231,13 +231,14 @@ class TCL(L.LightningModule):
         # 1. Use classifier head to get cluster predictions
         # 2. Use projector head to get normalized features
         # NOTE: In the original paper, they use train images w/o augmentation
+        # NOTE: Below tensors are on CPU only
         features = torch.zeros((train_set_size, self.head_hidden_dim))
-        labels = torch.zeros((train_set_size, ))
-        cluster_labels = torch.zeros((train_set_size, self.hparams["num_classes"]))
+        labels = torch.zeros((train_set_size, )).to(int)
+        cluster_labels = torch.zeros((train_set_size, self.hparams["num_classes"])).to(int)
         for (x_weak, _, _), metadata in train_dataloader:
             x_weak = x_weak.to(self.device)
-            dataset_idx = metadata["dataset_idx"].to(int).to(self.device)
-            labels[dataset_idx] = metadata["label"].to(self.device)
+            dataset_idx = metadata["dataset_idx"].to(int)
+            labels[dataset_idx] = metadata["label"].to(int)
             with torch.no_grad():
                 out = self.conv_backbone(x_weak).flatten(start_dim=1)
                 # Get cluster label
@@ -247,11 +248,6 @@ class TCL(L.LightningModule):
 
         # Use GMM to detect if label is clean/noisy
         ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
-
-        ret = {
-            "cluster_means": torch.randn((self.hparams["num_classes"], self.head_hidden_dim)),
-            "is_clean_prob": torch.rand((train_set_size,)),
-        }
 
         # Modify buffers
         self.cluster_means[:] = ret["cluster_means"]
