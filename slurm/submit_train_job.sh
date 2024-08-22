@@ -38,28 +38,48 @@ micromamba activate view
 ################################################################################
 #                                  Supervised                                  #
 ################################################################################
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_smaller_crops-short_train_30_no_swa_final_epoch.ini"
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_smaller_crops-short_train_60_no_swa_sgd.ini"
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_smaller_crops-short_train_30_no_swa_fp32.ini"
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_small-no_seed.ini"
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_smaller_crops-include_all_before_drop.ini"
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-cutmix_aug.ini"
-# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-mixup_aug.ini"
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_smaller_crops-include_all.ini"
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-supervised_baseline-with_zoomout.ini"
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-supervised_baseline-with_imbalanced_sampling.ini"
+
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-supervised_baseline-without_swa.ini"
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-supervised_baseline-3_perc_train.ini"
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-supervised_baseline-5_perc_train.ini"
+# srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-supervised_baseline-10_perc_train.ini"
 
 
 # srun python -m src.scripts.model_training -c "exp_perf_drop/exp_perf_drop-remove_sag_cluster.ini"
-srun python -m src.scripts.model_training -c "exp_perf_drop/exp_perf_drop-remove_sag_not_cluster.ini"
+# srun python -m src.scripts.model_training -c "exp_perf_drop/exp_perf_drop-remove_sag_not_cluster.ini"
+# srun python -m src.scripts.model_training -c "exp_perf_drop/exp_perf_drop-remove_sag_cluster-grayscale-mixup.ini"
 
 # srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-augment.ini"
 
 ################################################################################
+#                            Domain Generalization                             #
+################################################################################
+# srun python -m src.scripts.model_training -c "exp_ood_finetune/from_supervised-silent_trial.ini"
+# srun python -m src.scripts.model_training -c "exp_ood_finetune/from_supervised-stanford_image.ini"
+# srun python -m src.scripts.model_training -c "exp_ood_finetune/from_supervised-uiowa.ini"
+# srun python -m src.scripts.model_training -c "exp_ood_finetune/from_supervised-chop.ini"
+
+
+################################################################################
 #                                 GradCAM Loss                                 #
 ################################################################################
-# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class_upscale_loss.ini"
-# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class_upscale_loss__orig_implement.ini"
-# srun python -m src.scripts.model_training -c "finetuning/gradcam_ft-sup.ini"
-# srun python -m src.scripts.model_training -c "finetuning/gradcam_ft-sup_frozen.ini"
-# srun python -m src.scripts.model_training -c "finetuning/gradcam_ft-sup_orig_implement.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_supervised.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_ssl.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-imbalanced_sampler.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-remove_loss-imbalanced_sampler.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-remove_loss-using_file_exclusion.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-remove_loss-using_file_exclusion-no_aug.ini"
+
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-orig.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-remove_loss.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-loss_weight=0.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-all_class-from_scratch-loss_weight=0.1.ini"
+
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-pos_class-from_scratch.ini"
+# srun python -m src.scripts.model_training -c "exp_gradcam_loss/gradcam_loss-pos_class-from_scratch-orig_implement.ini"
 
 
 ################################################################################
@@ -69,3 +89,6 @@ srun python -m src.scripts.model_training -c "exp_perf_drop/exp_perf_drop-remove
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/byol_supervised.ini"
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/moco.ini"
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/moco_supervised.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/moco_supervised-same_video.ini"
+
+srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl.ini"

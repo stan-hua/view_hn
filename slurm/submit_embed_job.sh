@@ -15,10 +15,14 @@ micromamba activate view
 
 # Set experiment name
 # EXP_NAME=exp_ssl_pretrain-byol_accum_with_swa_no_seed
-EXP_NAME=exp_ssl_pretrain-byol-sup_plane
+# EXP_NAME=exp_ssl_pretrain-byol-sup_plane
+# EXP_NAME=exp_ssl_pretrain-moco_vanilla-no_seed
+# EXP_NAME=exp_ssl_pretrain-moco_supervised-no_seed
+# EXP_NAME=exp_ssl_pretrain-moco_supervised-same_video-no_seed
+EXP_NAME=imagenet
 
 # Create embeddings
-srun python -m src.scripts.embed --exp_name $EXP_NAME --dset "val"
+srun python -m src.scripts.embed --exp_name $EXP_NAME --dsets sickkids --splits "train" "val" "test"
 
 # Create UMAP
-srun python -m src.data_viz.plot_umap --exp_name $EXP_NAME --dset "val"
+srun python -m src.data_viz.plot_umap --exp_name $EXP_NAME --dsets sickkids --splits "all"

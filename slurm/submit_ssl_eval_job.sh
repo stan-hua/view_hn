@@ -39,8 +39,19 @@ micromamba activate view
 #                                    Script                                    #
 ################################################################################
 # Evaluate model
-EXP_NAME=exp_ssl_pretrain-byol-sup_plane
+# EXP_NAME=exp_ssl_pretrain-byol-sup_plane
+# EXP_NAME=exp_ssl_pretrain-moco_vanilla-no_seed
+EXP_NAME=exp_ssl_pretrain-moco_supervised-no_seed
+# EXP_NAME=exp_ssl_pretrain-moco_supervised-same_video-no_seed
+
+CONFIG=ssl_eval_default.ini
+# CONFIG=ssl_eval-no_aug.ini
+# CONFIG=ssl_eval-without_sag_cluster.ini
+# CONFIG=ssl_eval-imb_sampler.ini
+
+# Run script
 srun python -m src.scripts.ssl_model_eval \
-    -c ssl_eval_default.ini \
+    -c $CONFIG \
     --exp_name $EXP_NAME \
-    --dset val
+    --dsets "sickkids" "stanford" "uiowa" "chop" "stanford_image" "sickkids_silent_trial" \
+    --splits "test"
