@@ -45,7 +45,7 @@ class TCL(L.LightningModule):
 
     def __init__(self, **hparams):
         """
-        Initialize MoCo object.
+        Initialize TCL object.
 
         Parameters
         ----------
@@ -84,6 +84,9 @@ class TCL(L.LightningModule):
                 Name of EfficientNet backbone to use
             warmup_epochs : int
                 Number of warmup epochs
+            noise_gmm_type : str
+                Choice of noise GMM ("single" for all classes, "per_class" to
+                have 1 noise GMM per class)
         """
         super().__init__()
 
@@ -441,6 +444,12 @@ class TCL(L.LightningModule):
         # Compute loss altogether
         loss = cross_sup_loss + entropy_loss + con_loss + align_loss
 
+        # Log individual losses at each step
+        self.log("align_loss", align_loss)
+        self.log("con_loss", con_loss)
+        self.log("cross_sup_loss", cross_sup_loss)
+        self.log("entropy_loss", entropy_loss)
+
         # Prepare result
         self.dset_to_outputs["train"].append({"loss": loss})
 
@@ -595,19 +604,24 @@ class TCL(L.LightningModule):
         # Compute (normalized) negative log-likelihood of "correct" cluster
         # assignment according to noisy label
         nll_loss = -cluster_assignments[torch.arange(N), labels].to(torch.float32)
-        nll_loss = nll_loss.cpu().numpy()[:, np.newaxis]
+        nll_loss = nll_loss.cpu().unsqueeze(1)
         epsilon = 1e-10
         nll_loss = (nll_loss - nll_loss.min()) / (epsilon + nll_loss.max() - nll_loss.min())
 
-        # TODO: Consider separate GMM for each label
-        # Fit (OOD) GMM to detect clean/noisy labels
-        gm = GaussianMixture(n_components=2, random_state=0).fit(nll_loss)
-        # Predict probability of being in cluster 1/2
-        gm_probs = gm.predict_proba(nll_loss)
-        # Get probability that label belongs in clean cluster
-        # NOTE: Cluster with lower avg. negative log-likelihood is the clean cluster
-        is_clean_prob = gm_probs[:, np.argmin(gm.means_)]
-        is_clean_prob = torch.tensor(is_clean_prob, dtype=float)
+        # Get method for doing noise GMM
+        noise_gmm_type = self.hparams.get("noise_gmm_type", "single")
+        assert noise_gmm_type in ("single", "per_class")
+
+        # CASE 1: Single noise GMM for all labels
+        is_clean_prob = torch.zeros((nll_loss.shape[0],), dtype=float)
+        if noise_gmm_type == "single":
+            is_clean_prob = gmm_detect_noise(nll_loss)
+        # CASE 2: Per-label GMM; accounts for varying confidence across classes
+        elif noise_gmm_type == "per_class":
+            for label_idx in range(self.hparams["num_classes"]):
+                mask = (labels.cpu() == label_idx)
+                label_nll_loss = nll_loss[mask]
+                is_clean_prob[mask] = gmm_detect_noise(label_nll_loss)
 
         # Store values
         ret_dict = {
@@ -762,3 +776,40 @@ def interpolate(x_1, x_2, lam):
         Interpolated variable
     """
     return (lam * x_1) + ((1-lam) * x_2)
+
+
+def gmm_detect_noise(nll_loss):
+    """
+    Using a GMM, cluster based on cluster vs. noisy label negative log
+    likelihood loss
+
+    Note
+    ----
+    Cluster with lower avg. negative log-likelihood is assumed to be the
+    clean label cluster
+
+    Parameters
+    ----------
+    nll_loss : np.ndarray or torch.Tensor
+        Negative log likelihood loss for each sample
+
+    Returns
+    -------
+    torch.Tensor
+        Tensor containing probabilities that each label belongs to clean cluster
+    """
+    # Ensure numpy array input
+    if isinstance(nll_loss, torch.Tensor):
+        nll_loss = nll_loss.numpy()
+
+    # Fit (OOD) GMM to detect clean/noisy labels
+    gm = GaussianMixture(n_components=2, random_state=0).fit(nll_loss)
+
+    # Predict probability of being in cluster 1/2
+    gm_probs = gm.predict_proba(nll_loss)
+
+    # Get probability that label belongs in clean cluster
+    is_clean_prob = gm_probs[:, np.argmin(gm.means_)]
+    is_clean_prob = torch.tensor(is_clean_prob, dtype=float)
+
+    return is_clean_prob

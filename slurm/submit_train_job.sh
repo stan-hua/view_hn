@@ -85,10 +85,11 @@ micromamba activate view
 ################################################################################
 #                               Self-Supervised                                #
 ################################################################################
-# srun python -m src.scripts.model_training -c "contrastive_pretraining/byol_swa_no_seed.ini"
-# srun python -m src.scripts.model_training -c "contrastive_pretraining/byol_supervised.ini"
-# srun python -m src.scripts.model_training -c "contrastive_pretraining/moco.ini"
-# srun python -m src.scripts.model_training -c "contrastive_pretraining/moco_supervised.ini"
-# srun python -m src.scripts.model_training -c "contrastive_pretraining/moco_supervised-same_video.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/byol/byol_swa_no_seed.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/byol/byol_supervised.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/moco/moco.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/moco/moco_supervised.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/moco/moco_supervised-same_video.ini"
 
-srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/tcl.ini"
+srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/tcl-per_class_gmm.ini"
