@@ -44,7 +44,16 @@ mklink /d ".\src\data" "PATH\TO\DATA\DIRECTORY"
 ln -s /PATH/TO/DATA/DIRECTORY ./src/data
 ```
 
-#### 3. Set up Comet ML for Online Logging
+#### 3. Update `src/data/constants.py` with new image directory paths (if any)
+```
+# -- update src/data/constants.py
+
+# Update metadata paths
+python -m src.data_prep.scripts.create_metadata update_img_dirs
+```
+
+
+#### 4. Set up Comet ML for Online Logging
 ```
 comet init                  # create account, if not already
 ```

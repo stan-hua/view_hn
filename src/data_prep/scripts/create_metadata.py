@@ -745,10 +745,40 @@ def main_correct_labels(ref_path="corrected_view_labels.xlsx", label_col="plane"
         df_metadata.to_csv(clean_dset_path, index=False)
 
 
+def main_update_img_dirs():
+    """
+    If home directory or image data directories have changed, update metadata
+    to point to new paths based on `src.data.constants` file.
+    """
+    print("[main_update_img_dirs] Assumes your $HOME has been changed and you're migrating data!")
+    print("[main_update_img_dirs] Changing $HOME path hard-coded in metadata files!")
+
+    # For each metadata, check if any of the labels overlap
+    for dset in list(VIDEO_DSETS) + list(IMAGE_DSETS):
+        # Get cleaned metadata
+        clean_dset_path = constants.DSET_TO_METADATA["clean"][dset]
+        df_metadata = pd.read_csv(clean_dset_path)
+
+        # Remove old image directory from filename, if applicable
+        if "dir_name" in df_metadata.columns.tolist():
+            df_metadata["filename"] = df_metadata.apply(
+                lambda row: row["filename"].replace(row["dir_name"], ""),
+                axis=1
+            )
+
+        # Update with new image directory
+        img_dir = constants.DSET_TO_IMG_SUBDIR_FULL[dset]
+        df_metadata["dir_name"] = img_dir
+
+        # Save changes
+        df_metadata.to_csv(clean_dset_path, index=False)
+
+
 if __name__ == "__main__":
     # Add command-line interface
     fire.Fire({
         "prep_img_dsets": main_prepare_image_datasets,
         "clean_metadata": main_clean_metadata,
         "correct_labels": main_correct_labels,
+        "update_img_dirs": main_update_img_dirs,
     })
