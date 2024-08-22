@@ -515,7 +515,7 @@ class TCL(L.LightningModule):
         """
         outputs = self.dset_to_outputs["train"]
         loss = torch.stack([d['loss'] for d in outputs]).mean()
-        self.log('epoch_train_loss', loss, batch_size=self.hparams.get("batch_size"))
+        self.log('train_loss', loss, batch_size=self.hparams.get("batch_size"))
 
         # Clean stored output
         self.dset_to_outputs["train"].clear()

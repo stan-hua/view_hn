@@ -330,7 +330,10 @@ class UltrasoundDataModule(L.LightningDataModule):
             self.set_kfold_index(0)
 
         # Assign data split for unlabeled data
-        unlabeled_split = "train" if self.us_dataset_kwargs.get("include_unlabeled") else None
+        unlabeled_split = None
+        if self.us_dataset_kwargs.get("include_unlabeled"):
+            LOGGER.info("[Post-Split] Including unlabeled in training set...")
+            unlabeled_split = "train"
         self.df = utils.assign_unlabeled_split(self.df, unlabeled_split)
 
         # If specified, filter training data for those with segmentation masks
@@ -378,6 +381,11 @@ class UltrasoundDataModule(L.LightningDataModule):
 
             # Restore random state
             np.random.set_state(rng_state)
+
+            # Log
+            num_train = len(self.df[self.df["split"] == "train"])
+            LOGGER.info("[Post-Split] Downsampled training set to "
+                        f"{round(100*downsample_train_prop, 2)}% ({num_train})")
 
 
     def train_dataloader(self):
