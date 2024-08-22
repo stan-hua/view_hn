@@ -360,21 +360,24 @@ class UltrasoundDataModule(L.LightningDataModule):
             df_train = self.df[self.df["split"] == "train"]
             df_rest = self.df[self.df["split"] != "train"]
 
-            # Stratified split on label
             # 0. Set seed
             rng_state = np.random.get_state()
             np.random.seed(42)
 
-            # 1. Randomly assign samples to keep based on downsample train prop.
-            train_sampled_mask = df_train.groupby(by=["label"], group_keys=False).apply(
-                lambda df_label: np.random.choice(
-                    a=[True, False],
+            # 1. Randomly assign samples to remove based on downsample train prop.
+            # NOTE: Stratify based on label
+            assert df_train.index.is_unique, "Metadata table index must be unique!"
+            num_train_before = len(df_train)
+            remove_train_ids = np.concatenate(df_train.groupby(by=["label"], group_keys=False).apply(
+                lambda df_label: df_label.index[np.random.choice(
+                    a=[False, True],
                     size=len(df_label),
                     p=(downsample_train_prop, 1-downsample_train_prop),
-                )
-            )
-            # 2. Assign traing
-            df_train.loc[train_sampled_mask, "split"] = None
+                )].tolist(),
+                include_groups=False,
+            ).values)
+            # 2. Remove sampled rows from training set
+            df_train.loc[remove_train_ids, "split"] = None
 
             # 3. Recombine
             self.df = pd.concat([df_train, df_rest], ignore_index=True)
@@ -383,9 +386,10 @@ class UltrasoundDataModule(L.LightningDataModule):
             np.random.set_state(rng_state)
 
             # Log
-            num_train = len(self.df[self.df["split"] == "train"])
-            LOGGER.info("[Post-Split] Downsampled training set to "
-                        f"{round(100*downsample_train_prop, 2)}% ({num_train})")
+            num_train_after = len(self.df[self.df["split"] == "train"])
+            LOGGER.info("[Post-Split] Downsampled (labeld) training samples to "
+                        f"{round(100*downsample_train_prop, 2)}% "
+                        f"({num_train_after}/{num_train_before})")
 
 
     def train_dataloader(self):
