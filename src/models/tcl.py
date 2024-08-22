@@ -139,7 +139,7 @@ class TCL(L.LightningModule):
             dset: torchmetrics.Accuracy(
                 num_classes=self.hparams.num_classes,
                 task='multiclass')
-            for dset in ("val", "val_clean", "val_noisy")
+            for dset in ["val", "val_clean", "val_noisy"]
         })
 
         # Register buffers
@@ -235,7 +235,7 @@ class TCL(L.LightningModule):
 
         # Modify buffers
         self.cluster_means = ret["cluster_means"].type_as(self.cluster_means)
-        self.is_clean_prob = ret["is_clean_prob"]
+        self.is_clean_prob = ret["is_clean_prob"].to(self.device)
 
 
     ############################################################################
@@ -491,24 +491,15 @@ class TCL(L.LightningModule):
             # Get normalized features
             features = F.normalize(self.projection_head(out)).detach()
 
-        # Use GMM to detect if label is clean/noisy
-        ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
-        is_clean_mask = (ret["is_clean_prob"] >= 0.5)
-
         # Compute validation accuracy
         self.dset_to_acc["val"].update(cluster_labels, labels)
-
-        # Stratify by clean vs. noisy labels
-        if is_clean_mask.sum():
-            self.dset_to_acc["val_clean"].update(cluster_labels[is_clean_mask], labels[is_clean_mask])
-        if (~is_clean_mask).sum():
-            self.dset_to_acc["val_noisy"].update(cluster_labels[~is_clean_mask], labels[~is_clean_mask])
 
         # Prepare result
         ret = {
             "loss": loss.detach().cpu(),
-            "y_pred": cluster_labels.detach().cpu(),
+            "y_pred": cluster_labels.cpu(),
             "y_true": labels.detach().cpu(),
+            "features": features.cpu(),
         }
         self.dset_to_outputs["val"].append(ret)
 
@@ -534,10 +525,25 @@ class TCL(L.LightningModule):
         """
         Compute and log evaluation metrics for validation epoch.
         """
+        # Assemble outputs
         outputs = self.dset_to_outputs["val"]
-        # Stre loss
         loss = torch.tensor([o["loss"] for o in outputs]).mean()
+        noisy_labels = torch.cat([o["y_true"] for o in outputs])
+        cluster_labels = torch.cat([o["y_pred"] for o in outputs])
+        features = torch.cat([o["features"] for o in outputs])
+
+        # Log validation loss
         self.log('val_loss', loss, prog_bar=True)
+
+        # Use GMM to detect if label is clean/noisy
+        ret = self.gmm_get_noisy_labels(features, noisy_labels, cluster_labels)
+        is_clean_mask = (ret["is_clean_prob"] >= 0.5)
+
+        # Stratify by clean vs. noisy labels
+        if is_clean_mask.sum():
+            self.dset_to_acc["val_clean"].update(cluster_labels[is_clean_mask], noisy_labels[is_clean_mask])
+        if (~is_clean_mask).sum():
+            self.dset_to_acc["val_noisy"].update(cluster_labels[~is_clean_mask], noisy_labels[~is_clean_mask])
 
         # Compute accuracies
         for acc_key in ("val", "val_clean", "val_noisy"):
@@ -548,8 +554,8 @@ class TCL(L.LightningModule):
         # Create confusion matrix
         if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
-                y_true=torch.cat([o["y_true"] for o in outputs]),
-                y_predicted=torch.cat([o["y_pred"] for o in outputs]),
+                y_true=noisy_labels,
+                y_predicted=cluster_labels,
                 labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
                 title="Validation Confusion Matrix",
                 file_name="val_confusion-matrix.json",
@@ -629,7 +635,7 @@ class TCL(L.LightningModule):
             # Soft cluster assignments
             "cluster_assignments": cluster_assignments,
             # Prob. that label is in clean cluster
-            "is_clean_prob": is_clean_prob.to(self.device),
+            "is_clean_prob": is_clean_prob,
         }
 
         return ret_dict
