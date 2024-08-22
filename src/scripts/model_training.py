@@ -48,9 +48,6 @@ SEED = None
 # Comet-ML project name
 COMET_PROJECT = "renal-view"
 
-# Set matmul precision
-torch.set_float32_matmul_precision("medium")
-
 
 ################################################################################
 #                                Initialization                                #
