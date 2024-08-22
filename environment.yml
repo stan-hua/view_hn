@@ -52,6 +52,7 @@ dependencies:
 - comet_ml=3.44.4=py39
 - configobj=5.0.8=pyhd8ed1ab_0
 - contourpy=1.2.1=py39h7633fee_0
+- cookiecutter=2.6.0=pyhca7485f_0
 - cycler=0.12.1=pyhd8ed1ab_0
 - dav1d=1.2.1=hd590300_0
 - dbus=1.13.6=h5008d03_3

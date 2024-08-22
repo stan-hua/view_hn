@@ -52,10 +52,12 @@ ln -s /PATH/TO/DATA/DIRECTORY ./src/data
 python -m src.data_prep.scripts.create_metadata update_img_dirs
 ```
 
-
 #### 4. Set up Comet ML for Online Logging
 ```
 comet init                  # create account, if not already
+
+# Export env. variable COMET_API_KEY during shell init (~/.bashrc)
+# echo "export COMET_API_KEY=insert_here" >> ~/.bashrc
 ```
 
 ---

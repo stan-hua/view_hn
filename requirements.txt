@@ -10,6 +10,7 @@ colorama==0.4.6
 comet_ml==3.44.4
 configobj==5.0.8
 contourpy==1.2.1
+cookiecutter==2.6.0
 cycler==0.12.1
 dulwich==0.22.1
 efficientnet-pytorch==0.7.1
