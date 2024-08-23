@@ -949,6 +949,7 @@ class UltrasoundDatasetDataFrame(UltrasoundDataset):
         assert mode in (1, 3)
         self.mode = IMAGE_MODES[mode]
         self.img_size = img_size
+        self.df = df
 
         # Hidden variable to retrieve masks during data loading
         self._seg_masks = {}

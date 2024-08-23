@@ -87,7 +87,7 @@ def set_seed(seed=SEED, include_algos=False):
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
-def run(hparams, dm, results_dir, fold=0):
+def run(hparams, dm, results_dir=constants.DIR_RESULTS, fold=0):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
 

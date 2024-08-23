@@ -384,7 +384,7 @@ class TCL(L.LightningModule):
         return cross_sup_loss, align_loss, entropy_loss
 
 
-    def compute_entropy_loss(self, y_pred):
+    def compute_entropy_loss(self, y_probs):
         """
         Compute entropy regularization loss
 
@@ -395,7 +395,7 @@ class TCL(L.LightningModule):
 
         Parameters
         ----------
-        y_pred : torch.Tensor
+        y_probs : torch.Tensor
             Each row contains normalized class probabilities
 
         Returns
@@ -403,13 +403,14 @@ class TCL(L.LightningModule):
         torch.FloatTensor
             Entropy regularization loss
         """
-        # Maximize entropy across predictions; to prevent prediction collapse
-        entropy_loss_1 = -compute_entropy(y_pred.mean(dim=0))
+        # Maximize entropy of average predictions (avoid model collapse)
+        avg_prob = y_probs.mean(dim=0)
+        H_avg = torch.sum(avg_prob * torch.log(avg_prob + 1e-9))
 
-        # Minimize entropy for each prediction; to have more confident examples
-        entropy_loss_2 = compute_entropy(y_pred, dim=1).mean()
+        # Minimize entropy of each predictions (more confident predictions)
+        H_pred = -torch.mean(torch.sum(y_probs * torch.log(y_probs + 1e-9), dim=1))
 
-        return entropy_loss_1 + entropy_loss_2
+        return H_avg + H_pred
 
 
     ############################################################################
@@ -611,8 +612,7 @@ class TCL(L.LightningModule):
         # assignment according to noisy label
         nll_loss = -cluster_assignments[torch.arange(N), labels].to(torch.float32)
         nll_loss = nll_loss.cpu().unsqueeze(1)
-        epsilon = 1e-10
-        nll_loss = (nll_loss - nll_loss.min()) / (epsilon + nll_loss.max() - nll_loss.min())
+        nll_loss = (nll_loss - nll_loss.min()) / (1e-9 + nll_loss.max() - nll_loss.min())
 
         # Get method for doing noise GMM
         noise_gmm_type = self.hparams.get("noise_gmm_type", "single")
@@ -682,6 +682,51 @@ class TCL(L.LightningModule):
 
 
     @torch.no_grad()
+    def infer_dataloader(self, dataloader):
+        """
+        Perform inference on dataloader. Return predicted labels and label
+        noise detection
+
+        Parameters
+        ----------
+        dataloader : torch.utils.data.DataLoader
+            Loads data in standard (img tensor, metadata dict) format unlike
+            rest of functions in the class
+
+        Returns
+        -------
+        dict
+            Contains outputs of `gmm_get_noisy_labels` in the original order
+            of the dataset indices (metadata file)
+        """
+        dset_size = len(dataloader.dataset)
+
+        # For each of the images,
+        # 1. Use classifier head to get cluster predictions
+        # 2. Use projector head to get normalized features
+        features = torch.zeros((dset_size, self.head_hidden_dim))
+        labels = torch.zeros((dset_size, )).to(int)
+        cluster_labels = torch.zeros((dset_size, self.hparams["num_classes"])).to(torch.float32)
+        for img, metadata in dataloader:
+            img = img.to(self.device)
+            dataset_idx = metadata["dataset_idx"].to(int)
+            labels[dataset_idx] = metadata["label"].to(int)
+            with torch.no_grad():
+                out = self.conv_backbone(img).flatten(start_dim=1)
+                # Get cluster label
+                cluster_labels[dataset_idx] = F.softmax(self.prediction_head(out), dim=1).detach().cpu()
+                # Get normalized features
+                features[dataset_idx] = F.normalize(self.projection_head(out)).detach().cpu()
+
+        # Use GMM to detect if label is clean/noisy
+        ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
+        ret["noisy_labels"] = labels
+        ret["cluster_labels"] = cluster_labels
+
+        return ret
+
+
+    @torch.no_grad()
     def extract_embeds(self, inputs):
         """
         Extracts embeddings from input images.
@@ -694,39 +739,16 @@ class TCL(L.LightningModule):
         Returns
         -------
         numpy.array
-            Deep embeddings before final linear layer
+            Normalized projection embeddings
         """
-        z = self.conv_backbone(inputs)
+        x = self.extract_norm_features(inputs)
 
-        # Flatten
-        z = z.view(inputs.size()[0], -1)
-
-        return z.detach().cpu().numpy()
+        return x.detach().cpu().numpy()
 
 
 ################################################################################
 #                               Helper Functions                               #
 ################################################################################
-def compute_entropy(probs, dim=None):
-    """
-    Compute entropy
-
-    Parameters
-    ----------
-    probs : torch.Tensor
-        Probability vector of size (K,), where K is the number of classes
-        or probability tensor of size (N, K), where N is the number of samples
-    dim : int
-        Dimension to sum across (rows). If None, sum across all rows
-
-    Returns
-    -------
-    torch.Tensor
-        Entropy of probabilities
-    """
-    return -torch.sum(probs * torch.log(probs), dim=dim)
-
-
 def mixup(x, alpha=1.0):
     """
     Perform MixUp on image
