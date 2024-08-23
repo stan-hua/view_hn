@@ -22,6 +22,7 @@ from lightly.models.utils import (batch_shuffle, batch_unshuffle,
                                   deactivate_requires_grad, update_momentum)
 from sklearn.mixture import GaussianMixture
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from tqdm import tqdm
 
 # Custom libraries
 from src.utils import efficientnet_pytorch_utils as effnet_utils
@@ -626,6 +627,9 @@ class TCL(L.LightningModule):
         elif noise_gmm_type == "per_class":
             for label_idx in range(self.hparams["num_classes"]):
                 mask = (labels.cpu() == label_idx)
+                # Skip, if no label exists for class
+                if not mask.sum():
+                    continue
                 label_nll_loss = nll_loss[mask]
                 is_clean_prob[mask] = gmm_detect_noise(label_nll_loss)
 
@@ -639,46 +643,6 @@ class TCL(L.LightningModule):
         }
 
         return ret_dict
-
-
-    def get_cluster_logits(self, x):
-        """
-        Given an image, get cluster logits from classifier head
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input image
-
-        Returns
-        -------
-        torch.Tensor
-            Cluster logits from prediction head
-        """
-        out = self.conv_backbone(x).flatten(start_dim=1)
-        logits = self.prediction_head(out)
-        return logits
-
-
-    def extract_norm_features(self, x):
-        """
-        Given an image, extract normalized features from the projection head.
-
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input image
-
-        Returns
-        -------
-        torch.Tensor
-            Model intermediate features from the projection head
-        """
-        out = self.conv_backbone(x).flatten(start_dim=1)
-        out = self.projection_head(out)
-        # Ensure features are unit-norm
-        out = F.normalize(out)
-        return out
 
 
     @torch.no_grad()
@@ -707,7 +671,7 @@ class TCL(L.LightningModule):
         features = torch.zeros((dset_size, self.head_hidden_dim))
         labels = torch.zeros((dset_size, )).to(int)
         cluster_labels = torch.zeros((dset_size, self.hparams["num_classes"])).to(torch.float32)
-        for img, metadata in dataloader:
+        for img, metadata in tqdm(dataloader):
             img = img.to(self.device)
             dataset_idx = metadata["dataset_idx"].to(int)
             labels[dataset_idx] = metadata["label"].to(int)
@@ -727,13 +691,13 @@ class TCL(L.LightningModule):
 
 
     @torch.no_grad()
-    def extract_embeds(self, inputs):
+    def extract_embeds(self, imgs):
         """
         Extracts embeddings from input images.
 
         Parameters
         ----------
-        inputs : torch.Tensor
+        imgs : torch.Tensor
             Ultrasound images. Expected size is (B, C, H, W)
 
         Returns
@@ -741,9 +705,30 @@ class TCL(L.LightningModule):
         numpy.array
             Normalized projection embeddings
         """
-        x = self.extract_norm_features(inputs)
+        out = self.conv_backbone(imgs).flatten(start_dim=1)
+        out = self.projection_head(out)
+        # Ensure features are unit-norm
+        out = F.normalize(out)
+        return out.detach().cpu().numpy()
 
-        return x.detach().cpu().numpy()
+
+    def forward(self, imgs):
+        """
+        Predicts cluster label from images.
+
+        Parameters
+        ----------
+        imgs : torch.Tensor
+            Ultrasound images. Expected size is (B, C, H, W)
+
+        Returns
+        -------
+        torch.Tensor
+            Predicted cluster logits
+        """
+        out = self.conv_backbone(imgs).flatten(start_dim=1)
+        out = self.prediction_head(out)
+        return out
 
 
 ################################################################################
