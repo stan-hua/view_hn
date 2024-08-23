@@ -5,6 +5,7 @@
 #SBATCH --cpus-per-task=6                 # Number of CPU cores per task
 #SBATCH --mem=32GB
 #SBATCH -o slurm/logs/slurm-%j.out
+#SBATCH --time=12:00:00
 
 # If you want to do it in the terminal,
 # salloc --job-name=stans_terminal --nodes=1 --gres=gpu:1 --cpus-per-task=6 --mem=32GB
@@ -91,5 +92,5 @@ micromamba activate view
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/moco/moco_supervised.ini"
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/moco/moco_supervised-same_video.ini"
 
-# srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/tcl.ini"
-srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/tcl-per_class_gmm.ini"
+srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/tcl.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/tcl-per_class_gmm.ini"
