@@ -415,6 +415,11 @@ def main(args):
         # Load experiment hyperparameters
         exp_hparams = load_model.get_hyperparameters(exp_name=exp_name)
 
+        # Overwrite hyperparameters for data loading
+        exp_hparams["self_supervised"] = False
+        exp_hparams["augment_training"] = False
+        exp_hparams["shuffle"] = False
+
         # Extract embeddings for each dataset
         for idx, dset in enumerate(dsets):
             split = splits[idx]
@@ -434,7 +439,7 @@ def main(args):
             # Early return, if embeddings already made
             if os.path.isfile(save_embed_path):
                 LOGGER.info(f"Embeddings for exp_name: ({exp_name}), "
-                            f"dset: ({dset_or_split}) already exists! Skipping...")
+                            f"dset: ({dset}, {split}) already exists! Skipping...")
                 continue
 
             # Perform extraction
@@ -444,7 +449,7 @@ def main(args):
                            device=constants.DEVICE,)
 
             LOGGER.info(f"Success! Created embeddings for exp_name: "
-                        f"({exp_name}), dset: ({dset_or_split})")
+                        f"({exp_name}), dset: ({dset}, {split})")
 
 
 ################################################################################

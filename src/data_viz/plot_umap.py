@@ -873,6 +873,20 @@ if __name__ == "__main__":
     # INPUT: Ensure `dset` and `split` are lists
     dsets = ARGS.dsets
     splits = ARGS.splits
+
+    # If "all" split used, then broadcast to dsets too
+    new_splits = []
+    for idx, split in enumerate(list(splits)):
+        if splits == ["all"]:
+            LOGGER.info("`all` split detected! Copying `dset` multiple times")
+            dsets.insert(idx, dsets[idx])
+            dsets.insert(idx, dsets[idx])
+            splits = ["train", "val", "test"]
+            new_splits.extend(splits)
+        else:
+            new_splits.append(split)
+    splits = new_splits
+
     # If only one of dset/split is > 1, assume it's meant to be broadcast
     if len(dsets) == 1 and len(splits) > 1:
         LOGGER.info("Only 1 `dset` provided! Assuming same `dset` for all `splits`...")
@@ -887,4 +901,4 @@ if __name__ == "__main__":
             split = splits[idx]
             main(exp_name=EXP_NAME, dset=dset, split=split,
                  comet_exp_key=ARGS.comet_exp_key)
-        main(exp_name=EXP_NAME, dset=dsets, comet_exp_key=ARGS.comet_exp_key)
+        main(exp_name=EXP_NAME, dset=dsets, split=splits, comet_exp_key=ARGS.comet_exp_key)

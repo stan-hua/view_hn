@@ -2391,7 +2391,8 @@ def infer_dset(exp_name, dset, split,
     da_transform = None
     if da_transform_name is not None:
         # Get training data
-        dm = load_data.setup_data_module(hparams, self_supervised=False)
+        dm = load_data.setup_data_module(
+            hparams, self_supervised=False, augment_training=False)
         df_train_metadata = dm.filter_metadata(dset="sickkids", split="train")
 
         # Filter for existing images
@@ -2413,7 +2414,8 @@ def infer_dset(exp_name, dset, split,
 
     # 3. Load data
     # NOTE: Ensure data is loaded in the non-SSL mode
-    dm = load_data.setup_data_module(hparams, self_supervised=False)
+    dm = load_data.setup_data_module(
+        hparams, self_supervised=False, augment_training=False)
 
     # 3.1 Get metadata (for specified split)
     df_metadata = dm.filter_metadata(dset=dset, split=split)
@@ -2547,7 +2549,8 @@ def embed_dset(exp_name, dset, split,
 
     # 3. Load data
     # NOTE: Ensure data is loaded in the non-SSL mode
-    dm = load_data.setup_data_module(hparams, self_supervised=False)
+    dm = load_data.setup_data_module(
+        hparams, self_supervised=False, augment_training=False)
     dataloader = dm.get_filtered_dataloader(split=split, dset=dset)
 
     # 5. Extract embeddings and save them

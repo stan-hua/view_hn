@@ -243,7 +243,11 @@ def create_eval_hparams(dset=None, split="test"):
         Contains hyperparameters to overwrite, if necessary
     """
     # Accumulate hyperparameters to overwrite
-    overwrite_hparams = {"shuffle": False}
+    overwrite_hparams = {
+        "shuffle": False,
+        "augment_training": False,
+        "self_supervised": False,
+    }
 
     # Check that provided dataset or split is valid
     if dset:
