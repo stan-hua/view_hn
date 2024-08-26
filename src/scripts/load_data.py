@@ -93,6 +93,13 @@ def setup_data_module(hparams=None, use_defaults=False,
     # INPUT: Ensure `hparams` is a dict
     hparams = hparams or {}
 
+    # If excluding "Others" class, ensure `num_classes` is correct
+    if not hparams.get("include_labeled_other"):
+        label_part = hparams.get("label_part")
+        classes = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
+        hparams["num_classes"] = len(classes) - 1
+        LOGGER.info("[DataModule Setup] Ensuring `num_classes` is correct")
+
     # 0. Overwrite defaults
     all_hparams.update(hparams)
     all_hparams.update(overwrite_hparams)
@@ -127,9 +134,8 @@ def setup_data_module(hparams=None, use_defaults=False,
     dm.setup()
 
     # Modify hyperparameters in-place to store training/val/test set IDs
-    if hparams is not None:
-        for split in ("train", "val", "test"):
-            hparams[f"{split}_ids"] = dm.get_patient_ids(split)
+    for split in ("train", "val", "test"):
+        hparams[f"{split}_ids"] = dm.get_patient_ids(split)
 
     return dm
 

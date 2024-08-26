@@ -52,8 +52,8 @@ THEME = "dark"
 
 # Order of labels in plot
 VIEW_LABEL_ORDER = ["Sagittal_Right", "Transverse_Right", "Sagittal_Left",
-                    "Transverse_Left", "Bladder"]
-SIDE_LABEL_ORDER = ["Left", "None", "Right"]
+                    "Transverse_Left", "Bladder", "Other"]
+SIDE_LABEL_ORDER = ["Left", "Bladder", "Right", "Other"]
 PLANE_LABEL_ORDER = ["Sagittal", "Transverse", "Bladder"]
 HOSPITAL_LABEL_ORDER = [
     "sickkids", "sickkids_train", "sickkids_val", "sickkids_test",
@@ -666,7 +666,7 @@ def main(exp_name,
          one_seq_umap=False,
          machine_umap=False,
          n_patient_umap=False,
-         cluster_umap=True,
+         cluster_umap=False,
          comet_exp_key=None,
          ):
     """

@@ -391,15 +391,14 @@ def clean_sickkids_video_metadata():
     """
     print("Cleaning SickKids Video metadata...")
     # Load the original metadata file and the originally test metadata file
-    # NOTE: Even though it's called "test", we're ignoring that and merging it
-    raw_dset_to_metadata = constants.DSET_TO_METADATA["raw"]
-    csv_paths = [raw_dset_to_metadata[key] for key in ("sickkids", "sickkids_test")]
-    df_metadata = pd.concat([pd.read_csv(path) for path in csv_paths],
-                            ignore_index=True)
+    df_metadata = pd.read_csv(constants.DSET_TO_METADATA["raw"]["sickkids"])
 
     # Rename columns
-    df_metadata = df_metadata.rename(columns={"IMG_FILE": "filename",
-                                              "revised_labels": "label"})
+    df_metadata = df_metadata.rename(columns={
+        "image_file": "filename",
+        "IMG_FILE": "filename",
+        "revised_labels": "label"
+    })
 
     # Fix mislabel saggital --> sagittal
     fix_label_map = {"Saggital_Left": "Sagittal_Left",
@@ -428,7 +427,10 @@ def clean_sickkids_video_metadata():
     # Exclude Stanford data
     df_others = df_others[~df_others["filename"].str.startswith("SU2")]
 
-    # NOTE: Unlabeled images have label "Other"
+    # Exclude all segmentations masks
+    df_others = df_others[~df_others["filename"].str.contains("seg.")]
+
+    # NOTE: Unlabeled images have label
     df_others["label"] = None
 
     # Merge labeled and unlabeled data
@@ -689,8 +691,12 @@ def main_clean_metadata():
     clean_stanford_video_metadata()
     clean_image_dsets_metadata()
 
+    # Correct SickKids/Stanford view labels
+    ref_path = constants.DSET_TO_METADATA["raw"]["sickkids_corrections"]
+    main_correct_labels(ref_path, label_col="plane")
 
-def main_correct_labels(ref_path="corrected_view_labels.xlsx", label_col="plane"):
+
+def main_correct_labels(ref_path, label_col="plane"):
     """
     Correct labels for each dataset based on a reference file
 

@@ -277,7 +277,7 @@ def extract_from_label(label, extract="plane"):
     assert extract in ("plane", "side")
     label_parts = label.split("_")
     if extract == "side":
-        return label_parts[1] if len(label_parts) > 1 else "None"
+        return label_parts[1] if len(label_parts) > 1 else label_parts[0]
     return label_parts[0]
 
 

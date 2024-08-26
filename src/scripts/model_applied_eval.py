@@ -351,7 +351,7 @@ def filter_for_hn_pairs(df_metadata, pairing_method="random"):
     # CASE 2: Pairing by most confident plane prediction
     elif pairing_method == "most_confident_pred":
         # Remove images predicted as bladder
-        mask = (df_metadata["side_pred"] != "None") & (df_metadata["plane_pred"] != "Bladder")
+        mask = (df_metadata["side_pred"] != "Bladder") & (df_metadata["plane_pred"] != "Bladder")
         df_metadata = df_metadata[mask]
 
         return pair_by_most_confident_side_plane_pred(df_metadata)

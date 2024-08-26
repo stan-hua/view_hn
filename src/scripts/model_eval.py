@@ -955,7 +955,7 @@ def compare_prediction_similarity(df_pred_1, df_pred_2):
 #                          Side Predicted Correlation                          #
 ################################################################################
     """)
-    for side in ("Left", "Right", "None"):
+    for side in ("Left", "Right", "Bladder"):
         pred_mask_1 = (df_pred_1.pred_side == side)
         pred_mask_2 = (df_pred_2.pred_side == side)
         print(f"{side}: {pearsonr(pred_mask_1, pred_mask_2)}")
@@ -1949,9 +1949,9 @@ def show_example_side_predictions(df_pred, n=5, relative_side=False,
     """
     # If relative side label
     if relative_side:
-        side_to_idx = {"First": "1", "Second": "2", "None": "-",}
+        side_to_idx = {"First": "1", "Second": "2", "Bladder": "-",}
     else:
-        side_to_idx = {"Left": "1", "Right": "2", "None": "-",}
+        side_to_idx = {"Left": "1", "Right": "2", "Bladder": "-",}
 
     # How to determine side index
     side_func = lambda x: side_to_idx[utils.extract_from_label(x, "side")]
@@ -2067,7 +2067,7 @@ def create_save_path(exp_name, dset, split,
 
 def calculate_per_seq_silhouette_score(exp_name, dset, split,
                                        label_part="side",
-                                       exclude_labels=("None",)):
+                                       exclude_labels=("Bladder", "Other")):
     """
     Calculate a per - ultrasound sequence Silhouette score.
 
@@ -2084,7 +2084,7 @@ def calculate_per_seq_silhouette_score(exp_name, dset, split,
         and used as the given label, by default "side"
     exclude_labels : list or array-like, optional
         List of labels whose matching samples will be excluded when calculating
-        the Silhouette score, by default ("None",)
+        the Silhouette score, by default ("Bladder",)
 
     Returns
     -------

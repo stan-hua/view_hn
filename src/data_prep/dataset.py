@@ -288,6 +288,13 @@ class UltrasoundDataModule(L.LightningDataModule):
         """
         Prepares data for model training/validation/testing
         """
+        # If specified, include/drop images labeled "Others" 
+        # NOTE: Need to update hparams["num_classes"] elsewhere
+        if not self.us_dataset_kwargs.get("include_labeled_other"):
+            mask = (self.df["label"] == "Other")
+            self.df.loc[mask, "split"] = None
+            LOGGER.info(f"[Pre-Split] Removing {mask.sum()} images labeled 'Other'")
+
         # (1) Split into training and test sets
         if hasattr(self, "train_test_split") and self.train_test_split < 1:
             # Split into train/test by each dataset
@@ -329,7 +336,7 @@ class UltrasoundDataModule(L.LightningDataModule):
             # By default, set to first kfold
             self.set_kfold_index(0)
 
-        # Assign data split for unlabeled data
+        # If specified, add unlabeled data to training split
         unlabeled_split = None
         if self.us_dataset_kwargs.get("include_unlabeled"):
             LOGGER.info("[Post-Split] Including unlabeled in training set...")
@@ -345,6 +352,9 @@ class UltrasoundDataModule(L.LightningDataModule):
             # Remove images in the training set that DONT have a seg. mask
             has_seg_mask = df_train["filename"].map(utils.has_seg_mask)
             df_train.loc[~has_seg_mask, "split"] = None
+            LOGGER.info(
+                f"[Post-Split] Keeping only {(~has_seg_mask).sum()} images "
+                "with segmentation masks")
 
             # Recombine
             self.df = pd.concat([df_train, df_rest], ignore_index=True)
