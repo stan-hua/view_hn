@@ -419,6 +419,7 @@ def main(args):
         exp_hparams["self_supervised"] = False
         exp_hparams["augment_training"] = False
         exp_hparams["shuffle"] = False
+        exp_hparams["include_labeled_other"] = True
 
         # Extract embeddings for each dataset
         for idx, dset in enumerate(dsets):

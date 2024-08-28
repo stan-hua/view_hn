@@ -686,6 +686,7 @@ class TCL(L.LightningModule):
         ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
         ret["noisy_labels"] = labels
         ret["cluster_labels"] = cluster_labels
+        ret["features"] = features
 
         return ret
 

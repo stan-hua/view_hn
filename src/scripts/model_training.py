@@ -243,11 +243,12 @@ def main(conf):
     # Process configuration parameters
     # Flatten nesting in configuration file
     hparams = config_utils.flatten_nested_dict(conf)
-    # Add constants
+
+    # Overwrite number of classes
+    hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"])
+    # Add default image size, if not specified
     if "img_size" not in hparams:
         hparams["img_size"] = constants.IMG_SIZE
-    if "num_classes" not in hparams:
-        hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"])
 
     # 0. Set random seed
     set_seed(hparams.get("seed"))
