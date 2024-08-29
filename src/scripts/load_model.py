@@ -416,6 +416,7 @@ def find_last_ckpt_path(path_exp_dir=None, exp_name=None):
 
     return ckpt_paths[0]
 
+
 def extract_backbones_from_ssl(hparams, model_cls):
     """
     Given experiment hyperparameters with 1+ specified SSL checkpoints, extract
