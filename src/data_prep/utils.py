@@ -1232,6 +1232,8 @@ def prep_strong_augmentations(img_size=(256, 256), crop_scale=0.5):
     """
     transforms = {}
     transforms["texture"] = T.Compose([
+        T.RandomEqualize(p=0.5),
+        T.RandomAutocontrast(p=0.5),
         T.RandomAdjustSharpness(1.25, p=0.25),
         T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
     ])
@@ -1260,6 +1262,8 @@ def prep_weak_augmentations(img_size=(256, 256)):
     """
     transforms = {}
     transforms["texture"] = T.Compose([
+        T.RandomEqualize(p=0.5),
+        T.RandomAutocontrast(p=0.5),
         T.RandomAdjustSharpness(1.25, p=0.25),
         T.RandomApply([T.GaussianBlur(1, 0.1)], p=0.5),
     ])
