@@ -532,7 +532,10 @@ def print_confusion_matrix(df_pred, **hparams):
         "Not all given labels are present!"
 
     # Accumulate counts and proportion of predicted labels for each label
-    df_labels = df_pred.groupby(by=["label"]).apply(get_counts_and_prop)
+    df_labels = df_pred.groupby(by=["label"]).apply(
+        get_counts_and_prop,
+        include_groups=True,
+    )
 
     # Rename columns
     df_labels = df_labels.reset_index().rename(
@@ -826,7 +829,7 @@ def check_others_pred_progression(df_pred):
 
     # Get unique label sequences per patient
     df_seqs = df_pred.groupby(by=["id", "visit"])
-    label_seqs = df_seqs.apply(_get_label_sequence)
+    label_seqs = df_seqs.apply(_get_label_sequence, include_groups=True)
     label_seqs = label_seqs.map("".join)
     label_seq_counts = label_seqs.value_counts().reset_index().rename(
         columns={"index": "Label Sequence", 0: "Count"})
@@ -909,7 +912,7 @@ def check_rel_side_pred_progression(df_pred):
 
     # Get unique label sequences per patient
     df_seqs = df_pred.groupby(by=["id", "visit"])
-    label_seqs = df_seqs.apply(_get_label_sequence)
+    label_seqs = df_seqs.apply(_get_label_sequence, include_groups=True)
     label_seqs = label_seqs.map("".join)
     label_seq_counts = label_seqs.value_counts().reset_index().rename(
         columns={"index": "Label Sequence", 0: "Count"})
@@ -1152,7 +1155,9 @@ def calculate_metric_by_groups(df_pred, group_cols,
 
     # Calculate metric on each group
     grp_metrics = df_pred.groupby(by=group_cols).apply(
-        lambda df_grp: metric_func(df_grp["label"], df_grp["pred"]))
+        lambda df_grp: metric_func(df_grp["label"], df_grp["pred"]),
+        include_groups=True,
+    )
 
     # Calculate average across groups
     mean = round(grp_metrics.mean(), 4)
@@ -1818,7 +1823,9 @@ def filter_most_confident(df_pred, local=False, top_k=1, groupby="pred"):
         # Get most confident pred per view per sequence (ignoring seq. number)
         assert groupby in ("pred", "label")
         df_seqs = df_pred.groupby(by=["id", "visit", groupby])
-        df_filtered = df_seqs.apply(lambda df: df.nlargest(top_k, "out")).reset_index(drop=True)
+        df_filtered = df_seqs.apply(
+            lambda df: df.nlargest(top_k, "out"),
+            include_groups=True).reset_index(drop=True)
     # CASE 2: 
     else:
         # Get most confident pred per group of consecutive labels per sequence
@@ -1827,11 +1834,16 @@ def filter_most_confident(df_pred, local=False, top_k=1, groupby="pred"):
 
         # 1. Identify local groups of consecutive labels
         local_grps_per_seq = df_pred.groupby(by=["id", "visit"]).apply(
-            lambda df: get_local_groups(df.label.values))
+            lambda df: get_local_groups(df.label.values),
+            include_groups=True,
+        )
         df_pred["local_group"] = np.concatenate(local_grps_per_seq.values)
 
         df_seqs = df_pred.groupby(by=["id", "visit", "local_group"])
-        df_filtered = df_seqs.apply(lambda df: df[df.out == df.out.max()])
+        df_filtered = df_seqs.apply(
+            lambda df: df[df.out == df.out.max()],
+            include_groups=True,
+        )
 
     return df_filtered
 
