@@ -26,11 +26,72 @@ from src.data_prep import utils
 SRC_DIR_UIOWA_DATA = os.path.join(os.path.dirname(constants.DIR_DATA), "UIowa")
 
 # Video/image dataset names
-VIDEO_DSETS = ("sickkids", "stanford")
-IMAGE_DSETS = ("sickkids_silent_trial", "stanford_image", "uiowa", "chop")
+VIDEO_DSETS = (
+    "sickkids", "stanford",
+    "sickkids_beamform", "stanford_beamform",
+)
+IMAGE_DSETS = (
+    "sickkids_image", "sickkids_silent_trial", "stanford_image",
+    "uiowa", "chop",
+)
 
 # Label columns
 LABEL_COLS = ["plane", "side", "label"]
+
+
+################################################################################
+#                             Image Preprocessing                              #
+################################################################################
+def preprocess_uiowa_data(src_dir=SRC_DIR_UIOWA_DATA,
+                          dst_dir=constants.DSET_TO_IMG_SUBDIR_FULL["uiowa"]):
+    """
+    Preprocesses UIowa Data and places it into the ViewLabeling data directory.
+
+    Parameters
+    ----------
+    src_dir : str, optional
+        Source directory containined nested data, by default
+        SRC_DIR_UIOWA_DATA
+    dst_dir : str, optional
+        Destination directory to store preprocessed images, where patient ID
+        is prepended to the original filename, by default
+        constants.DSET_TO_IMG_SUBDIR_FULL["uiowa"]
+    """
+    # If destination directory already exists, don't overwrite
+    if os.path.exists(dst_dir) and os.listdir(dst_dir) \
+            and os.path.exists(constants.DSET_TO_METADATA["raw"]["uiowa"]):
+        print("UIowa image data is already pre-processed! Skipping...")
+        return
+
+    # Create metadata for src directory
+    df_metadata = create_uiowa_metadata_from_src(src_dir)
+
+    # Create new filename
+    df_metadata["old_path"] = df_metadata["filename"]
+    df_metadata["filename"] = df_metadata["filename"].str.replace("/", "_")
+
+    # Make full path to source images
+    df_metadata["old_path"] = df_metadata["old_path"].map(
+        lambda x: os.path.join(src_dir, x))
+
+    for old_path, new_fname in tqdm(df_metadata[["old_path", "filename"]].itertuples(
+            index=False, name=None)):
+        # Preprocess image
+        img = cv2.imread(old_path)
+        processed_img = utils.preprocess_image(
+            img,
+            resize_dims=(256, 256),
+            ignore_crop=True)
+
+        # Save image to specified directory
+        new_path = os.path.join(dst_dir, new_fname)
+        cv2.imwrite(new_path, processed_img)
+
+    # Drop old filename
+    df_metadata = df_metadata.drop(columns=["old_path"])
+
+    # Save metadata
+    df_metadata.to_csv(constants.DSET_TO_METADATA["raw"]["uiowa"], index=False)
 
 
 ################################################################################
@@ -177,61 +238,19 @@ def create_uiowa_metadata_from_src(dir_data, save_path=None):
     return df_metadata
 
 
-def preprocess_uiowa_data(src_dir=SRC_DIR_UIOWA_DATA,
-                          dst_dir=constants.DSET_TO_IMG_SUBDIR_FULL["uiowa"]):
-    """
-    Preprocesses UIowa Data and places it into the ViewLabeling data directory.
-
-    Parameters
-    ----------
-    src_dir : str, optional
-        Source directory containined nested data, by default
-        SRC_DIR_UIOWA_DATA
-    dst_dir : str, optional
-        Destination directory to store preprocessed images, where patient ID
-        is prepended to the original filename, by default
-        constants.DSET_TO_IMG_SUBDIR_FULL["uiowa"]
-    """
-    # Create metadata for src directory
-    df_metadata = create_uiowa_metadata_from_src(src_dir)
-
-    # Create new filename
-    df_metadata["old_path"] = df_metadata["filename"]
-    df_metadata["filename"] = df_metadata["filename"].str.replace("/", "_")
-
-    # Make full path to source images
-    df_metadata["old_path"] = df_metadata["old_path"].map(
-        lambda x: os.path.join(src_dir, x))
-
-    for old_path, new_fname in tqdm(df_metadata[["old_path", "filename"]].itertuples(
-            index=False, name=None)):
-        # Preprocess image
-        img = cv2.imread(old_path)
-        processed_img = utils.preprocess_image(
-            img,
-            resize_dims=(256, 256),
-            ignore_crop=True)
-
-        # Save image to specified directory
-        new_path = os.path.join(dst_dir, new_fname)
-        cv2.imwrite(new_path, processed_img)
-
-    # Drop old filename
-    df_metadata = df_metadata.drop(columns=["old_path"])
-
-    # Save metadata
-    df_metadata.to_csv(constants.DSET_TO_METADATA["raw"]["uiowa"], index=False)
-
-
 def create_stanford_image_metadata(dir_data, save_path=None):
     """
     Based on folder structure and image names, create metadata table with
     relative image paths.
 
+    Note
+    ----
+    These contain images acquired specifically for hydronephrosis prediction.
+
     Parameters
     ----------
     dir_data : str
-        Path to Stanford Non-Sequence folder
+        Path to Stanford image folder
     save_path : str, optional
         If provided, save metadata table to file path
 
@@ -380,12 +399,91 @@ def create_sickkids_silent_trial_metadata(dir_data, save_path=None):
     return df_metadata
 
 
+def create_sickkids_image_metadata(dir_data, save_path=None):
+    """
+    Based on folder structure and image names, create metadata table with
+    relative image paths.
+
+    Note
+    ----
+    These contain images acquired specifically for hydronephrosis prediction.
+
+    Parameters
+    ----------
+    dir_data : str
+        Path to SickKids image folder
+    save_path : str, optional
+        If provided, save metadata table to file path
+
+    Returns
+    -------
+    pandas.DataFrame
+        Metadata table containing `filename`, `label`, `id`, `visit` and
+        `seq_number`
+    """
+    print("Creating SickKids (Image) Metadata...")
+
+    # Label mapping
+    label_map = {"trv": "Transverse", "sag": "Sagittal"}
+
+    # Get filenames of all viable images
+    fname_regex = "ORIG(\d*)_(Left|Right)_(\d*)_(sag|trv)-preprocessed.png"
+    img_fnames = [path for path in os.listdir(dir_data)
+                  if re.match(fname_regex, path)]
+
+    # Since no videos, all sequence numbers will be 0
+    sequence_number = 0
+
+    # Accumulate metadata for each image
+    rows = []
+    for img_fname in img_fnames:
+        # Search regex matches again
+        match = re.match(fname_regex, img_fname)
+        assert match, "Filtered filenames MUST match regex at this point!"
+
+        # Get patient ID
+        patient_id = int(match.group(1))
+
+        # Get patient visit
+        visit = match.group(3)
+
+        # Get side
+        side = match.group(2)
+
+        # Get plane
+        plane = label_map[match.group(4)]
+
+        # Create view label
+        label = "_".join([plane, side])
+
+        # Create metadata row
+        img_metadata = pd.DataFrame({
+            "filename": [img_fname],
+            "label": [label],
+            "id": [patient_id],
+            "visit": [visit],
+            "seq_number": [sequence_number],
+        })
+
+        # Store metadata
+        rows.append(img_metadata)
+
+    # Combine metadata rows
+    df_metadata = pd.concat(rows, ignore_index=True)
+
+    # Save metadata to location
+    if save_path:
+        df_metadata.to_csv(save_path, index=False)
+
+    return df_metadata
+
+
 ################################################################################
 #                            Cleaning Raw Metadata                             #
 ################################################################################
 def clean_sickkids_video_metadata():
     """
-    Preprocesses raw SickKids (video) to:
+    Preprocesses processed SickKids (video) to:
         a) extract view label and its sub-parts plane and side,
         b) add unlabeled data
     """
@@ -461,6 +559,9 @@ def clean_sickkids_video_metadata():
     cols = ["dset", "split"] + df_metadata.columns.tolist()[:-2]
     df_metadata = df_metadata[cols]
 
+    # Add directory name
+    df_metadata["dir_name"] = constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"]
+
     # Print and store basic data statistics
     print_basic_data_stats(df_metadata)
 
@@ -471,7 +572,7 @@ def clean_sickkids_video_metadata():
 
 def clean_stanford_video_metadata():
     """
-    Preprocess raw Stanford (video) metadata
+    Preprocess processed Stanford (video) metadata
     """
     print("Cleaning Stanford Video metadata...")
     df_metadata = pd.read_csv(constants.DSET_TO_METADATA["raw"]["stanford"])
@@ -533,6 +634,9 @@ def clean_stanford_video_metadata():
     cols = ["dset", "split"] + df_metadata.columns.tolist()[:-2]
     df_metadata = df_metadata[cols]
 
+    # Add directory name
+    df_metadata["dir_name"] = constants.DSET_TO_IMG_SUBDIR_FULL["stanford"]
+
     # Print and store basic data statistics
     print_basic_data_stats(df_metadata)
 
@@ -554,7 +658,7 @@ def clean_image_dsets_metadata():
     Not a lot to be done because they were created through this script as well.
     """
     # Load metadata
-    for dset in ("sickkids_silent_trial", "stanford_image", "uiowa", "chop"):
+    for dset in IMAGE_DSETS:
         print(f"Cleaning `{dset}` metadata...")
         df_metadata = pd.read_csv(constants.DSET_TO_METADATA["raw"][dset])
 
@@ -577,12 +681,101 @@ def clean_image_dsets_metadata():
         cols = ["dset", "split"] + df_metadata.columns.tolist()[:-2]
         df_metadata = df_metadata[cols]
 
+        # Add directory name
+        df_metadata["dir_name"] = constants.DSET_TO_IMG_SUBDIR_FULL[dset]
+
         # Print and store basic data statistics
         print_basic_data_stats(df_metadata)
 
         # Save metadata file
         df_metadata.to_csv(constants.DSET_TO_METADATA["clean"][dset], index=False)
         print(f"Cleaning `{dset}` metadata...DONE")
+
+
+def clean_sickkids_video_beamform_metadata():
+    """
+    Preprocesses cropped beamform SickKids (video)
+    """
+    print("Cleaning SickKids Video (Beamform) metadata...")
+
+    # Load clean metadata file for SickKids Video
+    df_metadata = pd.read_csv(constants.DSET_TO_METADATA["clean"]["sickkids"])
+
+    ############################################################################
+    #                        Map to Beamform Images                            #
+    ############################################################################
+    # Change dset
+    df_metadata["dset"] = "sickkids_beamform"
+
+    # Overwrite filename and directory name
+    df_metadata["filename"] = df_metadata.apply(
+        lambda row: "_".join(map(str, [row["id"], row["visit"], row["seq_number"]])) + ".jpg",
+        axis=1
+    )
+    df_metadata["dir_name"] = constants.DSET_TO_IMG_SUBDIR_FULL["sickkids_beamform"]
+
+    # Check which images don't exist
+    exists_mask = df_metadata.apply(
+        lambda row: os.path.exists(os.path.join(row["dir_name"], row["filename"])),
+        axis=1
+    )
+    print(f"{(~exists_mask).sum()} images don't have original beamform format! Removing...")
+
+    # Filter for images that do exist
+    df_metadata = df_metadata[exists_mask]
+
+    ############################################################################
+    #                           Post-Processing                                #
+    ############################################################################
+    # Print and store basic data statistics
+    print_basic_data_stats(df_metadata)
+
+    # Save metadata file
+    df_metadata.to_csv(constants.DSET_TO_METADATA["clean"]["sickkids_beamform"], index=False)
+    print("Cleaning SickKids Video (Beamform) metadata...DONE")
+
+
+def clean_stanford_video_beamform_metadata():
+    """
+    Preprocesses cropped beamform Stanford (video)
+    """
+    print("Cleaning Stanford Video (Beamform) metadata...")
+
+    # Load clean metadata file for Stanford Video
+    df_metadata = pd.read_csv(constants.DSET_TO_METADATA["clean"]["stanford"])
+
+    ############################################################################
+    #                        Map to Beamform Images                            #
+    ############################################################################
+    # Change dset
+    df_metadata["dset"] = "stanford_beamform"
+
+    # Overwrite filename and directory name
+    df_metadata["filename"] = df_metadata.apply(
+        lambda row: "_".join(map(str, [row["id"], row["visit"], row["seq_number"]])) + ".jpg",
+        axis=1
+    )
+    df_metadata["dir_name"] = constants.DSET_TO_IMG_SUBDIR_FULL["stanford_beamform"]
+
+    # Check which images don't exist
+    exists_mask = df_metadata.apply(
+        lambda row: os.path.exists(os.path.join(row["dir_name"], row["filename"])),
+        axis=1
+    )
+    print(f"{(~exists_mask).sum()} images don't have original beamform format! Removing...")
+
+    # Filter for images that do exist
+    df_metadata = df_metadata[exists_mask]
+
+    ############################################################################
+    #                           Post-Processing                                #
+    ############################################################################
+    # Print and store basic data statistics
+    print_basic_data_stats(df_metadata)
+
+    # Save metadata file
+    df_metadata.to_csv(constants.DSET_TO_METADATA["clean"]["stanford_beamform"], index=False)
+    print("Cleaning Stanford Video (Beamform) metadata...DONE")
 
 
 ################################################################################
@@ -670,7 +863,7 @@ def main_prepare_image_datasets():
     # Preprocess UIowa data & Create metadata
     preprocess_uiowa_data(src_dir=SRC_DIR_UIOWA_DATA)
 
-    # Create Stanford (Non-Seq) Metadata
+    # Create Stanford (Image) Metadata
     create_stanford_image_metadata(
         constants.DSET_TO_IMG_SUBDIR_FULL["stanford_image"],
         constants.DSET_TO_METADATA["raw"]["stanford_image"],
@@ -682,18 +875,33 @@ def main_prepare_image_datasets():
         constants.DSET_TO_METADATA["raw"]["sickkids_silent_trial"],
     )
 
+    # Create SickKids (Image) Metadata
+    create_sickkids_image_metadata(
+        constants.DSET_TO_IMG_SUBDIR_FULL["sickkids_image"],
+        constants.DSET_TO_METADATA["raw"]["sickkids_image"],
+    )
+
 
 def main_clean_metadata():
     """
     Create clean metadata files for video and image datasets.
     """
+    # Video datasets
     clean_sickkids_video_metadata()
     clean_stanford_video_metadata()
+
+    # Image datasets
     clean_image_dsets_metadata()
 
     # Correct SickKids/Stanford view labels
     ref_path = constants.DSET_TO_METADATA["raw"]["sickkids_corrections"]
     main_correct_labels(ref_path, label_col="plane")
+
+    # Video (beamform) datasets
+    # NOTE: This needs to happen after label correction, since it takes after
+    #       the cleaned video metadata
+    clean_sickkids_video_beamform_metadata()
+    clean_stanford_video_beamform_metadata()
 
 
 def main_correct_labels(ref_path, label_col="plane"):
@@ -718,6 +926,10 @@ def main_correct_labels(ref_path, label_col="plane"):
 
     # For each metadata, check if any of the labels overlap
     for dset in list(VIDEO_DSETS) + list(IMAGE_DSETS):
+        # Exclude beamform video datasets
+        if "_beamform" in dset:
+            continue
+
         clean_dset_path = constants.DSET_TO_METADATA["clean"][dset]
         df_metadata = pd.read_csv(clean_dset_path)
         df_metadata[index_cols] = df_metadata[index_cols].astype(str)
