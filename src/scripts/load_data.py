@@ -257,7 +257,7 @@ def create_eval_hparams(dset=None, split="test"):
 
     # Check that provided dataset or split is valid
     if dset:
-        assert dset in constants.DSET_TO_IMG_SUBDIR_FULL
+        assert dset in constants.DSET_TO_IMG_SUBDIR_FULL, f"`{dset}` is not a valid dataset! Must be one of {constants.DSET_TO_IMG_SUBDIR_FULL.keys()}"
     # Set dataset
     overwrite_hparams["dsets"] = [dset]
     assert split in ("train", "val", "test")

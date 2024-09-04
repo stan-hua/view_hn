@@ -132,6 +132,7 @@ def init(parser):
         "exp_names": "Name/s of experiment/s (to evaluate)",
         "dsets": "List of dataset names to evaluate",
         "splits": "Name of data splits for each `dset` to evaluate",
+        "ckpt_option": "Choice of checkpoint to load (last/best)",
         "mask_bladder": "If True, mask bladder logit, if it's an US image dataset.",
         "test_time_aug": "If True, perform test-time augmentations during inference.",
         "da_transform_name":
@@ -148,6 +149,8 @@ def init(parser):
     parser.add_argument("--splits", default=["test"],
                         nargs='+',
                         help=arg_help["splits"])
+    parser.add_argument("--ckpt_option", default="best",
+                        help=arg_help["ckpt_option"])
     parser.add_argument("--mask_bladder", action="store_true",
                         help=arg_help["mask_bladder"])
     parser.add_argument("--test_time_aug", action="store_true",
@@ -2207,10 +2210,7 @@ def load_view_predictions(exp_name, dset, split, **infer_kwargs):
     df_pred = pd.read_csv(save_path)
 
     # 3. Ensure no duplicates (or sequential data only)
-    # NOTE: Because Stanford had duplicate metadata, there were duplicate preds
-    mask_bladder = infer_kwargs.get("mask_bladder")
-    if not mask_bladder:
-        df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number"])
+    df_pred = df_pred.drop_duplicates(subset=["id", "visit", "seq_number", "filename"])
 
     # 4. Add side/plane label, if not present
     for label_part in constants.LABEL_PARTS:
@@ -2340,7 +2340,7 @@ def scale_and_round(x, factor=100, num_places=2):
 #                                  Main Flows                                  #
 ################################################################################
 def infer_dset(exp_name, dset, split,
-               seq_number_limit=None,
+               ckpt_option="best",
                mask_bladder=False,
                test_time_aug=False,
                da_transform_name=None,
@@ -2357,9 +2357,8 @@ def infer_dset(exp_name, dset, split,
         Name of dataset
     split : str, optional
         Specific split of dataset. One of (train/val/test)
-    seq_number_limit : int, optional
-        If provided, filters out dset split samples with sequence numbers higher
-        than this value, by default None.
+    ckpt_option : str, optional
+        If "best", select based on validation loss. If "last", take last epoch.
     mask_bladder : bool, optional
         If True, mask out predictions on bladder/middle side, leaving only
         kidney labels. Defaults to False.
@@ -2384,10 +2383,10 @@ def infer_dset(exp_name, dset, split,
 
     # 0. Create path to save predictions
     pred_save_path = create_save_path(exp_name, dset=dset, split=split,
-                                      seq_number_limit=seq_number_limit,
                                       mask_bladder=mask_bladder,
                                       test_time_aug=test_time_aug,
-                                      da_transform_name=da_transform_name)
+                                      da_transform_name=da_transform_name,
+                                      ckpt_option=ckpt_option)
     # Early return, if prediction already made
     if os.path.isfile(pred_save_path) and not overwrite_existing:
         return
@@ -2421,7 +2420,10 @@ def infer_dset(exp_name, dset, split,
 
     # 4. Load existing model and send to device
     model = load_model.load_pretrained_from_exp_name(
-        exp_name, overwrite_hparams=overwrite_hparams)
+        exp_name,
+        ckpt_option=ckpt_option,
+        overwrite_hparams=overwrite_hparams
+    )
     model = model.to(DEVICE)
 
     # 3. Load data
@@ -2431,11 +2433,7 @@ def infer_dset(exp_name, dset, split,
 
     # 3.1 Get metadata (for specified split)
     df_metadata = dm.filter_metadata(dset=dset, split=split)
-    # 3.2 If provided, filter out high sequence number images
-    if seq_number_limit:
-        mask = (df_metadata["seq_number"] <= seq_number_limit)
-        df_metadata = df_metadata[mask]
-    # 3.3 Sort, so no mismatch occurs due to groupby sorting
+    # 3.2 Sort, so no mismatch occurs due to groupby sorting
     df_metadata = df_metadata.sort_values(by=["id", "visit"], ignore_index=True)
 
     # 4. Predict on dset split
@@ -2509,6 +2507,7 @@ def infer_dset(exp_name, dset, split,
 
 
 def embed_dset(exp_name, dset, split,
+               ckpt_option="best",
                overwrite_existing=OVERWRITE_EXISTING,
                **overwrite_hparams):
     """
@@ -2522,6 +2521,8 @@ def embed_dset(exp_name, dset, split,
         Name of dataset
     split : str, optional
         Specific split of dataset. One of (train/val/test)
+    ckpt_option : str, optional
+        If "best", select based on validation loss. If "last", take last epoch.
     overwrite_existing : bool, optional
         If True and embeddings already exists, overwrite existing, by
         default OVERWRITE_EXISTING.
@@ -2551,7 +2552,10 @@ def embed_dset(exp_name, dset, split,
 
     # 2. Load existing model and send to device
     model = load_model.load_pretrained_from_exp_name(
-        exp_name, overwrite_hparams=overwrite_hparams)
+        exp_name,
+        ckpt_option=ckpt_option,
+        overwrite_hparams=overwrite_hparams
+    )
     model = model.to(DEVICE)
 
     # NOTE: For non-video datasets, ensure each image is treated independently
@@ -2674,6 +2678,7 @@ def main(args):
                 "mask_bladder": mask_bladder,
                 "test_time_aug": args.test_time_aug,
                 "da_transform_name": args.da_transform_name,
+                "ckpt_option": args.ckpt_option,
             }
             infer_dset(exp_name=exp_name, dset=curr_dset, split=curr_split,
                        **infer_kwargs,
@@ -2681,7 +2686,9 @@ def main(args):
 
             # 4. Extract embeddings
             if EMBED:
-                embed_dset(exp_name=exp_name, dset=curr_dset, **eval_hparams)
+                embed_dset(exp_name=exp_name, dset=curr_dset,
+                           ckpt_option=args.ckpt_option,
+                           **eval_hparams)
 
             # 5. Evaluate predictions and embeddings
             analyze_dset_preds(exp_name=exp_name,
@@ -2698,7 +2705,6 @@ def main(args):
                            splits=splits,
                            log_to_comet=args.log_to_comet,
                            **infer_kwargs)
-
 
 
 if __name__ == '__main__':

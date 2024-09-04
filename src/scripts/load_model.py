@@ -181,8 +181,10 @@ def load_pretrained_from_exp_name(exp_name, ckpt_option="best",
     # 2. Load existing model and send to device
     # 2.1 Get checkpoint path
     if ckpt_option == "last":
-        ckpt_path = find_best_ckpt_path(model_dir)
+        LOGGER.info("Loading `last` pre-trained model weights...")
+        ckpt_path = find_last_ckpt_path(model_dir)
     else:
+        LOGGER.info("Loading `best` pre-trained model weights...")
         ckpt_path = find_best_ckpt_path(model_dir)
     # 2.2 Get model class and extra parameters for loading from checkpoint
     model_cls, model_cls_kwargs = get_model_cls(hparams)
