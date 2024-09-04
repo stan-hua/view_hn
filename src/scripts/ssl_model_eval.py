@@ -73,6 +73,7 @@ def init(parser):
     """
     arg_help = {
         "exp_names": "Experiment names of SSL-pretrained models to evaluate",
+        "ckpt_option": "Choice of checkpoint to load (last/best)",
         "dsets": "List of dataset names to evaluate",
         "splits": "Name of data splits for each `dset` to evaluate",
         "config": f"Name of configuration file under `{constants.DIR_CONFIG}` "
@@ -87,12 +88,15 @@ def init(parser):
     parser.add_argument("--exp_names", help=arg_help["exp_names"],
                         nargs="+",
                         required=True)
+    parser.add_argument("--ckpt_option", default="best",
+                        help=arg_help["ckpt_option"])
     parser.add_argument("--dsets", default=["sickkids"],
                         nargs='+',
                         help=arg_help["dsets"])
     parser.add_argument("--splits", default=["test"],
                         nargs='+',
                         help=arg_help["splits"])
+
 
 def train_eval_model(hparams):
     """
@@ -200,7 +204,7 @@ def train_eval_models(exp_name, **overwrite_hparams):
 ################################################################################
 #                               Analyze Results                                #
 ################################################################################
-def analyze_eval_model_preds(hparams, dsets, splits):
+def analyze_eval_model_preds(hparams, dsets, splits, **kwargs):
     """
     Evaluate single evaluation model.
 
@@ -212,6 +216,8 @@ def analyze_eval_model_preds(hparams, dsets, splits):
         Name of evaluation dataset/s
     splits : str or list, optional
         Name of splits corresponding to each dataset to evaluate
+    **kwargs : Any
+        Keyword arguments to pass into all `model_eval` functions
     """
     dsets = [dsets] if isinstance(dsets, str) else dsets
     splits = [splits] if isinstance(splits, str) else splits
@@ -227,6 +233,7 @@ def analyze_eval_model_preds(hparams, dsets, splits):
             hparams["exp_name"],
             dset=curr_dset,
             split=curr_split,
+            **kwargs,
             **eval_hparams)
 
         # 2. Embed dataset
@@ -234,6 +241,7 @@ def analyze_eval_model_preds(hparams, dsets, splits):
             hparams["exp_name"],
             dset=curr_dset,
             split=curr_split,
+            **kwargs,
             **eval_hparams,
         )
 
@@ -243,13 +251,15 @@ def analyze_eval_model_preds(hparams, dsets, splits):
             dsets=curr_dset,
             splits=curr_split,
             log_to_comet=True,
+            **kwargs,
         )
 
     # 4. Create UMAP together
-    model_eval.analyze_dset_preds(hparams["exp_name"], dsets=dsets, splits=splits)
+    model_eval.analyze_dset_preds(
+        hparams["exp_name"], dsets=dsets, splits=splits, **kwargs)
 
 
-def analyze_preds(exp_name, hparams, dsets="sickkids", splits="val",):
+def analyze_preds(exp_name, hparams, dsets="sickkids", splits="val", **kwargs):
     """
     Perform test prediction analysis from `model_eval` on trained evaluations
     models
@@ -264,6 +274,8 @@ def analyze_preds(exp_name, hparams, dsets="sickkids", splits="val",):
         Name of evaluation dataset/s
     splits : str or list, optional
         Name of splits corresponding to each dataset to evaluate
+    **kwargs : Any
+        Keyword arguments to pass into `analyze_eval_model_preds`
     """
     # Evaluate each model separately
     for model_type in MODEL_TYPES:
@@ -279,8 +291,7 @@ def analyze_preds(exp_name, hparams, dsets="sickkids", splits="val",):
                     lp_ft=False,
                 )
                 # Analyze predictions of SSL eval model
-                analyze_eval_model_preds(curr_hparams, dsets=dsets, splits=splits)
-
+                analyze_eval_model_preds(curr_hparams, dsets=dsets, splits=splits, **kwargs)
 
                 # Skip, if not doing LP-FT (fine-tuning after linear probing)
                 if not freeze_weights or not LP_FT:
@@ -291,7 +302,7 @@ def analyze_preds(exp_name, hparams, dsets="sickkids", splits="val",):
                 lp_ft_hparams = prep_eval_exp_hparams(curr_hparams, from_ssl_eval=True)
 
                 # Analyze predictions of (LP-FT) SSL eval model
-                analyze_eval_model_preds(lp_ft_hparams, dsets=dsets, splits=splits)
+                analyze_eval_model_preds(lp_ft_hparams, dsets=dsets, splits=splits, **kwargs)
 
 
 ################################################################################
@@ -409,6 +420,7 @@ def main(args, hparams):
     """
     # Get dataset and splits
     exp_names = args.exp_names
+    ckpt_option = args.ckpt_option
     dsets = args.dsets
     splits = args.splits
     # If only one of dset/split is > 1, assume it's meant to be broadcast
@@ -432,7 +444,7 @@ def main(args, hparams):
 
         # Analyze results of evaluation models
         analyze_preds(exp_name, dsets=dsets, splits=splits,
-                      hparams=hparams)
+                      hparams=hparams, ckpt_option=ckpt_option)
 
 
 if __name__ == "__main__":

@@ -165,17 +165,17 @@ def run(hparams, dm, results_dir=constants.DIR_RESULTS, fold=0):
     # Callbacks
     callbacks = []
     # 1. Model checkpointing
-    if hparams["checkpoint"]:
+    if hparams.get("checkpoint"):
         LOGGER.info("Storing model checkpoints...")
         callbacks.append(
             ModelCheckpoint(dirpath=experiment_dir, save_last=True,
                             monitor="val_loss" if includes_val else None))
     # 2. Stochastic Weight Averaging
-    if hparams["swa"]:
+    if hparams.get("swa"):
         LOGGER.info("Performing stochastic weight averaging (SWA)...")
         callbacks.append(StochasticWeightAveraging(swa_lrs=1e-2))
     # 3. Early stopping
-    if hparams["early_stopping"]:
+    if hparams.get("early_stopping"):
         LOGGER.info("Performing early stopping on validation loss...")
         callbacks.append(EarlyStopping(monitor="val_loss", mode="min"))
 
