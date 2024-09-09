@@ -244,6 +244,7 @@ class ImageEmbedder:
         if device != "cpu" and not torch.cuda.is_available():
             device = "cpu"
         self.model = self.model.to(device)
+        self.model.eval()
 
         # Input sanitization
         assert img_dir or img_dataloader, "Must specify at least image "\
@@ -264,34 +265,45 @@ class ImageEmbedder:
             dataloader = img_dataloader
 
         all_embeds = []
-        file_paths = []
+        file_paths, ids, visits, seq_numbers = [], [], [], []
+        dsets = []
 
         # Extract embeddings in batches
-        for data, metadata in tqdm(dataloader):
-            # If shape is (1, seq_len, C, H, W), flatten first dimension
-            if len(data.size()) == 5:
-                data = data.squeeze(dim=0)
+        with torch.no_grad():
+            for data, metadata in tqdm(dataloader):
+                # If shape is (1, seq_len, C, H, W), flatten first dimension
+                if len(data.size()) == 5:
+                    data = data.squeeze(dim=0)
 
-            if device != "cpu":
-                data = data.to(device)
-            embeds = self.embed_torch(data)
+                if device != "cpu":
+                    data = data.to(device)
+                embeds = self.embed_torch(data)
 
-            # Remove possibly added extra dimension
-            if len(embeds.shape) == 3 and embeds.shape[0] == 1:
-                embeds = embeds.squeeze(axis=0)
-            elif len(embeds.shape) == 4 and \
-                    embeds.shape[-2] == 1 and embeds.shape[-1] == 1:
-                embeds = embeds.squeeze(axis=2).squeeze(axis=2)
-                assert len(embeds.shape) == 2, \
-                    "Unexpected case, where embed. output has 4 dimensions!"
+                # Remove possibly added extra dimension
+                if len(embeds.shape) == 3 and embeds.shape[0] == 1:
+                    embeds = embeds.squeeze(axis=0)
+                elif len(embeds.shape) == 4 and \
+                        embeds.shape[-2] == 1 and embeds.shape[-1] == 1:
+                    embeds = embeds.squeeze(axis=2).squeeze(axis=2)
+                    assert len(embeds.shape) == 2, \
+                        "Unexpected case, where embed. output has 4 dimensions!"
 
-            all_embeds.append(embeds)
-            file_paths.extend(metadata["filename"])
+                all_embeds.append(embeds)
+                # Store metadata
+                file_paths.extend(metadata["filename"])
+                ids.extend(metadata["id"])
+                visits.extend(metadata["visit"])
+                seq_numbers.extend(metadata["seq_number"])
+                dsets.extend(metadata["dset"])
 
         # Save embeddings. Each row is a feature vector
         df_features = pd.DataFrame(np.concatenate(all_embeds))
         assert not df_features.isna().all(axis=None)
         df_features["filename"] = np.array(file_paths).flatten()
+        df_features["id"] = np.array(ids).flatten()
+        df_features["visit"] = np.array(visits).flatten()
+        df_features["seq_number"] = np.array(seq_numbers).flatten()
+        df_features["dset"] = np.array(dsets).flatten()
         df_features.to_hdf(save_path, "embeds", mode="w")
 
         return df_features
@@ -420,6 +432,7 @@ def main(args):
         exp_hparams["augment_training"] = False
         exp_hparams["shuffle"] = False
         exp_hparams["include_labeled_other"] = True
+        exp_hparams["imbalanced_sampler"] = False
 
         # Extract embeddings for each dataset
         for idx, dset in enumerate(dsets):
