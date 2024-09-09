@@ -103,7 +103,12 @@ def explain_model_on_dset(exp_name, dset, split, label_whitelist=SHOW_LABELS,
     )
 
     # Load predictions
-    pred_path = model_eval.create_save_path(exp_name=exp_name, dset=dset, split=split)
+    pred_path = model_eval.create_save_path(
+        exp_name=exp_name,
+        dset=dset,
+        split=split,
+        ckpt_option="best",
+    )
     try:
         df_preds = pd.read_csv(pred_path)
     except Exception as error_msg:

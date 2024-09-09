@@ -389,11 +389,6 @@ class TCL(L.LightningModule):
         """
         Compute entropy regularization loss
 
-        Note
-        -----
-        Original implementation may be wrong. See
-        https://github.com/Hzzone/TCL/blob/master/models/tcl/tcl_wrapper.py#L80
-
         Parameters
         ----------
         y_probs : torch.Tensor

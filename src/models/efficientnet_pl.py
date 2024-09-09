@@ -26,7 +26,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
     def __init__(self, num_classes=5, img_size=(256, 256),
                  optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
                  use_gradcam_loss=False,
-                 use_cutmix_aug=False, use_mixup_aug=False,
+                 use_mixup_aug=False,
                  freeze_weights=False, effnet_name="efficientnet-b0",
                  *args, **kwargs):
         """
@@ -51,8 +51,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         use_gradcam_loss : bool, optional
             If True, add auxiliary segmentation-attention GradCAM loss, by
             default False.
-        use_cutmix_aug : bool, optional
-            If True, use CutMix augmentation during training, by default False.
         use_mixup_aug : bool, optional
             If True, use Mixup augmentation during training, by default False
         freeze_weights : bool, optional
@@ -74,11 +72,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # If specified, store training-specific augmentations
         # NOTE: These augmentations require batches of input
         self.train_aug = None
-        if use_cutmix_aug:
-            assert not use_mixup_aug
-            self.train_aug = v2.CutMix(num_classes=num_classes)
         if use_mixup_aug:
-            assert not use_cutmix_aug
             self.train_aug = v2.MixUp(num_classes=num_classes)
 
         # Define loss
@@ -223,28 +217,44 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             Loss for training batch
         """
         data, metadata = train_batch
+        B = len(data)
 
-        # Get label (and modify for loss if using cutmix)
+        # Get label (and modify for loss if using MixUp)
         y_true = metadata["label"]
 
-        # If specified, apply CutMix augmentation on images
+        # If specified, apply MixUp augmentation on images
         y_true_aug = y_true
-        if self.hparams.get("use_cutmix_aug") or self.hparams.get("use_mixup_aug"):
+        if self.hparams.get("use_mixup_aug"):
             data, y_true_aug = self.train_aug(data, y_true)
 
         # Get prediction
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
 
-        # Get loss
-        ce_loss = self.loss(out, y_true_aug)
-        # If specified, compute GradCAM loss
-        if self.hparams.use_gradcam_loss:
+        # CASE 1: Cross-entropy loss on labeled + Penalize on unlabeled
+        if self.hparams.get("penalize_other_loss"):
+            # Assume last class is unlabeled class
+            unlabeled_idx = self.hparams["num_classes"] - 1
+            # Assert that second half is only "Other" labeled images
+            assert (y_true[B//2:] == unlabeled_idx).all(), \
+                "More than 1 label detected in 'Others' samples! Issue with sampler..."
+
+            # 1. Cross-entropy loss on labeled data (first half)
+            ce_loss = self.loss(out[:B//2], y_true_aug[:B//2])
+            # 2. Lower confidence on unlabeled data via entropy loss
+            entropy_loss = compute_unlabeled_entropy_loss(out[B//2:])
+            loss = ce_loss + (self.hparams.get("other_penalty_weight", .5) * entropy_loss)
+        # CASE 2: Cross-entropy + GradCAM loss
+        elif self.hparams.get("use_gradcam_loss"):
+            # 1. Cross-entropy loss
+            ce_loss = self.loss(out, y_true_aug)
+            # 2. GradCAM loss
             gradcam_loss = self.gradcam_loss(*train_batch)
             gradcam_loss_weight = self.hparams.get("gradcam_loss_weight", 1.)
             loss = ce_loss + (gradcam_loss_weight * gradcam_loss)
+        # CASE 3: [Standard] Cross-entropy loss
         else:
-            loss = ce_loss
+            loss = self.loss(out, y_true_aug)
 
         # Log training metrics
         self.train_acc.update(y_pred, y_true)
@@ -486,3 +496,30 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         z = z.view(inputs.size()[0], -1)
 
         return z.detach().cpu().numpy()
+
+
+def compute_unlabeled_entropy_loss(out):
+    """
+    Compute entropy regularization loss for unlabeled (catch-all) data
+
+    Parameters
+    ----------
+    out : torch.Tensor
+        Each row contains model logits
+
+    Returns
+    -------
+    torch.FloatTensor
+        Entropy regularization loss
+    """
+    # Convert to probabilities
+    y_probs = torch.nn.functional.softmax(out, dim=1)
+
+    # Maximize entropy of average predictions (avoid collapse to one class)
+    avg_prob = y_probs.mean(dim=0)
+    H_avg = torch.sum(avg_prob * torch.log(avg_prob + 1e-9))
+
+    # Maximize entropy of each predictions (less confident predictions)
+    H_pred = torch.mean(torch.sum(y_probs * torch.log(y_probs + 1e-9), dim=1))
+
+    return H_avg + H_pred

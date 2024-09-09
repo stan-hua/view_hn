@@ -86,9 +86,9 @@ def load_model(hparams):
         from_exp_name = from_exp_name[0] if isinstance(from_exp_name, list) \
             else from_exp_name
 
-        # Load pretrained model
+        # Load pretrained model (based on validation loss)
         pretrained_model = load_pretrained_from_exp_name(
-            from_exp_name,
+            from_exp_name, ckpt_option="best",
             **model_cls_kwargs)
         pretrained_model_hparams = get_hyperparameters(exp_name=from_exp_name)
 
