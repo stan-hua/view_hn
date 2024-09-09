@@ -253,6 +253,8 @@ def create_eval_hparams(dset=None, split="test"):
         "shuffle": False,
         "augment_training": False,
         "self_supervised": False,
+        "imbalanced_sampler": False,
+        "other_labeled_sampler": False,
     }
 
     # Check that provided dataset or split is valid

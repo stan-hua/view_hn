@@ -22,7 +22,7 @@ from torchvision.io import read_image, ImageReadMode
 # Custom libraries
 from src.data import constants
 from src.data_prep import utils
-from src.data_prep.sampler import ImbalancedDatasetSampler
+from src.data_prep.sampler import (ImbalancedDatasetSampler, OtherDatasetSampler)
 
 
 ################################################################################
@@ -105,6 +105,7 @@ class UltrasoundDataModule(L.LightningDataModule):
                  full_path=False,
                  augment_training=False,
                  imbalanced_sampler=False,
+                 other_labeled_sampler=False,
                  default_dl_params=DEFAULT_DATALOADER_PARAMS,
                  **kwargs):
         """
@@ -138,6 +139,9 @@ class UltrasoundDataModule(L.LightningDataModule):
         imbalanced_sampler : bool, optional
             If True, perform imbalanced sampling during training to
             account for label imbalances, by default False
+        other_labeled_sampler : bool, optional
+            If True, sample batches of labeled and "other" labeled data with the
+            same batch size.
         default_dl_params : dict, optional
             Default dataloader parameters
         **kwargs : dict
@@ -229,8 +233,10 @@ class UltrasoundDataModule(L.LightningDataModule):
         ########################################################################
         #                        DataLoader Parameters                         #
         ########################################################################
-        # Store parameter for imbalanced sampler
+        # Store parameter for data sampler
+        assert not (imbalanced_sampler and other_labeled_sampler), "Please choose only 1 sampler!"
         self.imbalanced_sampler = imbalanced_sampler
+        self.other_labeled_sampler = other_labeled_sampler
 
         # Extract parameters for training/validation DataLoaders
         self.train_dataloader_params = {}
@@ -288,7 +294,7 @@ class UltrasoundDataModule(L.LightningDataModule):
         """
         Prepares data for model training/validation/testing
         """
-        # If specified, include/drop images labeled "Others" 
+        # If specified, include/drop images labeled "Others"
         # NOTE: Need to update hparams["num_classes"] elsewhere
         if not self.us_dataset_kwargs.get("include_labeled_other"):
             mask = (self.df["label"] == "Other")
@@ -418,12 +424,23 @@ class UltrasoundDataModule(L.LightningDataModule):
             **self.us_dataset_kwargs,
         )
 
-        # If specified, instantiate imbalanced sampler
+        # CASE 1: Imbalanced sampler
         if self.imbalanced_sampler:
             LOGGER.info("Using imbalanced sampler for training!")
             sampler = ImbalancedDatasetSampler(train_dataset)
             self.train_dataloader_params["sampler"] = sampler
             self.train_dataloader_params["shuffle"] = False
+        # CASE 2: Other labeled sampler
+        elif self.other_labeled_sampler:
+            LOGGER.info("Using `other` labeled sampler for training!")
+            batch_sampler = OtherDatasetSampler(
+                train_dataset,
+                batch_size=self.train_dataloader_params["batch_size"],
+                shuffle=self.train_dataloader_params["shuffle"],
+            )
+            self.train_dataloader_params["batch_sampler"] = batch_sampler
+            self.train_dataloader_params.pop("batch_size")
+            self.train_dataloader_params.pop("shuffle")
 
         # Create DataLoader with parameters specified
         return DataLoader(train_dataset, **self.train_dataloader_params)
@@ -665,7 +682,7 @@ class UltrasoundDataset(torch.utils.data.Dataset):
             include path to image, patient ID, and hospital.
         """
         img_path = self.paths[index]
-        assert os.path.exists(img_path), "No image at path specified!"
+        assert os.path.exists(img_path), f"No image at path specified! \n\t{img_path}"
 
         # Load image
         X = read_image(img_path, self.mode)

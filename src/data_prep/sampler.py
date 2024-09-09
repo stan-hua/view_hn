@@ -79,3 +79,89 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
 
     def __len__(self):
         return self.num_samples
+
+
+class OtherDatasetSampler(torch.utils.data.sampler.Sampler):
+    """
+    OtherDatasetSampler class.
+
+    Note
+    ----
+    For a dataset with a catch-all "Other"/unlabeled class, load the first half
+    of images randomly sampled from the non-"Other" classes, and load the latter
+    half of images from the "Other" classes
+
+    e.g., batch_size = 6
+     - the first 3 images are labeled A, B, C and the last 3 are labeled "Other"
+    """
+
+    def __init__(
+        self,
+        dataset,
+        batch_size,
+        shuffle=False,
+        other_label=None,
+    ):
+        """
+        Initialize OthersDatasetBatchSampler object.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            Dataset class
+        batch_size : int
+            Batch size
+        shuffle : bool
+            If True, shuffle labeled and Other samples before batching
+        other_label : int, optional
+            Label of "Other" class. If not provided, assumed to be last index
+        """
+        self.batch_size = batch_size
+        self.num_samples = len(dataset)
+
+        # Get (encoded) labels
+        df = pd.DataFrame()
+        df["label"] = dataset.get_labels(encoded=True)
+
+        # If Other index is not provided, assume it's the last
+        if other_label is None:
+            other_label = sorted(df["label"].unique().tolist())[-1]
+
+        # If specified, shuffle
+        if shuffle:
+            df = df.sample(frac=1)
+
+        # Split indices into other and non-other images
+        other_mask = (df["label"] == other_label)
+        self.label_indices = df[~other_mask].index.to_numpy()
+        self.other_indices = df[other_mask].index.to_numpy()
+
+        # Set number of samples based on labeled data
+        self.num_samples = len(self.label_indices) // self.batch_size
+
+
+    def __iter__(self):
+        # Compute number of batches of "other" labels
+        num_samples_other = len(self.other_indices) // self.batch_size
+
+        # Iterate over batches
+        # NOTE: Drops last by default
+        for batch_idx in range(self.num_samples):
+            # Get labeled samples
+            start_idx = batch_idx * self.batch_size
+            end_idx = start_idx + self.batch_size
+            curr_label_indices = self.label_indices[start_idx:end_idx]
+
+            # Get "Other" samples
+            # NOTE: Handle case where there are more Other labeled samples than labeled
+            if batch_idx >= num_samples_other:
+                curr_idx = batch_idx % num_samples_other
+                start_idx = curr_idx * self.batch_size
+                end_idx = start_idx + self.batch_size
+            other_label_indices = self.other_indices[start_idx:end_idx]
+            batch_indices = list(curr_label_indices) + list(other_label_indices)
+            yield batch_indices
+
+
+    def __len__(self):
+        return self.num_samples
