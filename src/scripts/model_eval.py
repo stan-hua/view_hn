@@ -134,6 +134,7 @@ def init(parser):
         "splits": "Name of data splits for each `dset` to evaluate",
         "ckpt_option": "Choice of checkpoint to load (last/best)",
         "mask_bladder": "If True, mask bladder logit, if it's an US image dataset.",
+        "label_blacklist": "List of labels to ignore when computing metrics",
         "test_time_aug": "If True, perform test-time augmentations during inference.",
         "da_transform_name":
             "If provided, performs domain adaptation transform on test images, "
@@ -153,6 +154,8 @@ def init(parser):
                         help=arg_help["ckpt_option"])
     parser.add_argument("--mask_bladder", action="store_true",
                         help=arg_help["mask_bladder"])
+    parser.add_argument("--label_blacklist", nargs="+",
+                        help=arg_help["label_blacklist"])
     parser.add_argument("--test_time_aug", action="store_true",
                         help=arg_help["test_time_aug"])
     parser.add_argument("--da_transform_name", default=None,
@@ -1380,6 +1383,7 @@ def eval_create_plots(df_pred, hparams, inference_dir, dset, split,
 
 
 def calculate_exp_metrics(exp_name, dset, split, hparams=None,
+                          label_blacklist=None,
                           log_to_comet=False,
                           **infer_kwargs):
     """
@@ -1396,6 +1400,8 @@ def calculate_exp_metrics(exp_name, dset, split, hparams=None,
         Specific split of dataset. One of (train/val/test)
     hparams : dict, optional
         Experiment hyperparameters, by default None
+    label_blacklist : list, optional
+        List of images to exclude in evaluation based on labels
     log_to_comet : bool, optional
         If True, log metrics and graphs to Comet ML
     **infer_kwargs : Keyword arguments
@@ -1417,6 +1423,12 @@ def calculate_exp_metrics(exp_name, dset, split, hparams=None,
     # 2. Load inference
     df_pred = load_view_predictions(exp_name, dset=dset, split=split,
                                     **infer_kwargs)
+
+    # Remove images whose label is in the blacklist
+    if label_blacklist:
+        LOGGER.info(f"Excluding images with label in `{label_blacklist}`")
+        mask = ~df_pred["label"].isin(label_blacklist)
+        df_pred = df_pred[mask]
 
     # If multi-output, evaluate each label part, separately
     label_parts = constants.LABEL_PARTS if hparams.get("multi_output") \
@@ -2578,6 +2590,7 @@ def embed_dset(exp_name, dset, split,
 
 
 def analyze_dset_preds(exp_name, dsets, splits,
+                       label_blacklist=None,
                        log_to_comet=False,
                        **infer_kwargs):
     """
@@ -2591,6 +2604,8 @@ def analyze_dset_preds(exp_name, dsets, splits,
         Name of dataset
     splits : str or list, optional
         Specific split of dataset. One of (train/val/test)
+    label_blacklist : list, optional
+        List of images to exclude in evaluation based on labels
     log_to_comet : bool, optional
         If True, log metrics and UMAPs to Comet ML.
     **infer_kwargs : Keyword arguments
@@ -2624,6 +2639,7 @@ def analyze_dset_preds(exp_name, dsets, splits,
                     dset=curr_dset,
                     split=curr_split,
                     hparams=hparams,
+                    label_blacklist=label_blacklist,
                     log_to_comet=log_to_comet,
                     **infer_kwargs,
                 )
@@ -2703,6 +2719,7 @@ def main(args):
         analyze_dset_preds(exp_name=exp_name,
                            dsets=dsets,
                            splits=splits,
+                           label_blacklist=args.label_blacklist,
                            log_to_comet=args.log_to_comet,
                            **infer_kwargs)
 
