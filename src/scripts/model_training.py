@@ -245,7 +245,9 @@ def main(conf):
     hparams = config_utils.flatten_nested_dict(conf)
 
     # Overwrite number of classes
-    hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"])
+    if "num_classes" not in hparams:
+        LOGGER.info("`num_classes` not provided! Providing defaults...")
+        hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"])
     # Add default image size, if not specified
     if "img_size" not in hparams:
         hparams["img_size"] = constants.IMG_SIZE
