@@ -2710,6 +2710,7 @@ def main(args):
             analyze_dset_preds(exp_name=exp_name,
                                dsets=curr_dset,
                                splits=curr_split,
+                               label_blacklist=args.label_blacklist,
                                log_to_comet=args.log_to_comet,
                                **infer_kwargs)
 
