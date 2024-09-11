@@ -233,17 +233,22 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         # CASE 1: Cross-entropy loss on labeled + Penalize on unlabeled
         if self.hparams.get("penalize_other_loss"):
-            # Assume last class is unlabeled class
-            unlabeled_idx = self.hparams["num_classes"] - 1
+            # Assume last class (not predicted) is unlabeled idx
+            unlabeled_idx = self.hparams["num_classes"]
             # Assert that second half is only "Other" labeled images
-            assert (y_true[B//2:] == unlabeled_idx).all(), \
+            mid_idx = B//2
+            assert (y_true[mid_idx:] == unlabeled_idx).all(), \
                 "More than 1 label detected in 'Others' samples! Issue with sampler..."
 
             # 1. Cross-entropy loss on labeled data (first half)
-            ce_loss = self.loss(out[:B//2], y_true_aug[:B//2])
+            ce_loss = self.loss(out[:mid_idx], y_true_aug[:mid_idx])
             # 2. Lower confidence on unlabeled data via entropy loss
-            entropy_loss = compute_unlabeled_entropy_loss(out[B//2:])
+            entropy_loss = compute_unlabeled_entropy_loss(out[mid_idx:])
             loss = ce_loss + (self.hparams.get("other_penalty_weight", .5) * entropy_loss)
+
+            # Filter predictions and labels for correct accuracy computation
+            y_pred = y_pred[:mid_idx]
+            y_true = y_true[:mid_idx]
         # CASE 2: Cross-entropy + GradCAM loss
         elif self.hparams.get("use_gradcam_loss"):
             # 1. Cross-entropy loss

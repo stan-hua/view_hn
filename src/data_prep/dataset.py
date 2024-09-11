@@ -455,9 +455,17 @@ class UltrasoundDataModule(L.LightningDataModule):
         torch.utils.data.DataLoader
             Data loader for validation data
         """
+        df_val = self.df[self.df["split"] == "val"]
+
+        # CASE 1: If using Other sampler, assume Other is not used in training
+        if self.other_labeled_sampler:
+            LOGGER.info("Since `other` labeled sampler is used, excluding "
+                        "'Other' images from validation!")
+            df_val = df_val[(df_val["label"] != "Other")]
+
         # Instantiate UltrasoundDatasetDataFrame
         val_dataset = UltrasoundDatasetDataFrame(
-            self.df[self.df["split"] == "val"],
+            df_val,
             **self.us_dataset_kwargs,
         )
 
@@ -474,9 +482,17 @@ class UltrasoundDataModule(L.LightningDataModule):
         torch.utils.data.DataLoader
             Data loader for test data
         """
+        df_test = self.df[self.df["split"] == "test"]
+
+        # CASE 1: If using Other sampler, assume Other is not used in training
+        if self.other_labeled_sampler:
+            LOGGER.info("Since `other` labeled sampler is used, excluding "
+                        "'Other' images from validation!")
+            df_test = df_test[(df_test["label"] != "Other")]
+
         # Instantiate UltrasoundDatasetDataFrame
         test_dataset = UltrasoundDatasetDataFrame(
-            self.df[self.df["split"] == "test"],
+            df_test,
             **self.us_dataset_kwargs,
         )
 
