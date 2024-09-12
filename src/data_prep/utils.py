@@ -1154,7 +1154,9 @@ def preprocess_image_dir(image_dir, save_dir, file_regex="*.*"):
     for img_path in glob.glob(os.path.join(image_dir, file_regex)):
         # Read and preprocess image
         img = cv2.imread(img_path)
-        processed_img = preprocess_image(img, (100, 100), (256, 256))
+        # NOTE: Crop scale is chosen to match 150x150 previous crop
+        processed_img = preprocess_image(
+            img, crop_scale=0.5859, resize_dims=(256, 256))
 
         # Save image to specified directory
         filename = os.path.basename(img_path)
@@ -1162,20 +1164,22 @@ def preprocess_image_dir(image_dir, save_dir, file_regex="*.*"):
         cv2.imwrite(new_path, processed_img)
 
 
-def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
+def preprocess_image(img, crop_scale=0.59,
+                     resize_dims=(256, 256),
                      ignore_crop=False):
     """
     Perform preprocessing on image array:
-        (1) Center crop 150 x 150 (by default)
+        (1) Center crop to 1:1 aspect ratio based on crop scale (by default)
         (2) Resize to 256 x 256 (by default)
         (3) Histogram equalize image
 
     Parameters
     ----------
     img : np.array
-        Input image to crop
-    crop_dims : tuple, optional
-        Dimensions (height, width) of image crop, by default (150, 150).
+        Input image to crop of shape (H, W, 3)
+    crop_scale : float, optional
+        Proportion at which to center crop image (relative to height/width
+        whichever is smaller)
     resize_dims : tuple, optional
         Dimensions (height, width) of final image, by default (256, 256).
     ignore_crop : bool, optional
@@ -1190,24 +1194,21 @@ def preprocess_image(img, crop_dims=(150, 150), resize_dims=(256, 256),
     if not ignore_crop:
         height, width = img.shape[0], img.shape[1]
 
-        # Sanitize input to be less than or equal to max width/height
-        crop_height = min(crop_dims[0], height)
-        crop_width = min(crop_dims[1], img.shape[1])
+        # Create crop size based on height/width
+        crop_size = int(min(height, width) * crop_scale)
 
         # Get midpoints and necessary distance from midpoints
         mid_x, mid_y = int(width/2), int(height/2)
-        half_crop_height, half_crop_width = int(crop_width/2), int(crop_height/2)
+        half_crop_size = crop_size // 2
 
-        # Crop image
-        img = img[mid_y-half_crop_width:mid_y+half_crop_width,
-                  mid_x-half_crop_height:mid_x+half_crop_height]
-
+        # Center crop image
+        img = img[mid_y-half_crop_size:mid_y+half_crop_size,
+                  mid_x-half_crop_size:mid_x+half_crop_size]
     # Resize image
-    resized_img = cv2.resize(img, resize_dims)
+    resized_img = cv2.resize(img, resize_dims, interpolation=cv2.INTER_CUBIC)
 
     # Histogram equalize images
     equalized_img = equalize_hist(resized_img)
-
     # Scale back to 255
     processed_img = 255 * equalized_img
 

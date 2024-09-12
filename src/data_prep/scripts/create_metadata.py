@@ -32,7 +32,7 @@ VIDEO_DSETS = (
 )
 IMAGE_DSETS = (
     "sickkids_image", "sickkids_silent_trial", "stanford_image",
-    "uiowa", "chop",
+    "uiowa", "chop", "ubc_adult"
 )
 
 # Label columns
@@ -478,6 +478,77 @@ def create_sickkids_image_metadata(dir_data, save_path=None):
     return df_metadata
 
 
+def create_ubc_adult_image_metadata():
+    """
+    Create (raw) UBC adult kidney dataset metadata
+
+    Note
+    ----
+    Assumes label files are in `.../ViewLabeling/Datasheets/raw/ubc_adult`
+
+    """
+    # Label mapping
+    # NOTE: Side isn't provided, so it needs to be filled in with unknown for now
+    label_map = {"Transverse": "Transverse", "Longitudinal": "Sagittal"}
+
+    # Load first and second labels
+    fnames = ["reviewed_labels_1.csv", "reviewed_labels_2.csv"]
+    dir_metadata_raw = os.path.join(constants.DIR_METADATA_RAW, "ubc_adult")
+    accum_metadata = []
+    for fname in fnames:
+        path = os.path.join(dir_metadata_raw, fname)
+        assert os.path.exists(path), \
+            f"[UBC Adult Kidney Dataset] Original label file doesn't exist at: `{path}`"
+        # Load view labels
+        df_curr = pd.read_csv(path)
+        view_labels = pd.json_normalize(df_curr["file_attributes"].apply(json.loads))
+        df_curr = df_curr[["filename"]].merge(view_labels, left_index=True, right_index=True)
+        accum_metadata.append(df_curr)
+
+    # Concatenate first and second label files
+    df_metadata = pd.concat(accum_metadata, ignore_index=True)
+
+    # Aggregate annotation across raters
+    df_metadata = df_metadata.groupby("filename", as_index=False).apply(
+        lambda df_raters: pd.Series({
+            "filename": df_raters["filename"].iloc[0],
+            "quality": df_raters["Quality"].mode().iloc[0],
+            "view": df_raters["View"].mode().iloc[0],
+            "num_views": df_raters["View"].nunique(),
+        }),
+        include_groups=True,
+    )
+
+    # Drop all images with Poor quality
+    mask = (df_metadata["quality"].isin(["Poor", "Unsatisfactory"]))
+    df_metadata = df_metadata[~mask]
+    print(f"[UBC Adult] Dropping `{mask.sum()}` poor-quality images...")
+
+    # Drop all images with 2+ view labels
+    mask = df_metadata["num_views"] > 1
+    df_metadata = df_metadata[~mask]
+    print(f"[UBC Adult] Dropping `{mask.sum()}` images with 2+ view labels...")
+
+    # Get plane from view label
+    df_metadata["plane"] = df_metadata["view"].map(label_map.get)
+    # Drop all images that aren't Sagittal/Transverse views
+    mask = df_metadata["plane"].isna()
+    df_metadata = df_metadata[~mask]
+    print(f"[UBC Adult] Dropping `{mask.sum()}` images with non - SAG/TRANS view images...")
+
+    # Create inferred ID, visit and sequence number from filename
+    df_metadata["id"] = df_metadata["filename"].map(lambda x: int(x.split("_")[0]))
+    df_metadata["visit"] = df_metadata["filename"].map(lambda x: int(x.split("_")[1].split("-")[1]))
+    df_metadata["seq_number"] = df_metadata["filename"].map(lambda x: int(x.split("_")[1].split("-")[2]))
+
+    # Save metadata
+    cols = ["filename", "id", "visit", "seq_number", "quality", "plane"]
+    df_metadata = df_metadata[cols]
+    df_metadata = df_metadata.sort_values(by=["id", "visit", "seq_number"])
+    df_metadata.to_csv(constants.DSET_TO_METADATA["raw"]["ubc_adult"],
+                       index=False)
+
+
 ################################################################################
 #                            Cleaning Raw Metadata                             #
 ################################################################################
@@ -671,14 +742,14 @@ def clean_image_dsets_metadata():
         # NOTE: Metadata table contains duplicate rows
         df_metadata = df_metadata.drop_duplicates()
 
-        # Assign data split
+        # Assign data split, if not already
         df_metadata = utils.assign_split_table(df_metadata, train_split=0.2)
 
         # Assign hospital/dataset
         df_metadata["dset"] = dset
 
         # Reorder columns
-        cols = ["dset", "split"] + df_metadata.columns.tolist()[:-2]
+        cols = ["dset", "split"] + [col for col in df_metadata.columns.tolist() if col not in ["dset", "split"]]
         df_metadata = df_metadata[cols]
 
         # Add directory name
@@ -925,7 +996,7 @@ def main_correct_labels(ref_path, label_col="plane"):
     idx_to_label = df_correct.set_index(index_cols)["new_label"].to_dict()
 
     # For each metadata, check if any of the labels overlap
-    for dset in list(VIDEO_DSETS) + list(IMAGE_DSETS):
+    for dset in list(constants.VIDEO_DSETS) + list(constants.IMAGE_DSETS):
         # Exclude beamform video datasets
         if "_beamform" in dset:
             continue
@@ -972,7 +1043,7 @@ def main_update_img_dirs():
     print("[main_update_img_dirs] Changing $HOME path hard-coded in metadata files!")
 
     # For each metadata, check if any of the labels overlap
-    for dset in list(VIDEO_DSETS) + list(IMAGE_DSETS):
+    for dset in list(constants.VIDEO_DSETS) + list(constants.IMAGE_DSETS):
         # Get cleaned metadata
         clean_dset_path = constants.DSET_TO_METADATA["clean"][dset]
         df_metadata = pd.read_csv(clean_dset_path)
