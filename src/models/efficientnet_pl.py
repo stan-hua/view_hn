@@ -88,13 +88,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             exec(f"self.{dset}_acc = torchmetrics.Accuracy("
                  f"num_classes={self.hparams.num_classes}, task='multiclass')")
 
-            # Metrics for binary classification
-            if self.hparams.num_classes == 2:
-                exec(f"""self.{dset}_auroc = torchmetrics.AUROC(
-                    task='multiclass')""")
-                exec(f"""self.{dset}_auprc = torchmetrics.AveragePrecision(
-                    task='multiclass')""")
-
         # Store outputs
         self.dset_to_outputs = {"train": [], "val": [], "test": []}
 
@@ -231,6 +224,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         out = self.forward(data)
         y_pred = torch.argmax(out, dim=1)
 
+        losses = []
+
         # CASE 1: Cross-entropy loss on labeled + Penalize on unlabeled
         if self.hparams.get("penalize_other_loss"):
             # Assume last class (not predicted) is unlabeled idx
@@ -242,11 +237,13 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
             # 1. Cross-entropy loss on labeled data (first half)
             ce_loss = self.loss(out[:mid_idx], y_true_aug[:mid_idx])
-            # 2. Lower confidence on unlabeled data via entropy loss
-            entropy_loss = compute_unlabeled_entropy_loss(out[mid_idx:])
-            loss = ce_loss + (self.hparams.get("other_penalty_weight", .5) * entropy_loss)
+            # 2. Negative entropy loss; to lower confidence on "Other" data predictions
+            weight = self.hparams.get("other_penalty_weight", .5)
+            other_neg_entropy_loss = (weight * compute_entropy_loss(out[mid_idx:]))
+            losses.extend([ce_loss, other_neg_entropy_loss])
 
             # Filter predictions and labels for correct accuracy computation
+            out = out[:mid_idx]
             y_pred = y_pred[:mid_idx]
             y_true = y_true[:mid_idx]
         # CASE 2: Cross-entropy + GradCAM loss
@@ -254,27 +251,31 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             # 1. Cross-entropy loss
             ce_loss = self.loss(out, y_true_aug)
             # 2. GradCAM loss
-            gradcam_loss = self.gradcam_loss(*train_batch)
-            gradcam_loss_weight = self.hparams.get("gradcam_loss_weight", 1.)
-            loss = ce_loss + (gradcam_loss_weight * gradcam_loss)
+            weight = self.hparams.get("gradcam_loss_weight", 1.)
+            gradcam_loss = weight * self.gradcam_loss(*train_batch)
+            losses.extend([ce_loss, gradcam_loss])
         # CASE 3: [Standard] Cross-entropy loss
         else:
-            loss = self.loss(out, y_true_aug)
+            losses.append(self.loss(out, y_true_aug))
+
+        # 4. If specified, add entropy loss to increase prediction confidence
+        if self.hparams.get("use_entropy_loss"):
+            entropy_loss = -compute_entropy_loss(out)
+            losses.append(entropy_loss)
+
+        # Compute loss
+        losses = sum(losses)
 
         # Log training metrics
         self.train_acc.update(y_pred, y_true)
 
-        if self.hparams.num_classes == 2:
-            self.train_auroc.update(out[:, 1], y_true)
-            self.train_auprc.update(out[:, 1], y_true)
-
         # Prepare result
         ret = {
-            "loss": loss.detach().cpu(),
+            "loss": losses.detach().cpu(),
         }
         self.dset_to_outputs["train"].append(ret)
 
-        return loss
+        return losses
 
 
     def validation_step(self, val_batch, batch_idx):
@@ -307,10 +308,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         # Log validation metrics
         self.val_acc.update(y_pred, y_true)
-
-        if self.hparams.num_classes == 2:
-            self.val_auroc.update(out[:, 1], y_true)
-            self.val_auprc.update(out[:, 1], y_true)
 
         # Prepare result
         ret = {
@@ -354,10 +351,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         # Log test metrics
         self.test_acc.update(y_pred, y_true)
 
-        if self.hparams.num_classes == 2:
-            self.test_auroc.update(out[:, 1], y_true)
-            self.test_auprc.update(out[:, 1], y_true)
-
         # Prepare result
         ret = {
             "loss": loss.detach().cpu(),
@@ -385,16 +378,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
 
         self.train_acc.reset()
 
-        if self.hparams.num_classes == 2:
-            auroc = self.train_auroc.compute()
-            auprc = self.train_auprc.compute()
-
-            self.log('train_auroc', auroc)
-            self.log('train_auprc', auprc, prog_bar=True)
-
-            self.train_auroc.reset()
-            self.train_auprc.reset()
-
         # Clean stored output
         self.dset_to_outputs["train"].clear()
 
@@ -411,14 +394,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         self.log('val_acc', acc, prog_bar=True)
 
         self.val_acc.reset()
-
-        if self.hparams.num_classes == 2:
-            auroc = self.val_auroc.compute()
-            auprc = self.val_auprc.compute()
-            self.log('val_auroc', auroc)
-            self.log('val_auprc', auprc, prog_bar=True)
-            self.val_auroc.reset()
-            self.val_auprc.reset()
 
         # Create confusion matrix
         if self.hparams.get("use_comet_logger"):
@@ -449,14 +424,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         self.log(f'{dset}_acc', acc)
 
         exec(f'self.{dset}_acc.reset()')
-
-        if self.hparams.num_classes == 2:
-            auroc = eval(f'self.{dset}_auroc.compute()')
-            auprc = eval(f'self.{dset}_auprc.compute()')
-            self.log(f'{dset}_auroc', auroc)
-            self.log(f'{dset}_auprc', auprc, prog_bar=True)
-            exec(f'self.{dset}_auroc.reset()')
-            exec(f'self.{dset}_auprc.reset()')
 
         # Create confusion matrix
         if self.hparams.get("use_comet_logger"):
@@ -503,9 +470,14 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         return z.detach().cpu().numpy()
 
 
-def compute_unlabeled_entropy_loss(out):
+def compute_entropy_loss(out):
     """
-    Compute entropy regularization loss for unlabeled (catch-all) data
+    Compute entropy regularization loss
+
+    Note
+    ----
+    Simply negative entropy for each prediction. Minimizing this means
+    increasing entropy (uncertainty) in each prediction.
 
     Parameters
     ----------
@@ -520,11 +492,7 @@ def compute_unlabeled_entropy_loss(out):
     # Convert to probabilities
     y_probs = torch.nn.functional.softmax(out, dim=1)
 
-    # Maximize entropy of average predictions (avoid collapse to one class)
-    avg_prob = y_probs.mean(dim=0)
-    H_avg = torch.sum(avg_prob * torch.log(avg_prob + 1e-9))
-
-    # Maximize entropy of each predictions (less confident predictions)
+    # Maximize entropy of each prediction (less confident predictions)
     H_pred = torch.mean(torch.sum(y_probs * torch.log(y_probs + 1e-9), dim=1))
 
-    return H_avg + H_pred
+    return H_pred
