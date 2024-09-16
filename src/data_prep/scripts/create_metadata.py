@@ -742,7 +742,7 @@ def clean_image_dsets_metadata():
         # NOTE: Metadata table contains duplicate rows
         df_metadata = df_metadata.drop_duplicates()
 
-        # Assign data split, if not already
+        # Assign train/test split, if not already
         df_metadata = utils.assign_split_table(df_metadata, train_split=0.2)
 
         # Assign hospital/dataset
@@ -850,9 +850,81 @@ def clean_stanford_video_beamform_metadata():
 
 
 ################################################################################
+#                            Creating Data Samples                             #
+################################################################################
+def sample_sickkids_video_metadata_for_adult_vs_child(n_subsets=5):
+    """
+    Sample SickKids video metadata to create N subsets of the datasets for
+    Adult vs. Child experiment.
+
+    Note
+    ----
+    Differences between the sample and the UBC Adult Kidney dataset include:
+        (1) The UBC dataset images are all from distinct patients, whereas
+            multiple training/test images can come from the same person
+        (2) The UBC dataset images are mostly from transplanted kidneys
+
+    Parameters
+    ----------
+    n_subsets : int, optional
+        Number of subsets to create for dataset
+    """
+    # Parameters of UBC Adult Kidney Dataset
+    # Number of sagittal vs. transverse images to sample
+    num_samples = {
+        "train": {
+            "Sagittal": 239,
+            "Transverse": 91,
+        },
+        "test": {
+            "Sagittal": 109,
+            "Transverse": 33,
+        }
+    }
+    # Proportion of dataset to use for training vs. test set
+    train_test_split = 0.75
+
+    print("Creating subsets of SickKids Video metadata for `Adult vs Child` experiment...")
+    # Load SickKids metadata
+    df_metadata = pd.read_csv(constants.DSET_TO_METADATA["clean"]["sickkids"])
+    # Filter for Sagittal/Transverse views
+    df_metadata = df_metadata[df_metadata["plane"].isin(["Sagittal", "Transverse"])]
+    # Filter for training/validation set
+    # NOTE: Leave test set out
+    df_train_val = df_metadata[df_metadata["split"] != "test"]
+
+    # Iteratively create subsets
+    for sample_idx in range(1, n_subsets+1):
+        curr_df = df_train_val.copy()
+
+        # Randomly re-assign patients to train/test
+        curr_df["split"] = None
+        curr_df = utils.assign_split_table(
+            curr_df, overwrite=True,
+            train_split=train_test_split
+        )
+
+        # Sample images for a specific split and label
+        accum_sampled_splits = []
+        for split, label_to_count in num_samples.items():
+            df_split = curr_df[curr_df["split"] == split]
+            for label, count in label_to_count.items():
+                df_split_label = df_split[df_split["plane"] == label]
+                accum_sampled_splits.append(df_split_label.sample(n=count))
+        df_sample = pd.concat(accum_sampled_splits, ignore_index=True)
+
+        # Save metadata
+        save_path = constants.DSET_TO_METADATA["clean"][f"sickkids_subset_{sample_idx}"]
+        df_sample.to_csv(save_path, index=False)
+
+    print("Creating subsets of SickKids Video metadata for `Adult vs Child` experiment...DONE")
+
+
+################################################################################
 #                               Helper Functions                               #
 ################################################################################
 def print_basic_data_stats(df_metadata):
+
     """
     Print basic stats about the data
 

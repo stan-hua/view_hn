@@ -93,12 +93,13 @@ def setup_data_module(hparams=None, use_defaults=False,
     # INPUT: Ensure `hparams` is a dict
     hparams = hparams or {}
 
-    # If excluding "Others" class, ensure `num_classes` is correct
+    # NOTE: Add warning if number of classes isn't expected
     if not hparams.get("include_labeled_other"):
         label_part = hparams.get("label_part")
         classes = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
-        hparams["num_classes"] = len(classes) - 1
-        LOGGER.info("[DataModule Setup] Ensuring `num_classes` is correct")
+        num_classes = hparams["num_classes"]
+        exp_num_classes = len(classes) - 1
+        LOGGER.warning(f"[DataModule Setup] Expected `num_classes` as {exp_num_classes}. Found {num_classes} instead!")
 
     # 0. Overwrite defaults
     all_hparams.update(hparams)
@@ -255,6 +256,8 @@ def create_eval_hparams(dset=None, split="test"):
         "self_supervised": False,
         "imbalanced_sampler": False,
         "other_labeled_sampler": False,
+        # TODO: Consider reverting
+        "include_labeled_other": True,
     }
 
     # Check that provided dataset or split is valid
