@@ -7,6 +7,7 @@ Description: Used to evaluate a trained model's performance on other view
 
 # Standard libraries
 import argparse
+import json
 import logging
 import os
 import random
@@ -218,6 +219,7 @@ def predict_on_images(model, filenames, labels=None,
     # Predict on each images one-by-one
     preds = []
     probs = []
+    class_probs = []        # Store per class probabilities as JSON string
     outs = []
     losses = []
 
@@ -258,18 +260,26 @@ def predict_on_images(model, filenames, labels=None,
         loss = None
         if labels:
             label_idx = class_to_idx[labels[idx]]
-            label = torch.LongTensor([label_idx]).to(out.device)
-            loss = round(float(torch.nn.functional.cross_entropy(out, label).detach().cpu().item()), 4)
+            # CASE 1: Label is excluded from training (e.g., "Other")
+            if label_idx >= hparams["num_classes"]:
+                loss = None
+            # CASE 2: Label is included in training
+            else:
+                label = torch.LongTensor([label_idx]).to(out.device)
+                loss = round(float(torch.nn.functional.cross_entropy(out, label).detach().cpu().item()), 4)
         losses.append(loss)
 
         # Get index of predicted label
         pred = torch.argmax(out, dim=1)
         pred = int(pred.detach().cpu())
 
-        # Get probability
+        # Convert to probabilities
         prob = torch.nn.functional.softmax(out, dim=1)
-        prob = prob.detach().cpu().numpy().max()
-        probs.append(prob)
+        prob_numpy = prob.detach().cpu().numpy().flatten()
+        # Store per-class probabilities
+        class_probs.append(json.dumps(prob_numpy.round(4).tolist()))
+        # Get probability of largest class
+        probs.append(prob_numpy.max())
 
         # Get maximum activation
         out = float(out.max().detach().cpu())
@@ -285,12 +295,14 @@ def predict_on_images(model, filenames, labels=None,
         "prob": probs,
         "out": outs,
         "loss": losses,
+        "class_probs": class_probs
     })
 
     return df_preds
 
 
 # TODO: Implement test-time augmentations
+# TODO: Implement getting class probs
 @torch.no_grad()
 def predict_on_sequences(model, filenames,
                          img_dir=constants.DSET_TO_IMG_SUBDIR_FULL["sickkids"],
@@ -1064,6 +1076,150 @@ def plot_rolling_accuracy(df_pred, window_size=15, max_seq_num=75,
     return plt.gca()
 
 
+def plot_prob_for_label_vs_catch_all_class(df_pred, save_dir=None, fname_suffix="baseline"):
+    """
+    Plot probability distribution for a labeled image and catch-all class images
+
+    Note
+    ----
+    Wouldn't expect high probabilities for catch-all class images
+
+    Parameters
+    ----------
+    df_pred : pd.DataFrame
+        Table of predictions
+    save_dir : str
+        Directory to save figure
+    fname_suffix : str
+        Suffix to add to filename
+    """
+    # Default save directory
+    save_dir = save_dir if save_dir else os.path.join(constants.DIR_FIGURES, "etc")
+
+    paths = (
+        constants.DIR_INFERENCE + "exp_param_sweep-supervised_baseline-with_zoomout__best/sickkids-val_set_results.csv",
+        constants.DIR_INFERENCE + "exp_penalize_other-supervised_baseline-with_other-penalize_other__best/sickkids-val_set_results.csv",
+        constants.DIR_INFERENCE + "exp_penalize_other-supervised_baseline-with_other-penalize_other-ent_loss__best/sickkids-val_set_results.csv"
+    )
+    fname_suffixes = ("baseline", "penalize_other", "penalize_other-with_entropy_loss",)
+    for idx in range(len(paths)):
+        df_pred = pd.read_csv(paths[idx])
+        fname_suffix = fname_suffixes[idx]
+
+    # Create plot
+    df_pred = df_pred.copy()
+    df_pred["type"] = df_pred["label"].map(lambda x: "Other" if x == "Other" else "Labeled")
+    hue_order = [l for l in sorted(df_pred["label"].unique().tolist()) if l != "Other"]
+    label_order = hue_order.copy()
+    label_order.append("Other")
+    plt.figure(figsize=(8, 5))
+    sns.boxenplot(
+        data=df_pred,
+        x="label", y="prob",
+        hue="pred",
+        palette="colorblind",
+        width=0.5,
+        order=label_order,
+        hue_order=hue_order,
+    )
+    plt.ylim(0, 1)
+    plt.title("Probability Distribution of Labeled vs. Other images")
+    plt.ylabel("Class Probabilty")
+    plt.xlabel("Label")
+    plt.legend(loc='lower left')
+    # # Save
+    # if save_dir:
+    path = os.path.join(save_dir, f"labeled_vs_other-probs-{fname_suffix}.png")
+    plt.tight_layout()
+    plt.savefig(path, bbox_inches="tight")
+    plt.clf()
+
+    # Compute metrics for each path
+    accum_df = []
+    for idx, path in enumerate(paths):
+        df_pred = pd.read_csv(path)
+        fname_suffix = fname_suffixes[idx]
+        # Get class probabilities (normalize to sum to 1)
+        class_probs = np.stack(df_pred["class_probs"].map(lambda x: np.array(json.loads(x))).to_list())
+        class_probs = class_probs / class_probs.sum(axis=1).reshape(-1, 1)
+        num_classes = class_probs.shape[1]
+        # Get label mapping
+        unique_labels = sorted(df_pred["label"].unique())
+        _, class_to_idx = get_label_mapping(unique_labels)
+        # Get integer encoded labels
+        encoded_labels = df_pred["label"].map(lambda x: class_to_idx[x]).to_numpy()
+        # Initialize dictionaries to store metrics
+        best_thresholds = {}
+        sensitivity_dict = {}
+        specificity_dict = {}
+        precision_dict = {}
+        # Loop through each class
+        for i in range(num_classes):
+            # Find the best threshold (example: maximizing F1 score)
+            precision, recall, pr_thresholds = skmetrics.precision_recall_curve(encoded_labels == i, class_probs[:, i])
+            f1_scores = 2 * (precision * recall) / (precision + recall)
+            best_threshold = pr_thresholds[f1_scores.argmax()]
+            # Calculate confusion matrix at the best threshold
+            y_pred = (class_probs[:, i] >= best_threshold).astype(int)
+            tn, fp, fn, tp = skmetrics.confusion_matrix(encoded_labels == i, y_pred).ravel()
+            # Calculate Sensitivity, Specificity, and Precision
+            sensitivity = tp / (tp + fn)
+            specificity = tn / (tn + fp)
+            precision = tp / (tp + fp)
+            # Store metrics rounded to 4 decimal places
+            best_thresholds[i] = round(best_threshold, 4)
+            sensitivity_dict[i] = round(sensitivity, 4)
+            specificity_dict[i] = round(specificity, 4)
+            precision_dict[i] = round(precision, 4)
+        # Print results
+        print(f"  Best Thresholds: {[best_thresholds[i] for i in range(num_classes)]}")
+        print(f"  Sensitivity (Recall): {[sensitivity_dict[i] for i in range(num_classes)]}")
+        print(f"  Specificity: {[specificity_dict[i] for i in range(num_classes)]}")
+        print(f"  Precision: {[precision_dict[i] for i in range(num_classes)]}")
+        metric_names = ["Sensitivity"]*3 + ["Specificity"]*3 + ["Precision"]*3
+        metric_vals = [d[i] for d in (sensitivity_dict, specificity_dict, precision_dict) for i in range(num_classes)]
+        model_name = "Confuse Other & Confidence Loss"
+        df_curr = pd.DataFrame({
+            "Model": [model_name] * 9,
+            "Label": ["Sagittal", "Transverse", "Bladder"] * 3,
+            "Metric": metric_names,
+            "Score": metric_vals,
+        })
+        accum_df.append(df_curr)
+
+    # Create bar plot of metrics for each class
+    df_all = pd.concat(accum_df)
+    for label in ("Sagittal", "Transverse", "Bladder"):
+        sns.barplot(
+            data=df_all[df_all["Label"] == label],
+            x="Metric",
+            y="Score",
+            hue="Model"
+        )
+        plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=3)
+        path = os.path.join(save_dir, f"penalizing_other-{label.lower()}.png")
+        plt.ylim(0, 1)
+        plt.tight_layout()
+        plt.savefig(path, bbox_inches="tight")
+        plt.clf()
+
+    # Create bar plot for average metrics across classes
+    df_avg = df_all.groupby(by=["Model"]).apply(lambda df: df.groupby("Metric")["Score"].mean().reset_index()).reset_index()
+    sns.barplot(
+        data=df_avg,
+        x="Metric",
+        y="Score",
+        hue="Model",
+        order=["Sensitivity", "Specificity", "Precision"]
+    )
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1), ncol=3)
+    path = os.path.join(save_dir, f"penalizing_other-average.png")
+    plt.ylim(0, 1)
+    plt.tight_layout()
+    plt.savefig(path, bbox_inches="tight")
+    plt.clf()
+
+
 def calculate_metrics(df_pred, ci=False, **ci_kwargs):
     """
     Calculate important metrics given prediction and labels
@@ -1082,11 +1238,32 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
     pd.DataFrame
         Table containing metrics
     """
+    # Create copy to prevent in-place edits
+    df_pred = df_pred.copy()
+
+    # Get unique labels
+    unique_labels = sorted(df_pred["label"].unique())
+
+    # If computing AUROC/AUPRC
+    encoded_labels = class_probs = None
+    if "class_probs" in df_pred.columns.tolist() and len(unique_labels) > 1:
+        # Get class probabilities (normalize to sum to 1)
+        class_probs = np.stack(df_pred["class_probs"].map(lambda x: np.array(json.loads(x))).to_list())
+        class_probs = class_probs / class_probs.sum(axis=1).reshape(-1, 1)
+        num_classes = class_probs.shape[1]
+
+        # Only compute, if there is at least 1 image for each label
+        if len(unique_labels) == num_classes:
+            # Get label mapping
+            _, class_to_idx = get_label_mapping(unique_labels)
+            # Get one-hot encoded labels
+            encoded_labels = df_pred["label"].map(lambda x: class_to_idx[x]).to_numpy()
+            encoded_labels = np.eye(num_classes)[encoded_labels]
+
     # Accumulate exact metric, and confidence interval bounds (if specified)
     metrics = OrderedDict()
 
     # 1. Accuracy by class
-    unique_labels = sorted(df_pred["label"].unique())
     for label in unique_labels:
         df_pred_filtered = df_pred[df_pred.label == label]
         metrics[f"Label Accuracy ({label})"] = 0
@@ -1130,6 +1307,24 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
                                    average=None)
     for i, f1_score in enumerate(f1_scores):
         metrics[f"Label F1-Score ({unique_labels[i]})"] = round(f1_score, 4)
+
+    # Compute AUROC/AUPRC only if class probabilities are provided
+    if encoded_labels is not None:
+        # 7. Compute macro-AUROC and per-class (one vs. rest) AUROC
+        metrics["Overall AUROC"] = round(skmetrics.roc_auc_score(
+            encoded_labels, class_probs, average="micro", multi_class="ovr"), 4)
+        per_class_auroc = skmetrics.roc_auc_score(
+            encoded_labels, class_probs, average=None, multi_class="ovr").tolist()
+        for i, auroc in enumerate(per_class_auroc):
+            metrics[f"Label AUROC ({unique_labels[i]})"] = round(auroc, 4)
+
+        # 8. Compute macro-AUPRC and per-class (one vs. rest) AUPRC
+        metrics["Overall AUPRC"] = round(skmetrics.average_precision_score(
+            encoded_labels, class_probs, average="micro"), 4)
+        per_class_auprc= skmetrics.average_precision_score(
+            encoded_labels, class_probs, average=None).tolist()
+        for i, auprc in enumerate(per_class_auprc):
+            metrics[f"Label AUPRC ({unique_labels[i]})"] = round(auprc, 4)
 
     return pd.Series(metrics)
 
@@ -1437,7 +1632,6 @@ def calculate_exp_metrics(exp_name, dset, split, hparams=None,
         temp_exp_name = exp_name
 
         # If multi-output, make temporary changes to hparams
-        orig_label_part = hparams.get("label_part")
         if hparams.get("multi_output"):
             # Change experiment name to create different folders
             temp_exp_name += f"__{label_part}"
@@ -2348,6 +2542,34 @@ def scale_and_round(x, factor=100, num_places=2):
     return x
 
 
+def get_label_mapping(labels):
+    """
+    Get class to index given unique label list
+
+    Parameters
+    ----------
+    labels : list
+        List of string labels
+
+    Returns
+    -------
+    tuple of (dict, dict)
+        (i) Mapping of index to label
+        (ii) Mapping of label to index
+    """
+    label_set = set(labels)
+    for label_part in ("plane", "side", None):
+        label_part_metadata = constants.LABEL_PART_TO_CLASSES[label_part] 
+        curr_labels = label_part_metadata["classes"]
+        idx_to_class = label_part_metadata["idx_to_class"]
+        class_to_idx = label_part_metadata["class_to_idx"]
+
+        # Early exit, if all classes are accounted for
+        if label_set.issubset(curr_labels):
+            return idx_to_class, class_to_idx
+    raise RuntimeError(f"Unable to find label mapping! Labels: {labels}")
+
+
 ################################################################################
 #                                  Main Flows                                  #
 ################################################################################
@@ -2474,7 +2696,7 @@ def infer_dset(exp_name, dset, split,
                     "Domain Adaptation transform is not implemented for "
                     "video model!")
             # CASE 1: Dataset of US videos
-            if dset not in constants.DSETS_NON_SEQ:
+            if dset not in constants.IMAGE_DSETS:
                 # Perform inference one sequence at a time
                 df_preds = df_metadata.groupby(by=["id", "visit"]).\
                     progress_apply(
@@ -2571,7 +2793,7 @@ def embed_dset(exp_name, dset, split,
     model = model.to(DEVICE)
 
     # NOTE: For non-video datasets, ensure each image is treated independently
-    if dset in constants.DSETS_NON_SEQ:
+    if dset in constants.IMAGE_DSETS:
         hparams["full_seq"] = False
         hparams["batch_size"] = 1
 
