@@ -275,9 +275,9 @@ def predict_on_images(model, filenames, labels=None,
 
         # Convert to probabilities
         prob = torch.nn.functional.softmax(out, dim=1)
-        prob_numpy = prob.detach().cpu().numpy().flatten()
+        prob_numpy = prob.detach().cpu().numpy().flatten().round(4)
         # Store per-class probabilities
-        class_probs.append(json.dumps(prob_numpy.round(4).tolist()))
+        class_probs.append(json.dumps(prob_numpy.tolist()))
         # Get probability of largest class
         probs.append(prob_numpy.max())
 
