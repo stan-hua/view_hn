@@ -390,8 +390,9 @@ def prep_eval_exp_hparams(hparams, **overwrite_hparams):
         pass
 
     # Ensure number of classes is as expected
-    label_part = hparams["label_part"]
-    hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[label_part]["classes"])
+    if "num_classes" not in hparams:
+        label_part = hparams["label_part"]
+        hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[label_part]["classes"])
 
     # Specify to load pretrained weights
     hparams["from_exp_name"] = hparams["exp_name"]

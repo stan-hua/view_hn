@@ -446,7 +446,9 @@ def main(args):
                 # Get image dataloader
                 img_dataloader = load_data.setup_default_dataloader_for_dset(
                     dset=dset, split=split,
-                    full_path=True)
+                    full_path=True,
+                    use_defaults=True,
+                )
 
             # Create path to save embeddings
             save_embed_path = get_save_path(exp_name, dset=dset, split=split)

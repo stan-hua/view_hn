@@ -247,7 +247,7 @@ def main(conf):
     # Overwrite number of classes
     if "num_classes" not in hparams:
         LOGGER.info("`num_classes` not provided! Providing defaults...")
-        hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"])
+        hparams["num_classes"] = len(constants.LABEL_PART_TO_CLASSES[hparams["label_part"]]["classes"]) - 1
     # Add default image size, if not specified
     if "img_size" not in hparams:
         hparams["img_size"] = constants.IMG_SIZE

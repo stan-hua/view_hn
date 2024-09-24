@@ -66,6 +66,7 @@ MAP_DSET_STR = {
     "sickkids_train": "SickKids (Train)",
     "sickkids_val": "SickKids (Val)",
     "sickkids_test": "SickKids (Test)",
+    "sickkids_beamform": "SickKids (Beamform)",
     "stanford": "Stanford",
     "chop": "CHOP",
     "uiowa": "UIowa",

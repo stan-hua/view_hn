@@ -93,17 +93,18 @@ def setup_data_module(hparams=None, use_defaults=False,
     # INPUT: Ensure `hparams` is a dict
     hparams = hparams or {}
 
-    # NOTE: Add warning if number of classes isn't expected
-    if not hparams.get("include_labeled_other"):
-        label_part = hparams.get("label_part")
-        classes = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
-        num_classes = hparams["num_classes"]
-        exp_num_classes = len(classes) - 1
-        LOGGER.warning(f"[DataModule Setup] Expected `num_classes` as {exp_num_classes}. Found {num_classes} instead!")
-
     # 0. Overwrite defaults
     all_hparams.update(hparams)
     all_hparams.update(overwrite_hparams)
+
+    # NOTE: Add warning if number of classes isn't expected
+    if not all_hparams.get("include_labeled_other"):
+        label_part = all_hparams.get("label_part")
+        classes = constants.LABEL_PART_TO_CLASSES[label_part]["classes"]
+        num_classes = all_hparams["num_classes"]
+        exp_num_classes = len(classes) - 1
+        if num_classes != exp_num_classes:
+            LOGGER.warning(f"[DataModule Setup] Expected `num_classes` as {exp_num_classes}. Found {num_classes} instead!")
 
     # If sequence model, batch size must be 1
     if all_hparams.get("full_seq"):
@@ -163,6 +164,8 @@ def setup_default_data_module_for_dset(dset=None, split="test", **kwargs):
     dm_kwargs = create_eval_hparams(dset, split=split)
     # Update with kwargs
     dm_kwargs.update(kwargs)
+    # Remove `use_defaults` kwargs
+    dm_kwargs.pop("use_defaults", None)
 
     # Set up data module
     dm = setup_data_module(use_defaults=True, **dm_kwargs)
