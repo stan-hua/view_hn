@@ -215,6 +215,7 @@ def predict_on_images(model, filenames, labels=None,
 
     # Set to evaluation mode
     model.eval()
+    model = model.to(DEVICE)
 
     # Predict on each images one-by-one
     preds = []
