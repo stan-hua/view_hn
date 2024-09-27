@@ -157,17 +157,8 @@ class TCLDataModule(UltrasoundDataModule):
             **self.us_dataset_kwargs,
         )
 
-        # Transform to LightlyDataset
-        # NOTE: `transforms` only contains basic image pre-processing steps
-        val_dataset = LightlyDataset.from_torch_dataset(
-            val_dataset,
-            transform=self.transforms)
-
         # Create DataLoader with parameters specified
-        return DataLoader(val_dataset,
-                          drop_last=True,
-                          collate_fn=self.collate_fn,
-                          **self.val_dataloader_params)
+        return DataLoader(val_dataset, **self.val_dataloader_params)
 
 
     def test_dataloader(self):
@@ -185,14 +176,4 @@ class TCLDataModule(UltrasoundDataModule):
             **self.us_dataset_kwargs,
         )
 
-        # Transform to LightlyDataset
-        # NOTE: `transforms` only contains basic image pre-processing steps
-        test_dataset = LightlyDataset.from_torch_dataset(
-            test_dataset,
-            transform=self.transforms)
-
-        # Create DataLoader with parameters specified
-        return DataLoader(test_dataset,
-                          drop_last=True,
-                          collate_fn=self.collate_fn,
-                          **self.val_dataloader_params)
+        return DataLoader(test_dataset, **self.val_dataloader_params)

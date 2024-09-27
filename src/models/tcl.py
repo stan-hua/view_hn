@@ -135,12 +135,12 @@ class TCL(L.LightningModule):
         )
 
         # Store metrics, just for validation set
-        # NOTE: Split validation set into clean and noisy labels based on GMM
+        # NOTE: Split accuracy based on prediction from prediction/projection head
         self.dset_to_acc = torch.nn.ModuleDict({
             dset: torchmetrics.Accuracy(
                 num_classes=self.hparams.num_classes,
                 task='multiclass')
-            for dset in ["val", "val_clean", "val_noisy"]
+            for dset in ["val_predict", "val_project"]
         })
 
         # Register buffers
@@ -453,15 +453,15 @@ class TCL(L.LightningModule):
         return loss
 
 
+    @torch.no_grad()
     def validation_step(self, val_batch, batch_idx):
         """
         Validation step
 
         Parameters
         ----------
-        val_batch : tuple of ((torch.Tensor, torch.Tensor, torch.Tensor), dict)
-            (i) (weak, strong, strong) augmented views of the same image
-            (ii) metadata dictionary
+        val_batch : tuple
+            Contains (img tensor, metadata dict)
         batch_idx : int
             Training batch index
 
@@ -470,37 +470,43 @@ class TCL(L.LightningModule):
         torch.FloatTensor
             Loss for training batch
         """
-        # Compute validation loss
-        losses = []
-        losses.append(self.compute_contrastive_loss(val_batch))
-        losses.extend(self.compute_classifier_alignment_and_entropy_loss(val_batch))
-        loss = sum(losses)
+        data, metadata = val_batch
 
-        # Compute validation accuracies on weakly augmented images
-        (x_weak, _, _), metadata = val_batch
-        labels = metadata["label"].to(int)
+        # Get label
+        y_true = metadata["label"]
 
-        # Get cluster labels and extract features
-        with torch.no_grad():
-            out = self.conv_backbone(x_weak).flatten(start_dim=1)
-            # Get cluster label
-            cluster_labels = F.softmax(self.prediction_head(out), dim=1).detach()
-            # Get normalized features
-            features = F.normalize(self.projection_head(out)).detach()
+        # Extract features
+        out = self.conv_backbone(data).flatten(start_dim=1)
+        # Pass through prediction head to get label assignment
+        logits_prediction = self.prediction_head(out)
+        y_pred_prediction = F.softmax(logits_prediction, dim=1).detach()
+
+        # Pass through projection head to get features
+        features = F.normalize(self.projection_head(out)).detach()
+        # Get cluster assignment based on training set means
+        logits_projection = self.get_cluster_logits(features)
+        y_pred_projection = F.softmax(logits_projection, dim=1).detach()
+
+        # Compute loss
+        loss_predict = self.ce_loss(logits_prediction, y_true)
+        loss_project = self.ce_loss(logits_projection, y_true)
 
         # Compute validation accuracy
-        self.dset_to_acc["val"].update(cluster_labels, labels)
+        self.dset_to_acc["val_predict"].update(y_pred_prediction, y_true)
+        self.dset_to_acc["val_project"].update(y_pred_projection, y_true)
 
         # Prepare result
         ret = {
-            "loss": loss.detach().cpu(),
-            "y_pred": cluster_labels.cpu(),
-            "y_true": labels.detach().cpu(),
-            "features": features.cpu(),
+            "loss_predict": loss_predict.detach().cpu(),
+            "loss_project": loss_project.detach().cpu(),
+            "y_pred": y_pred_prediction.cpu(),
+            # "y_pred_predict": y_pred_prediction.cpu(),
+            # "y_pred_project": y_pred_projection.cpu(),
+            "y_true": y_true.detach().cpu(),
         }
         self.dset_to_outputs["val"].append(ret)
 
-        return loss
+        return loss_predict
 
 
     ############################################################################
@@ -522,37 +528,32 @@ class TCL(L.LightningModule):
         """
         Compute and log evaluation metrics for validation epoch.
         """
-        # Assemble outputs
         outputs = self.dset_to_outputs["val"]
-        loss = torch.tensor([o["loss"] for o in outputs]).mean()
-        noisy_labels = torch.cat([o["y_true"] for o in outputs])
-        cluster_labels = torch.cat([o["y_pred"] for o in outputs])
-        features = torch.cat([o["features"] for o in outputs])
 
-        # Log validation loss
-        self.log('val_loss', loss, prog_bar=True)
+        # NOTE: For comparison of val_loss and val_acc, use prediction head results
+        # Log losses
+        loss_predict = torch.tensor([o["loss_predict"] for o in outputs]).mean()
+        loss_project = torch.tensor([o["loss_project"] for o in outputs]).mean()
+        self.log('val_loss', loss_predict, prog_bar=True)
+        self.log("val_loss_prediction", loss_predict, prog_bar=True)
+        self.log("val_loss_projection", loss_project, prog_bar=True)
 
-        # Use GMM to detect if label is clean/noisy
-        ret = self.gmm_get_noisy_labels(features, noisy_labels, cluster_labels)
-        is_clean_mask = (ret["is_clean_prob"] >= 0.5)
+        # Log accuracies
+        acc = self.dset_to_acc["val_predict"].compute()
+        self.dset_to_acc["val_predict"].reset()
+        self.log('val_acc', acc, prog_bar=True)
+        self.log('val_acc_prediction', acc, prog_bar=True)
 
-        # Stratify by clean vs. noisy labels
-        if is_clean_mask.sum():
-            self.dset_to_acc["val_clean"].update(cluster_labels[is_clean_mask], noisy_labels[is_clean_mask])
-        if (~is_clean_mask).sum():
-            self.dset_to_acc["val_noisy"].update(cluster_labels[~is_clean_mask], noisy_labels[~is_clean_mask])
-
-        # Compute accuracies
-        for acc_key in ("val", "val_clean", "val_noisy"):
-            acc = self.dset_to_acc[acc_key].compute()
-            self.log(f'{acc_key}_acc', acc, prog_bar=True)
-            self.dset_to_acc[acc_key].reset()
+        acc = self.dset_to_acc["val_project"].compute()
+        self.dset_to_acc["val_project"].reset()
+        self.log('val_acc_projection', acc, prog_bar=True)
 
         # Create confusion matrix
+        # NOTE: Using prediction head predictions
         if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
-                y_true=noisy_labels,
-                y_predicted=cluster_labels,
+                y_true=torch.cat([o["y_true"] for o in outputs]),
+                y_predicted=torch.cat([o["y_pred"] for o in outputs]),
                 labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
                 title="Validation Confusion Matrix",
                 file_name="val_confusion-matrix.json",
@@ -654,36 +655,23 @@ class TCL(L.LightningModule):
 
         Returns
         -------
-        dict
-            Contains outputs of `gmm_get_noisy_labels` in the original order
-            of the dataset indices (metadata file)
+        torch.Tensor
+            Contains label predictions for each image
         """
-        dset_size = len(dataloader.dataset)
-
-        # For each of the images,
-        # 1. Use classifier head to get cluster predictions
-        # 2. Use projector head to get normalized features
-        features = torch.zeros((dset_size, self.head_hidden_dim))
-        labels = torch.zeros((dset_size, )).to(int)
-        cluster_labels = torch.zeros((dset_size, self.hparams["num_classes"])).to(torch.float32)
-        for img, metadata in tqdm(dataloader):
+        # For each image,
+        # 1. Use projector head to get normalized features
+        # 2. Assign cluster probabilities using training set
+        accum_y_preds = []
+        for img, _ in tqdm(dataloader):
             img = img.to(self.device)
-            dataset_idx = metadata["dataset_idx"].to(int)
-            labels[dataset_idx] = metadata["label"].to(int)
-            with torch.no_grad():
-                out = self.conv_backbone(img).flatten(start_dim=1)
-                # Get cluster label
-                cluster_labels[dataset_idx] = F.softmax(self.prediction_head(out), dim=1).detach().cpu()
-                # Get normalized features
-                features[dataset_idx] = F.normalize(self.projection_head(out)).detach().cpu()
+            out = self.conv_backbone(img).flatten(start_dim=1)
+            features = F.normalize(self.projection_head(out)).detach().cpu()
+            accum_y_preds.append(self.get_cluster_logits(features))
 
-        # Use GMM to detect if label is clean/noisy
-        ret = self.gmm_get_noisy_labels(features, labels, cluster_labels)
-        ret["noisy_labels"] = labels
-        ret["cluster_labels"] = cluster_labels
-        ret["features"] = features
+        # Concatenate predictions
+        y_preds = torch.cat(accum_y_preds)
 
-        return ret
+        return y_preds
 
 
     @torch.no_grad()
@@ -723,8 +711,33 @@ class TCL(L.LightningModule):
             Predicted cluster logits
         """
         out = self.conv_backbone(imgs).flatten(start_dim=1)
-        out = self.prediction_head(out)
-        return out
+        features = F.normalize(self.projection_head(out)).detach().cpu()
+        logits = self.get_cluster_logits(features)
+        return logits
+
+
+    def get_cluster_logits(self, features):
+        """
+        Get cluster assignments using features from projection head and
+        pre-computed cluster means.
+
+        Note
+        ----
+        To be used on inference
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Contains normalized extracted features of shape (N, D)
+
+        Returns
+        -------
+        torch.Tensor
+            Contains soft cluster logits of shape (N, K)
+        """
+        # Get cluster assignments
+        cluster_assignments_logits = features.mm(self.cluster_means.T) / self.hparams["temperature"]
+        return cluster_assignments_logits
 
 
 ################################################################################
