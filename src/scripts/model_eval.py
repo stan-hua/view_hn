@@ -1127,8 +1127,8 @@ def plot_prob_for_label_vs_catch_all_class(df_pred, save_dir=None, fname_suffix=
     plt.ylabel("Class Probabilty")
     plt.xlabel("Label")
     plt.legend(loc='lower left')
-    # # Save
-    # if save_dir:
+
+    # Save
     path = os.path.join(save_dir, f"labeled_vs_other-probs-{fname_suffix}.png")
     plt.tight_layout()
     plt.savefig(path, bbox_inches="tight")
@@ -1178,6 +1178,7 @@ def plot_prob_for_label_vs_catch_all_class(df_pred, save_dir=None, fname_suffix=
         print(f"  Precision: {[precision_dict[i] for i in range(num_classes)]}")
         metric_names = ["Sensitivity"]*3 + ["Specificity"]*3 + ["Precision"]*3
         metric_vals = [d[i] for d in (sensitivity_dict, specificity_dict, precision_dict) for i in range(num_classes)]
+        # TODO: Modify this
         model_name = "Confuse Other & Confidence Loss"
         df_curr = pd.DataFrame({
             "Model": [model_name] * 9,
@@ -1495,13 +1496,27 @@ def eval_calculate_all_metrics(df_pred):
     #     df_pred[df_pred["at_label_boundary"]])
     # df_metrics_at_boundary.name = "At Label Boundary"
 
-    # 1.4 Most confident sample for each predicted view label across sequence
+    # 1.4 Most confident predicted plane for each video (ignoring side)
     df_confident = filter_most_confident(df_pred, local=False)
     df_metrics_confident = calculate_metrics(df_confident, ci=True)
     df_metrics_confident.name = "Most Confident"
     accum_metric_tables.append(df_metrics_confident)
 
-    # 1.5 If bladder present, re-compute metrics without Bladder images
+    # TODO: Remove after not needed
+    # 1.5 Most confident predicted planes for each side (for each video)
+    # NOTE: Only runs if plane model
+    if set(["Sagittal", "Transverse"]).issubset(df_pred["label"].unique()):
+        df_filtered = df_pred[~df_pred["label"].isin(["None", "Bladder", "Other"])]
+        df_filtered = df_filtered[~df_filtered["pred"].isin(["None", "Bladder", "Other"])]
+        df_confident_side = filter_most_confident(
+            df_filtered,
+            local=False,
+            groupby=["side", "pred"])
+        df_metrics_confident_side = calculate_metrics(df_confident_side, ci=True)
+        df_metrics_confident_side.name = "Most Confident By Side"
+        accum_metric_tables.append(df_metrics_confident_side)
+
+    # 1.6 If bladder present, re-compute metrics without Bladder images
     # NOTE: Doesn't remove non-Bladder images misclassified as Bladder
     for bladder_label in ["None", "Bladder"]:
         if bladder_label not in df_pred["label"].unique():
@@ -1755,6 +1770,50 @@ def get_highest_loss_samples(df_pred, n=100):
         lambda df: df.sort_values(by=["loss"], ascending=False).iloc[:n]
     ).reset_index(drop=True)
     return df_samples
+
+
+def compute_thresholds(class_probs, encoded_labels, metric="f1"):
+    """
+    Compute probability threshold that maximizes the F1 score
+
+    Note
+    ----
+    This is typically run on a validation set 
+
+    Parameters
+    ----------
+    class_probs : np.array
+        Array of (num_classes, num_samples) with predicted probabilities
+    encoded_labels : np.array
+        Array of integer encoded label (num_samples,)
+    metric : str, optional
+        Metric to maximize, by default "f1"
+
+    Returns
+    -------
+    list
+        List of probability thresholds for each class
+
+    """
+    # Assert on supported metrics
+    # NOTE: In the future, support more metrics
+    if metric != "f1":
+        raise RuntimeError("Any metric besides F1 is not supported!")
+
+    # Ensure class probabilities sum up to 1
+    class_probs = class_probs / class_probs.sum(axis=1).reshape(-1, 1)
+    num_classes = class_probs.shape[1]
+
+    # Loop through each class
+    best_thresholds = {}
+    for i in range(num_classes):
+        # Find the best threshold (example: maximizing F1 score)
+        precision, recall, pr_thresholds = skmetrics.precision_recall_curve(encoded_labels == i, class_probs[:, i])
+        f1_scores = 2 * (precision * recall) / (precision + recall)
+        best_threshold = pr_thresholds[f1_scores.argmax()]
+        best_thresholds[i] = round(best_threshold, 4)
+
+    return [best_thresholds[i] for i in range(num_classes)]
 
 
 ################################################################################
@@ -2015,10 +2074,12 @@ def filter_most_confident(df_pred, local=False, top_k=1, groupby="pred"):
         by default False.
     top_k : int, optional
         Get top K most confident view label predictions, by default 1.
-    groupby : str, optional
+    groupby : str or list, optional
         If `local=False`, "pred" would find the most confident view prediction
         (irrespective of the ground truth), and "label" would find the most
-        confident prediction grouping by the ground-truth label
+        confident prediction grouping by the ground-truth label.
+        If a list is provided, then it would group on those columns (e.g.,
+        ["side", "pred"] can filter for predicted planes by side)
 
     Returns
     -------
@@ -2029,15 +2090,19 @@ def filter_most_confident(df_pred, local=False, top_k=1, groupby="pred"):
 
     # CASE 1: For each sequence, get the strongest predicted view
     if not local:
-        # Get most confident pred per view per sequence (ignoring seq. number)
-        assert groupby in ("pred", "label")
-        df_seqs = df_pred.groupby(by=["id", "visit", groupby])
+        # Create groupby columns, starting with patient ID and hospital visit
+        initial_groupby = ["id", "visit"]
+        groupby =  [groupby] if isinstance(groupby, str) else groupby
+        groupby = [col for col in groupby if col not in initial_groupby]
+        groupby = initial_groupby + groupby
+
+        # Get most confident pred per view per sequence
+        df_seqs = df_pred.groupby(by=groupby)
         df_filtered = df_seqs.apply(
             lambda df: df.nlargest(top_k, "out"),
             include_groups=True).reset_index(drop=True)
-    # CASE 2: 
+    # CASE 2: Get most confident pred per group of consecutive labels per sequence
     else:
-        # Get most confident pred per group of consecutive labels per sequence
         # 0. Sort by id, visit and sequence number
         df_pred = df_pred.sort_values(by=["id", "visit", "seq_number"])
 
@@ -2939,12 +3004,12 @@ def main(args):
         # 6. Create UMAPs embeddings on all dsets together
         # NOTE: `mask_bladder` is not needed if combining all dsets
         infer_kwargs.pop("mask_bladder")
-        analyze_dset_preds(exp_name=exp_name,
-                           dsets=dsets,
-                           splits=splits,
-                           label_blacklist=args.label_blacklist,
-                           log_to_comet=args.log_to_comet,
-                           **infer_kwargs)
+        # analyze_dset_preds(exp_name=exp_name,
+        #                    dsets=dsets,
+        #                    splits=splits,
+        #                    label_blacklist=args.label_blacklist,
+        #                    log_to_comet=args.log_to_comet,
+        #                    **infer_kwargs)
 
 
 if __name__ == '__main__':
