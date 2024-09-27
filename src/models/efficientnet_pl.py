@@ -28,7 +28,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
                  use_gradcam_loss=False,
                  use_mixup_aug=False,
                  freeze_weights=False, effnet_name="efficientnet-b0",
-                 *args, **kwargs):
+                 **kwargs):
         """
         Initialize EfficientNetPL object.
 
@@ -94,6 +94,9 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         ########################################################################
         #                          Post-Setup                                  #
         ########################################################################
+        # Placeholder for SAFT parameters whose gradient to mask
+        self.saft_param_mask = None
+
         # Freeze convolutional weights, if specified
         self.prep_conv_weights()
 
@@ -128,13 +131,16 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         dict
             Contains optimizer and LR scheduler
         """
+        # Get filtered or all parameters
+        params = self.parameters()
+        
         # Create optimizer
         if self.hparams.optimizer == "adamw":
-            optimizer = torch.optim.AdamW(self.parameters(),
+            optimizer = torch.optim.AdamW(params,
                                           lr=self.hparams.lr,
                                           weight_decay=self.hparams.weight_decay)
         elif self.hparams.optimizer == "sgd":
-            optimizer = torch.optim.SGD(self.parameters(),
+            optimizer = torch.optim.SGD(params,
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
@@ -163,6 +169,39 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             advprop=False)
 
 
+    def create_saft_param_mask(self, train_dataloader):
+        """
+        Create mask for SAFT, to filter for parameters with strong gradients
+        for the task
+
+        Parameters
+        ----------
+        train_dataloader : torch.utils.data.DataLoader
+            Training dataset to compute gradients over
+        """
+        num_samples = 0
+        gradients = []
+        for (data, metadata) in train_dataloader:
+            num_samples += len(data)
+
+            y_true = metadata["label"]
+            data, y_true = data.to(self.device), y_true.to(self.device)
+
+            # Perform forward and backward pass
+            out = self.forward(data)
+            loss = self.loss(out, y_true)
+            self.zero_grad()
+            loss.backward()
+
+            # NOTE: Don't include FC weights in mask
+            gradients.append([p.grad.clone() for name, p in self.named_parameters() if p.requires_grad and not name.startswith("_fc")])
+
+        avg_gradients = [torch.mean(torch.stack([g[i] for g in gradients]), dim=0) for i in range(len(gradients[0]))]
+        flat_grads = torch.cat([g.view(-1) for g in avg_gradients])
+        threshold = torch.topk(flat_grads.abs(), int(self.hparams.get("saft_sparsity", 0.1) * flat_grads.numel()), largest=True)[0][-1]
+        self.saft_param_mask = [torch.abs(g) >= threshold for g in avg_gradients]
+
+
     ############################################################################
     #                             Optimization                                 #
     ############################################################################
@@ -175,11 +214,28 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         if self.hparams.get("use_grokfast"):
             gradfilter_ema(self)
 
+        # If SAFT specified, only keep gradients for chosen parameters
+        if self.hparams.get("saft"):
+            for (name, p), m in zip(self.named_parameters(), self.saft_param_mask):
+                if str(name).startswith("_fc"):
+                    continue
+                p.grad *= m
+
 
     def on_train_epoch_start(self):
         """
         Deal with Stochastic Weight Averaging (SWA) Issue in Lightning<=2.3.2
         """
+        # CASE 1: If performing Sparse Adaptive Fine-Tuning (SAFT), filter for
+        #         strong parameters on the first epoch
+        if self.hparams.get("saft") and self.current_epoch == 0:
+            print("Performing Sparse Adaptive Fine-Tuning (SAFT)! "
+                  "Getting parameters with strong gradients...")
+            self.eval()
+            self.create_saft_param_mask(self.trainer.train_dataloader)
+            self.train()
+
+        # HACK: Fix issue with Stochastic Weight Optimization on the last epoch
         if self.hparams.get("swa") and self.current_epoch == self.trainer.max_epochs - 1:
             # Workaround to always save the last epoch until the bug is fixed in lightning (https://github.com/Lightning-AI/lightning/issues/4539)
             self.trainer.check_val_every_n_epoch = 1
@@ -263,19 +319,23 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             entropy_loss = -compute_entropy_loss(out)
             losses.append(entropy_loss)
 
+        # 5. If specified, add nuclear norm loss to force low-rank classifier layer
+        if self.hparams.get("low_rank_linear_loss"):
+            losses.append(0.01 * compute_nuclear_norm_loss(self._fc.weight))
+
         # Compute loss
-        losses = sum(losses)
+        loss = sum(losses)
 
         # Log training metrics
         self.train_acc.update(y_pred, y_true)
 
         # Prepare result
         ret = {
-            "loss": losses.detach().cpu(),
+            "loss": loss.detach().cpu(),
         }
         self.dset_to_outputs["train"].append(ret)
 
-        return losses
+        return loss
 
 
     def validation_step(self, val_batch, batch_idx):
@@ -496,3 +556,22 @@ def compute_entropy_loss(out):
     H_pred = torch.mean(torch.sum(y_probs * torch.log(y_probs + 1e-9), dim=1))
 
     return H_pred
+
+
+def compute_nuclear_norm_loss(weight_matrix):
+    """
+    Compute nuclear norm regularization loss to encourage the weight matrix
+    to be low-rank
+
+    Parameters
+    ----------
+    weight_matrix : torch.Tensor
+        Weight tensor
+
+    Returns
+    -------
+    torch.FloatTensor
+        Nuclear norm regularization loss
+    """
+    _, S, _ = torch.svd(weight_matrix, some=False)
+    return torch.sum(S)
