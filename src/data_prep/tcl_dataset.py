@@ -9,7 +9,7 @@ Description: Contains module to load data for Twin Contrastive Learning (TCL)
 import torch
 import torchvision.transforms.v2 as T
 from lightly.data import LightlyDataset
-from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
+from torch.utils.data import DataLoader
 
 # Custom libraries
 from src.data_prep import ssl_collate_fn, utils

@@ -664,9 +664,7 @@ class TCL(L.LightningModule):
         accum_y_preds = []
         for img, _ in tqdm(dataloader):
             img = img.to(self.device)
-            out = self.conv_backbone(img).flatten(start_dim=1)
-            features = F.normalize(self.projection_head(out)).detach().cpu()
-            accum_y_preds.append(self.get_cluster_logits(features))
+            accum_y_preds.append(self.forward(img).detach().cpu())
 
         # Concatenate predictions
         y_preds = torch.cat(accum_y_preds)
@@ -711,7 +709,7 @@ class TCL(L.LightningModule):
             Predicted cluster logits
         """
         out = self.conv_backbone(imgs).flatten(start_dim=1)
-        features = F.normalize(self.projection_head(out)).detach().cpu()
+        features = F.normalize(self.projection_head(out))
         logits = self.get_cluster_logits(features)
         return logits
 
