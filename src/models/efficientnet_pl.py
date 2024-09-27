@@ -319,10 +319,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             entropy_loss = -compute_entropy_loss(out)
             losses.append(entropy_loss)
 
-        # 5. If specified, add nuclear norm loss to force low-rank classifier layer
-        if self.hparams.get("low_rank_linear_loss"):
-            losses.append(0.01 * compute_nuclear_norm_loss(self._fc.weight))
-
         # Compute loss
         loss = sum(losses)
 
@@ -556,22 +552,3 @@ def compute_entropy_loss(out):
     H_pred = torch.mean(torch.sum(y_probs * torch.log(y_probs + 1e-9), dim=1))
 
     return H_pred
-
-
-def compute_nuclear_norm_loss(weight_matrix):
-    """
-    Compute nuclear norm regularization loss to encourage the weight matrix
-    to be low-rank
-
-    Parameters
-    ----------
-    weight_matrix : torch.Tensor
-        Weight tensor
-
-    Returns
-    -------
-    torch.FloatTensor
-        Nuclear norm regularization loss
-    """
-    _, S, _ = torch.svd(weight_matrix, some=False)
-    return torch.sum(S)
