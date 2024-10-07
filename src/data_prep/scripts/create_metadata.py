@@ -7,6 +7,7 @@ import glob
 import json
 import os
 import re
+from collections import defaultdict
 
 # Non-standard libraries
 import cv2
@@ -97,7 +98,7 @@ def preprocess_uiowa_data(src_dir=SRC_DIR_UIOWA_DATA,
 ################################################################################
 #                      Creating "Raw" Metadata Functions                       #
 ################################################################################
-def create_chop_metadata(dir_data, save_path=None):
+def create_chop_metadata(dir_data=None, save_path=None):
     """
     Based on folder structure and image names, create metadata table with
     relative image paths.
@@ -115,6 +116,10 @@ def create_chop_metadata(dir_data, save_path=None):
         Metadata table containing `filename`, `label`, `id`, `visit` and
         `seq_number`
     """
+    # Use defaults if not provided
+    dir_data = dir_data if dir_data else constants.DSET_TO_IMG_SUBDIR_FULL["chop"]
+    save_path = save_path if save_path else constants.DSET_TO_METADATA["raw"]["chop"]
+
     # Label mapping
     label_map = {"TRAN_L": "Transverse_Left", "SAG_L": "Sagittal_Left",
                  "TRAN_R": "Transverse_Right", "SAG_R": "Sagittal_Right"}
@@ -163,7 +168,7 @@ def create_chop_metadata(dir_data, save_path=None):
     return df_metadata
 
 
-def create_uiowa_metadata_from_src(dir_data, save_path=None):
+def create_uiowa_metadata_from_src(dir_data=None, save_path=None):
     """
     Based on folder structure and image names, create metadata table with
     relative image paths.
@@ -181,6 +186,10 @@ def create_uiowa_metadata_from_src(dir_data, save_path=None):
         Metadata table containing `filename`, `label`, `id`, `visit` and
         `seq_number`
     """
+    # Use defaults if not provided
+    dir_data = dir_data if dir_data else SRC_DIR_UIOWA_DATA
+    save_path = save_path if save_path else constants.DSET_TO_METADATA["raw"]["stanford_image"]
+
     # List of possible filenames for UIowa images
     possible_fnames = set(["LT_cropped.png", "LS_cropped.png",
                            "RT_cropped.png", "RS_cropped.png"])
@@ -238,7 +247,7 @@ def create_uiowa_metadata_from_src(dir_data, save_path=None):
     return df_metadata
 
 
-def create_stanford_image_metadata(dir_data, save_path=None):
+def create_stanford_image_metadata(dir_data=None, save_path=None):
     """
     Based on folder structure and image names, create metadata table with
     relative image paths.
@@ -260,6 +269,10 @@ def create_stanford_image_metadata(dir_data, save_path=None):
         Metadata table containing `filename`, `label`, `id`, `visit` and
         `seq_number`
     """
+    # Use defaults if not provided
+    dir_data = dir_data if dir_data else constants.DSET_TO_IMG_SUBDIR_FULL["stanford_image"]
+    save_path = save_path if save_path else constants.DSET_TO_METADATA["raw"]["stanford_image"]
+
     # Label mapping
     label_map = {"LT": "Transverse_Left", "LS": "Sagittal_Left",
                  "RT": "Transverse_Right", "RS": "Sagittal_Right"}
@@ -311,7 +324,7 @@ def create_stanford_image_metadata(dir_data, save_path=None):
     return df_metadata
 
 
-def create_sickkids_silent_trial_metadata(dir_data, save_path=None):
+def create_sickkids_silent_trial_metadata(dir_data=None, save_path=None):
     """
     Based on folder structure and image names, create metadata table with
     relative image paths.
@@ -329,6 +342,10 @@ def create_sickkids_silent_trial_metadata(dir_data, save_path=None):
         Metadata table containing `filename`, `label`, `id`, `visit` and
         `seq_number`
     """
+    # Use defaults if not provided
+    dir_data = dir_data if dir_data else constants.DSET_TO_IMG_SUBDIR_FULL["sickkids_silent_trial"]
+    save_path = save_path if save_path else constants.DSET_TO_METADATA["raw"]["sickkids_silent_trial"]
+
     # Regex that matches filenames for SickKids Silent Trial images
     fname_regex = ".*(Sag|SAG|Trv|TRV)(\s?)(\d+)(\w)-preprocessed\.png"
 
@@ -399,7 +416,7 @@ def create_sickkids_silent_trial_metadata(dir_data, save_path=None):
     return df_metadata
 
 
-def create_sickkids_image_metadata(dir_data, save_path=None):
+def create_sickkids_image_metadata(dir_data=None, save_path=None):
     """
     Based on folder structure and image names, create metadata table with
     relative image paths.
@@ -422,6 +439,10 @@ def create_sickkids_image_metadata(dir_data, save_path=None):
         `seq_number`
     """
     print("Creating SickKids (Image) Metadata...")
+
+    # Use defaults if not provided
+    dir_data = dir_data if dir_data else constants.DSET_TO_IMG_SUBDIR_FULL["sickkids_image"]
+    save_path = save_path if save_path else constants.DSET_TO_METADATA["raw"]["sickkids_image"]
 
     # Label mapping
     label_map = {"trv": "Transverse", "sag": "Sagittal"}
@@ -547,6 +568,93 @@ def create_ubc_adult_image_metadata():
     df_metadata = df_metadata.sort_values(by=["id", "visit", "seq_number"])
     df_metadata.to_csv(constants.DSET_TO_METADATA["raw"]["ubc_adult"],
                        index=False)
+
+
+################################################################################
+#                           Supplement Raw Metadata                            #
+################################################################################
+def supplement_chop_image_metadata():
+    """
+    Supplement CHOP image metadata with hydronephrosis surgery label
+    """
+    df_metadata = pd.read_csv(constants.DSET_TO_METADATA["raw"]["chop"])
+
+    # Skip if HN label is already present
+    if "hn" in df_metadata.columns.tolist():
+        print("[CHOP] HN column already present! Skipping...")
+        return
+    print("[CHOP] Supplementing metadata with HN surgery labels...")
+
+    # Prepare metadata
+    df_supplement = pd.read_csv(constants.DSET_TO_METADATA["raw"]["chop_hn"])
+    df_supplement = df_supplement.dropna(how="all").dropna(how="all", axis=1)
+    df_supplement["id"] = df_supplement["Pt ID for images"].astype(int)
+    df_supplement["surgery"] = df_supplement["Was surgery for obstruction performed"].map(lambda x: x == "Yes")
+    df_supplement["side"] = df_supplement["Laterality of hydro"]
+    df_supplement["side"] = df_supplement["side"].map(lambda x: x.strip().lower() if not pd.isnull(x) else None)
+
+    # Create mapping of patient ID to body side to surgery label
+    id_to_side_to_surgery = defaultdict(dict)
+    for row in df_supplement.itertuples():
+        if row.side is None or not row.surgery:
+            continue
+        if row.side == "bilateral":
+            id_to_side_to_surgery[row.id]["Left"] = row.surgery
+            id_to_side_to_surgery[row.id]["Right"] = row.surgery
+        else:
+            assert row.side.capitalize() in ("Left", "Right")
+            id_to_side_to_surgery[row.id][row.side.capitalize()] = row.surgery
+
+    # Assign each row its surgery decision label
+    df_metadata["hn"] = True
+    df_metadata["surgery"] = df_metadata.apply(
+        lambda row: id_to_side_to_surgery[row["id"]].get(row["side"], False),
+        axis=1
+    )
+
+    df_metadata.to_csv(constants.DSET_TO_METADATA["raw"]["chop"], index=False)
+
+
+def supplement_uiowa_image_metadata():
+    """
+    Supplement UIowa image metadata with hydronephrosis surgery label
+    """
+    df_metadata = pd.read_csv(constants.DSET_TO_METADATA["raw"]["uiowa"])
+
+    # Skip if HN label is already present
+    if "hn" in df_metadata.columns.tolist():
+        print("[UIowa] HN column already present! Skipping...")
+        return
+    print("[UIowa] Supplementing metadata with HN surgery labels...")
+
+    # Prepare metadata
+    df_supplement = pd.read_csv(constants.DSET_TO_METADATA["raw"]["uiowa_hn"])
+    df_supplement = df_supplement.dropna(how="all").dropna(how="all", axis=1)
+    df_supplement["id"] = df_supplement["Name"]
+    df_supplement["surgery"] = True
+    df_supplement["side"] = df_supplement["U/B"]
+
+    # Create mapping of patient ID to body side to surgery label
+    id_to_side_to_surgery = defaultdict(dict)
+    for row in df_supplement.itertuples():
+        if not row.surgery:
+            continue
+        if row.side == "B":
+            id_to_side_to_surgery[row.Name]["Left"] = row.surgery
+            id_to_side_to_surgery[row.Name]["Right"] = row.surgery
+        else:
+            assert row.side in ("L", "R")
+            side = "Left" if row.side == "L" else "Right"
+            id_to_side_to_surgery[row.Name][side] = row.surgery
+
+    # Assign each row its surgery decision label
+    df_metadata["hn"] = True
+    df_metadata["surgery"] = df_metadata.apply(
+        lambda row: id_to_side_to_surgery[row["id"]].get(row["side"], False),
+        axis=1
+    )
+
+    df_metadata.to_csv(constants.DSET_TO_METADATA["raw"]["uiowa"], index=False)
 
 
 ################################################################################
