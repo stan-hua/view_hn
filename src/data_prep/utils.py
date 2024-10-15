@@ -111,8 +111,8 @@ def load_metadata(dsets, prepend_img_dir=False, **config):
                 lambda x: os.path.join(img_dir, x)
             )
 
-        # Ensure all columns are string type
-        df_metadata_curr = df_metadata_curr.astype(str)
+        # Ensure all ID and Visit columns are string type
+        df_metadata_curr[["id", "visit"]] = df_metadata_curr[["id", "visit"]].astype(str)
 
         metadata_tables.append(df_metadata_curr)
 

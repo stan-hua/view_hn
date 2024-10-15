@@ -208,6 +208,9 @@ def predict_on_images(model, filenames, labels=None,
             - probability of each prediction,
             - raw model output
     """
+    if da_transform is not None:
+        LOGGER.info(f"Performing inference with domain adaptation transform: {da_transform}...")
+
     # Get mapping of index to class
     label_part = hparams.get("label_part")
     idx_to_class = constants.LABEL_PART_TO_CLASSES[label_part]["idx_to_class"]
@@ -1944,8 +1947,9 @@ def get_da_transform(da_transform_name, src_paths):
         return T.Identity()
 
     # Ensure valid transform is provided
-    if da_transform_name not in ("fda", "hm"):
-        raise RuntimeError(f"`da_transform_name` must be in {('fda', 'hm')}")
+    valid_da_transforms = ("fda", "hm", "clahe")
+    if da_transform_name not in valid_da_transforms:
+        raise RuntimeError(f"`da_transform_name` must be in {valid_da_transforms}")
 
     # Load transform
     # CASE 1: Fourier Domain Adaptation
@@ -1962,6 +1966,9 @@ def get_da_transform(da_transform_name, src_paths):
             blend_ratio=(1, 1),
             p=1,
             read_fn=partial(load_image, as_numpy=True))
+    # CASE 3: Adaptive Histogram Equalization
+    elif da_transform_name == "clahe":
+        da_transform = A.CLAHE(p=1)
 
     # Compose transform
     # NOTE: Ensure converted to PyTorch tensor after
@@ -2665,8 +2672,7 @@ def infer_dset(exp_name, dset, split,
     test_time_aug : bool, optional
         If True, perform test-time augmentation.
     da_transform_name : str, optional
-        If provided, performs domain adaptation transform on test images, by
-        default None. Must be one of ("fda", "hm").
+        If provided, performs domain adaptation transform on test images.
     overwrite_existing : bool, optional
         If True and prediction file already exists, overwrite existing, by
         default OVERWRITE_EXISTING.
@@ -2794,8 +2800,6 @@ def infer_dset(exp_name, dset, split,
                 filenames=filenames,
                 labels=df_metadata["label"].tolist(),
                 img_dir=None,
-                mask_bladder=mask_bladder,
-                test_time_aug=test_time_aug,
                 da_transform=da_transform,
                 **hparams)
 

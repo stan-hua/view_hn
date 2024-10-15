@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 # Custom libraries
 from src.data import constants
+from src.data_prep import utils
 from src.data_prep.dataset import UltrasoundDataModule
 from src.scripts import load_data, load_model
 
@@ -394,6 +395,69 @@ def get_embeds(name, **kwargs):
     return df_embeds
 
 
+def get_embeds_with_metadata(exp_name, dset="sickkids_beamform", split="all",
+                             **kwargs):
+    """
+    Retrieves embeddings from specified pretrained model. Then adds metadata from
+    image file paths.
+
+    Parameters
+    ----------
+    exp_name : str
+        Name of experiment
+    dset : str, optional
+        Name of dataset
+    split : str, optional
+        Split of dataset, or "all" if doing train/val/test
+    **kwargs : Any
+        Keyword arguments to pass into `get_embeds`
+
+    Returns
+    -------
+    pd.DataFrame
+        Table with both embedding features and metadata
+    """
+    # Load embeddings for all splits
+    all_embed_lst = []
+    splits = ["train", "val", "test"] if split == "all" else [split]
+    for curr_split in splits:
+        df_embeds = get_embeds(exp_name, dset=dset, split=curr_split, **kwargs)
+        # Rename old filename column
+        df_embeds = df_embeds.rename(columns={"paths": "filename",
+                                                "files": "filename"})
+        # Add dset and split
+        df_embeds["dset"] = dset
+        df_embeds["split"] = curr_split
+        all_embed_lst.append(df_embeds)
+
+    # Concatenate embeddings
+    df_embeds_all = pd.concat(all_embed_lst, ignore_index=True)
+
+    # Extract metadata from image file paths
+    try:
+        df_metadata = utils.extract_data_from_filename_and_join(
+            df_embeds_all,
+            dset=dset,
+            label_part=None,
+        )
+    # If errored, print experiment name
+    except RuntimeError as error_msg:
+        LOGGER.critical("[plot_umap] Failed to extract metadata for experiment:"
+                        " %s", exp_name)
+        raise error_msg
+
+    # Isolate embedding columns
+    feature_cols = [col for col in df_embeds_all.columns
+                    if isinstance(col, int)]
+    df_embeds_only = df_embeds_all[feature_cols]
+
+    # Create table with both embeddings and metadata
+    df_data = pd.concat([df_embeds_only, df_metadata], axis=1)
+    df_data = df_data.loc[:, ~df_data.columns.duplicated()]
+
+    return df_data
+
+
 ################################################################################
 #                                Main Function                                 #
 ################################################################################
@@ -422,7 +486,10 @@ def main(args):
     # Extract embeddings for each experiment name
     for exp_name in args.exp_name:
         # 1. Load pre-trained model
-        model = load_model.load_pretrained_from_exp_name(exp_name)
+        model = load_model.load_pretrained_from_exp_name(
+            exp_name,
+            ckpt_option=args.ckpt_option,
+        )
 
         # Load experiment hyperparameters
         exp_hparams = load_model.get_hyperparameters(exp_name=exp_name)
@@ -484,6 +551,7 @@ def init(parser):
         "exp_name": "Name of experiment/s to create embeddings for",
         "dsets": "Name of datasets to embed",
         "splits": "For each `dset`, what data split to embed",
+        "ckpt_option": "Which checkpoint to use: 'best' or 'last'",
     }
 
     parser.add_argument("--exp_name", required=True, nargs="+",
@@ -492,9 +560,10 @@ def init(parser):
                         help=arg_help["dsets"])
     parser.add_argument("--splits", required=True, nargs="+",
                         help=arg_help["splits"])
+    parser.add_argument("--ckpt_option", default="best",
+                        help=arg_help["ckpt_option"])
 
-
-def get_save_path(name, dset, split,
+def get_save_path(name, dset, split, ckpt_option="best",
                   raw=False, segmented=False, reverse_mask=False):
     """
     Create expected save path from model name and parameters.
@@ -507,6 +576,8 @@ def get_save_path(name, dset, split,
         Name of dataset (e.g., sickkids)
     split : str, optional
         Specific data split (i.e., train/val/test)
+    ckpt_option : str, optional
+        Which checkpoint to use: 'best' or 'last', by default "best"
     raw : bool, optional
         If True, extracts embeddings for raw images. Otherwise, uses
         preprocessed images, by default False.
@@ -527,7 +598,9 @@ def get_save_path(name, dset, split,
 
     embed_suffix = EMBED_SUFFIX_RAW if raw else EMBED_SUFFIX
     segmented_suffix = f"_segmented{'_reverse' if reverse_mask else ''}"
+    # HACK: Only add infix for "last" ckpt embeddings
     save_path = f"{constants.DIR_EMBEDS}/{name}"\
+                f"{'_last' if ckpt_option == 'last' else ''}" \
                 f"{segmented_suffix if segmented else ''}"\
                 f"{f'({dset}-{split})'}"\
                 f"{embed_suffix}"
