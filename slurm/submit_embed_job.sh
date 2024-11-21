@@ -13,16 +13,37 @@
 # Load any necessary modules or activate your virtual environment here
 micromamba activate view
 
-# Set experiment name
-# EXP_NAME=exp_ssl_pretrain-byol_accum_with_swa_no_seed
-# EXP_NAME=exp_ssl_pretrain-byol-sup_plane
-# EXP_NAME=exp_ssl_pretrain-moco_vanilla-no_seed
-# EXP_NAME=exp_ssl_pretrain-moco_supervised-no_seed
-# EXP_NAME=exp_ssl_pretrain-moco_supervised-same_video-no_seed
-EXP_NAME=imagenet
+################################################################################
+#                                  Constants                                   #
+################################################################################
+# EXP_NAME=exp_param_sweep-supervised_baseline-only_beamform
+# EXP_NAME=exp_from_imagenet-only_beamform
+# EXP_NAME=finetuned_moco_supervised_large_crop-only_beamform
+# EXP_NAME=finetuned_moco_large_crop-only_beamform
 
+EXP_NAME=exp_ssl_pretrain-tcl-per_class_gmm-only_beamform-large_crop-long_warmup
+
+# Checkpoint option
+CKPT_OPTION="last"      # "best" or "last"
+
+
+################################################################################
+#                              Create Embeddings                               #
+################################################################################
 # Create embeddings
-srun python -m src.scripts.embed --exp_name $EXP_NAME --dsets sickkids --splits "train" "val" "test"
+# srun python -m src.scripts.embed --exp_name $EXP_NAME \
+#     --dsets sickkids_beamform \
+#     --splits "train" "val" "test" \
+#     --ckpt_option $CKPT_OPTION
 
 # Create UMAP
-srun python -m src.data_viz.plot_umap --exp_name $EXP_NAME --dsets sickkids --splits "all"
+# srun python -m src.data_viz.plot_umap --exp_name $EXP_NAME --dsets sickkids_beamform --splits "test"
+
+
+################################################################################
+#                              Attribute Encoding                              #
+################################################################################
+srun python -m src.data_viz.attr_encoding \
+    --exp_name $EXP_NAME \
+    --dset "sickkids_beamform" \
+    --ckpt_option $CKPT_OPTION

@@ -43,6 +43,7 @@ micromamba activate view
 # EXP_NAME=exp_ssl_pretrain-moco_vanilla-no_seed
 EXP_NAME=exp_ssl_pretrain-moco_supervised-no_seed
 # EXP_NAME=exp_ssl_pretrain-moco_supervised-same_video-no_seed
+# EXP_NAME=exp_ssl_pretrain-moco_supervised-with_beamform_and_canonical
 
 CONFIG=ssl_eval_default.ini
 # CONFIG=ssl_eval-no_aug.ini
@@ -50,8 +51,9 @@ CONFIG=ssl_eval_default.ini
 # CONFIG=ssl_eval-imb_sampler.ini
 
 # Run script
+# "sickkids" "stanford" "sickkids_beamform" "stanford_beamform" "sickkids_image" "sickkids_silent_trial" "stanford_image" "uiowa" "chop"
 srun python -m src.scripts.ssl_model_eval \
     -c $CONFIG \
     --exp_name $EXP_NAME \
-    --dsets "sickkids" "stanford" "uiowa" "chop" "stanford_image" "sickkids_silent_trial" \
-    --splits "test"
+    --dsets "sickkids" "sickkids" \
+    --splits "val" "test"
