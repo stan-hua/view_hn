@@ -315,7 +315,6 @@ class ImageEmbedder:
 ################################################################################
 def extract_embeds(model,
                    save_embed_path=None,
-                   exp_name=None,
                    img_file=None,
                    **embedder_kwargs):
     """
@@ -341,10 +340,6 @@ def extract_embeds(model,
     img_dataloader : torch.utils.data.DataLoader
         Image dataloader with metadata dictionary containing `filename`
     """
-    # INPUT: Create save path, if only experiment name provided
-    if not save_embed_path and exp_name:
-        save_embed_path = get_save_path(exp_name)
-
     # Wrap model in ImageEmbedder
     embedder = ImageEmbedder(model)
 
@@ -518,7 +513,10 @@ def main(args):
                 )
 
             # Create path to save embeddings
-            save_embed_path = get_save_path(exp_name, dset=dset, split=split)
+            save_embed_path = get_save_path(
+                exp_name, dset=dset, split=split,
+                ckpt_option=args.ckpt_option
+            )
             # Early return, if embeddings already made
             if os.path.isfile(save_embed_path):
                 LOGGER.info(f"Embeddings for exp_name: ({exp_name}), "
@@ -526,7 +524,7 @@ def main(args):
                 continue
 
             # Perform extraction
-            extract_embeds(model=model, exp_name=exp_name,
+            extract_embeds(model=model,
                            save_embed_path=save_embed_path,
                            img_dataloader=img_dataloader,
                            device=constants.DEVICE,)
@@ -562,6 +560,7 @@ def init(parser):
                         help=arg_help["splits"])
     parser.add_argument("--ckpt_option", default="best",
                         help=arg_help["ckpt_option"])
+
 
 def get_save_path(name, dset, split, ckpt_option="best",
                   raw=False, segmented=False, reverse_mask=False):
