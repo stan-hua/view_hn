@@ -191,7 +191,8 @@ def extract_data_from_filename_and_join(df_metadata, dset="sickkids",
     # Combine the directory path and filename
     df_metadata_all["filename"] = df_metadata_all.apply(
         lambda row: os.path.join(row["dir_name"], row["filename"])
-                    if row["dir_name"] not in row["filename"],
+                    if row["dir_name"] not in row["filename"]
+                    else row["filename"],
         axis=1
     )
 
