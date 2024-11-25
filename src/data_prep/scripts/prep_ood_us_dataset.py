@@ -498,7 +498,7 @@ def download_clarius(save_dir=None):
 ################################################################################
 #                    Processing Functions (Image Datasets)                     #
 ################################################################################
-def process_datasets(*organs):
+def process_datasets(*organs, aggregate=False):
     """
     Processes downloaded ultrasound datasets using predefined processing functions.
 
@@ -506,6 +506,9 @@ def process_datasets(*organs):
     ----------
     *organs : Any
         List of organ datasets to download. If None, all available datasets are downloaded.
+    aggregate : bool, optional
+        If True, aggregate all clean datasets into a single file and split data
+        into training/calib/test sets.
     """
     # Mapping of organ to processing method
     process_map = {
@@ -514,6 +517,7 @@ def process_datasets(*organs):
         "lung": process_lung_dataset,
         "abdomen": process_abdomen_dataset,
         "pelvis": process_pelvis_ovarian_dataset,
+        "knee": process_knee_dataset,
         "fetal": process_fetal_planes_dataset,
 
         # Held-out test sets
@@ -525,13 +529,14 @@ def process_datasets(*organs):
         organs = list(process_map.keys())
 
     # Process each dataset
-    print(f"[OOD Ultrasound] Processing data for the following organs: {organs}")
+    print(f"[OOD Ultrasound] Processing data for the following organs: {list(organs)}")
     for organ in organs:
         print(f"Processing dataset: {organ}")
         process_map[organ]()
 
-    # Aggregate all datasets
-    aggregate_processed_datasets()
+    # If specified, aggregate all clean datasets
+    if aggregate:
+        aggregate_processed_datasets()
 
 
 def process_neck_datasets(overwrite=False):
@@ -804,6 +809,7 @@ def process_breast_dataset(data_dir=None, save_dir=None, seed=SEED,
     df_metadata = re_anonymize_and_save_as_png(
         sampled_img_paths, dataset_key, img_subdir, metadata_subdir,
         overwrite=overwrite,
+        **extra_metadata_cols,
     )
 
     # Create a text file with the provenance
@@ -1532,8 +1538,9 @@ def aggregate_processed_datasets():
     save_metadata_path = os.path.join(save_dir, "metadata.csv")
 
     # Load metadata for each dataset and create train/calib/test splits
+    print("[OOD Dataset] Aggregating processed datasets...")
     accum_metadata = []
-    for dataset in CLEAN_DSETS:
+    for dataset in enumerate(CLEAN_DSETS):
         metadata_path = os.path.join(save_dir, dataset, "metadata", f"{dataset}-metadata.csv")
         df_curr = pd.read_csv(metadata_path)
         df_curr["dset"] = dataset
@@ -1556,6 +1563,7 @@ def aggregate_processed_datasets():
 
     # Save metadata
     df_metadata.to_csv(save_metadata_path, index=False)
+    print("[OOD Dataset] Aggregating processed datasets...DONE")
 
 
 ################################################################################
