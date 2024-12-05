@@ -124,7 +124,84 @@ def center_crop(img_arr):
     return cropped_img
 
 
+def write_model_details():
+    """
+    Create model card
+    """
+    # Set the page configuration
+    st.set_page_config(
+        page_title="RenalView: Pediatric Kidney/Bladder Plane Labeler",
+        layout="wide"
+    )
+
+    # Custom CSS
+    st.markdown(
+        """
+        <style>
+        .stSidebar {
+            background-color: #3d4f6b !important;
+            padding: 20px !important;
+            border-radius: 10px;
+        }
+        .stSidebar h1 {
+            background-color: #3d4f6b !important;
+            border-radius: 10px;
+        }
+        .stSidebar .st-emotion-cache-1gwvy71 {
+            background-color: #ffffff !important;
+            border: 2px solid #3d4f6b;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .stSidebar .stHeading {
+            color: #ffffff !important;
+            font-size: 1.5rem;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .stSidebar .st-emotion-cache-phe2gf li {
+            font-size: 1.1rem !important;
+            margin-bottom: 10px;
+        }
+        .stSidebar .st-emotion-cache-1gwvy71 h1 {
+            font-size: 1.8rem !important;
+            text-align: center;
+            color: #ffffff !important;
+        }
+        .st-emotion-cache-1b0udgb {
+            font-size: 1.1rem !important;
+            color: #000000 !important;
+            font-weight: bold !important;
+        }
+        img {
+            border: 2px solid black; /* Adds a black border */
+            border-radius: 25px; /* Rounds the corners */
+            width: 100%; /* Makes the image responsive */
+            max-width: 500px; /* Sets a maximum width */
+            margin: 0 auto; /* Centers the image */
+            display: block; /* Ensures the image is treated as a block element */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Sidebar content
+    st.sidebar.title("Model Card")
+    st.sidebar.write("- **Input**: Renal Ultrasound Image")
+    st.sidebar.write("- **Output**: Sagittal Kidney / Transverse Kidney / Bladder")
+    st.sidebar.write("- **SickKids Test Set Accuracy**: 92%")
+    st.sidebar.write("- **Training Set**: **62** patients, **190** sequences, **11.7K** images")
+
+    # Main app title
+    st.title("RenalView: Pediatric Ultrasound View Classifier")
+    st.write("")
+
+
 def main(device=DEVICE):
+    # Write model details
+    write_model_details()
+
     # Set up streamer
     STREAMER = VideoStreamer()
 
@@ -159,7 +236,8 @@ def main(device=DEVICE):
 
             # Convert to probabilities
             prob = torch.nn.functional.softmax(out, dim=1)
-            prob_numpy = prob.detach().cpu().numpy().flatten().round(4)
+            prob = prob.detach().cpu().numpy().flatten()[pred]
+            prob = round(float(prob), 2)
 
             # Convert from encoded label to label name
             pred_label = idx_to_class[pred]
@@ -167,8 +245,8 @@ def main(device=DEVICE):
             # Display image
             st.image(
                 img_arr,
-                use_container_width=True,
-                caption=f"Prediction: {pred_label} (p={prob_numpy[pred]})",
+                use_container_width=False,
+                caption=f"Prediction: {pred_label} (p={prob})",
             )
 
             # Get next frame
@@ -176,6 +254,4 @@ def main(device=DEVICE):
 
 
 if __name__ == "__main__":
-    st.title("RenalView: Renal Ultrasound Kidney/Bladder Plane Labeler")
-    st.write("")
     main()
