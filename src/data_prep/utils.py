@@ -187,6 +187,15 @@ def extract_data_from_filename_and_join(df_metadata, dset="sickkids",
 
     # Load metadata from ALL dsets specified
     df_metadata_all = load_metadata(dsets=dsets, **kwargs)
+
+    # Combine the directory path and filename
+    df_metadata_all["filename"] = df_metadata_all.apply(
+        lambda row: os.path.join(row["dir_name"], row["filename"])
+                    if row["dir_name"] not in row["filename"]
+                    else row["filename"],
+        axis=1
+    )
+
     # Clean path
     df_metadata_all["filename"] = df_metadata_all["filename"].map(
         os.path.normpath)
@@ -1332,6 +1341,11 @@ def left_join_filtered_to_source(df_filtered, df_full, index_cols=None):
     """
     # If specified, set index
     if index_cols:
+        # Ensure index columns are strings
+        df_filtered[index_cols] = df_filtered[index_cols].astype(str)
+        df_full[index_cols] = df_full[index_cols].astype(str)
+
+        # Set index
         df_filtered = df_filtered.set_index(index_cols)
         df_full = df_full.set_index(index_cols)
 

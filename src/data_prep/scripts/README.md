@@ -12,3 +12,31 @@ python -m src.data_prep.scripts.prep_ubc_kidney_dataset prep_metadata
 # c. Final touches on metadata
 python -m src.data_prep.scripts.create_metadata clean_metadata
 ```
+
+### Ultrasound OOD Dataset
+
+#### 1. Set path to directory to save OOD data
+```
+# Replace path below (optionally add to ~/.bashrc)
+export OOD_DATA_DIR="."
+```
+
+#### 2. Download most datasets (automatically)
+```
+# Downloads all datasets
+python -m src.data_prep.scripts.prep_ood_us_dataset download_datasets
+```
+
+#### 3. Download one dataset (manually)
+```
+# 1. JoCo Knee Ultrasound (from Harvard Dataverse)
+#       a. Create new directory `${OOD_DATA_DIR}/raw/knee_ultrasound`
+#       b. Please download from https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/SKP9IB#
+#       c. Move `dataverse_files/data/*` to a new directory `${OOD_DATA_DIR}/raw/knee_ultrasound`
+#       d. Run `unzip -n '${OOD_DATA_DIR}/raw/knee_ultrasound/image/ultrasound/*.zip'`
+```
+
+#### 4. Process all datasets
+```
+python -m src.data_prep.scripts.prep_ood_us_dataset process_datasets
+```

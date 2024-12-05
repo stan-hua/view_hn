@@ -13,36 +13,57 @@
 # Load any necessary modules or activate your virtual environment here
 micromamba activate view
 
-# EXP_NAME=exp_param_sweep-augment_smaller_crops-include_all
-# EXP_NAME=exp_gradcam_loss-all_class-only_segmented_from_supervised_moco
-# EXP_NAME=exp_gradcam_loss-all_class-only_segmented_from_supervised
-EXP_NAME=exp_gradcam_loss-all_class-only_segmented_from_scratch
-# EXP_NAME=exp_perf_drop-remove_sag_not_cluster
-# EXP_NAME=exp_ssl_pretrain-moco_supervised-no_seed__linear__plane__finetuned__aug
+# EXP_NAME=exp_param_sweep-supervised_baseline-with_zoomout
+# EXP_NAME=exp_penalize_other-supervised_baseline-with_other-penalize_other
+# EXP_NAME=exp_penalize_other-supervised_baseline-with_other-penalize_other-ent_loss
 
-# --dset = "train" "val" "test" "stanford" "uiowa" "chop" "stanford_image" "sickkids_silent_trial"
+# EXP_NAME=exp_param_sweep-supervised_baseline-only_orig
+EXP_NAME=exp_param_sweep-supervised_baseline-only_beamform
+
+# EXP_NAME=exp_from_imagenet-only_beamform
+# EXP_NAME=exp_ssl_pretrain-tcl-per_class_gmm-only_beamform
+# EXP_NAME=finetuned_moco_large_crop-only_beamform
+# EXP_NAME=finetuned_moco_supervised_large_crop-only_beamform
+# EXP_NAME=finetuned_byol-only_beamform.ini
+
+# EXP_NAME=exp_ssl_pretrain-tcl-per_class_gmm-only_beamform-val_fix-large_crop
+# EXP_NAME=exp_ssl_pretrain-tcl-per_class_gmm-only_beamform-large_crop-long_warmup
+
+# Best/Last Checkpoint
+CKPT_OPTION="best"
+
+################################################################################
+#                               Model Evaluation                               #
+################################################################################
+# --dset = "sickkids" "stanford" "sickkids_beamform" "stanford_beamform" "sickkids_image" "sickkids_silent_trial" "stanford_image" "uiowa" "chop"
 
 # Evaluate model
 srun python -m src.scripts.model_eval \
     --exp_name $EXP_NAME \
-    --dsets "sickkids" "sickkids_silent_trial" \
-    --splits "val" "test" \
+    --dsets "sickkids_beamform" "sickkids_image"\
+    --label_blacklist "Other" \
+    --splits "val" "val" \
+    --ckpt_option $CKPT_OPTION \
+    --da_transform_name "clahe" \
     --log_to_comet
 
-# Evaluate DA transform
-# srun python -m src.scripts.model_eval \
-#     --exp_name $EXP_NAME \
-#     --dset "sickkids_silent_trial" \
-#     --da_transform_name "fda" \
+srun python -m src.scripts.model_eval \
+    --exp_name $EXP_NAME \
+    --dsets "sickkids_beamform" "stanford_beamform" \
+    --label_blacklist "Other" \
+    --splits "test" \
+    --ckpt_option $CKPT_OPTION \
+    --da_transform_name "clahe" \
+    --log_to_comet
 
 ################################################################################
 #                                   GradCAM                                    #
 ################################################################################
 # Create GradCAM
-srun python -m src.data_viz.grad_cam \
-    --exp_names $EXP_NAME \
-    --dsets "sickkids" "sickkids_silent_trial" \
-    --splits "val" "test"
+# srun python -m src.data_viz.grad_cam \
+#     --exp_names $EXP_NAME \
+#     --dsets "sickkids" "sickkids_beamform" "sickkids_image" \
+#     --splits "val"
 
 # "val" "uiowa" "chop" \
 #            "stanford_image" "sickkids_silent_trial" \
