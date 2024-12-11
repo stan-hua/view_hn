@@ -5,29 +5,94 @@ Description: Script to prepare image and metadata for OOD-US dataset
 
 Note
 ----
-The following datasets are used to create the "Ultrasound Out-Of-View Dataset"
-
-Partially Unseen OOD:
-1. Neck Ultrasound (1K images)
-    1. Adult [Thyroid dataset](https://www.kaggle.com/datasets/dasmehdixtr/ddti-thyroid-ultrasound-images) (480 US images)
-    2. [Nerve dataset](https://www.kaggle.com/c/ultrasound-nerve-segmentation/data) (8K US images)
-2. Breast Ultrasound (1K images)
-    1. Adult [BUSI dataset](https://www.kaggle.com/datasets/aryashah2k/breast-ultrasound-images-dataset) (1.57K US images)
-3. Lung Ultrasound (1K images)
-    1. Adult [COVID POCUS](https://github.com/jannisborn/covid19_ultrasound) dataset (200 US videos; US images)
-4. Abdominal Ultrasound (1K images)
-    1. [Pediatric Appendix](https://www.kaggle.com/datasets/joebeachcapital/regensburg-pediatric-appendicitis) (2.1K US images; appendix)
-    2. Adult [USNotAI](https://github.com/LeeKeyu/abdominal_ultrasound_classification) (360 US images; bladder, kidney, bowel, gallbladder, liver, spleen)
-5. Knee Ultrasound (1K images)
-    1. Adult (35-70 years) [Knee Ultrasound](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/SKP9IB) (>15K US images; knee)
-6. Pelvic Ultrasound (1K images)
-    1. [Adult ovarian ultrasound dataset](https://figshare.com/articles/dataset/_zip/25058690?file=44222642) (1.2K US images; pelvis)
-7. Fetal Ultrasound (1K images)
-    1. [Fetal Planes dataset](https://zenodo.org/records/3904280) (12K US images; abdomen, brain, femur and thorax)
-
-Held-Out Unseen OOD Datasets:
+The following datasets are used to create the "POCUS Out-Of-View Dataset"
 1. [POCUS Atlas](https://www.thepocusatlas.com/) (1.7K videos)
-2. [Clarius Clinical Gallery](https://clarius.com/about/clinical-gallery/)
+    - CC BY-NC 4.0 - needs attribution and cannot be used for commercial purposes
+    - NOTE: OOD between adult vs. pediatric data
+2. [USEnhance dataset - Thyroid / Carotid Artery / Breast / Liver / Kidney](https://ultrasoundenhance2023.grand-challenge.org/ultrasoundenhance2023/) (_ images, _ patients)
+    - Unknown license, made publicly available
+    - NOTE: OOD between high vs. low quality ultrasound machines
+3. Simulated Ultrasound Noise Dataset
+    - NOTE: Simulate by generating artificial speckle noise and applying different cone/rectangle masks in the center
+    - NOTE: Can insert background information from images
+
+- TODO: Consider simulating multiple images in one pane
+- TODO: Consider using MixUp between outliers
+- TODO: Consider impact of removed background details
+
+
+The following datasets are used to create the "Ultrasound Out-Of-View Dataset"
+1. Brain Ultrasound
+    1. [ReMIND dataset](https://www.cancerimagingarchive.net/collection/remind/) (342=3x114 3D iUS videos, 114 patients)
+        - CC BY 4.0 - needs attribution but can be used commercially
+        - NOTE: OOD against unseen age/sex/race/histopathology
+        - 3 sequences per patient: a) before dural opening, b) after dural opening, and c) before intraoperative MRI
+            - Before Dural Opening (less clear because of dura)
+            - After Dural Opening (more clear but brain shift can occur)
+            - Before Intraoperative MRI (part of tumor has been resected by this point)
+2. Neck Ultrasound (1K images)
+    # TODO: 1. [Thyroid TN3K dataset](https://github.com/haifangong/TRFE-Net-for-thyroid-nodule-segmentation) (3493 images, 2421 patients)
+        - MIT License
+    # TODO: 2.[Carotid Artery](https://data.mendeley.com/datasets/d4xt63mgjm/1) (1100 images, 11 patients)
+        - CC BY-NC 4.0 - needs attribution and cannot be used for commercial purposes
+3. Breast Ultrasound (1K images)
+    # TODO: 1. [Breast-Lesions-USG dataset](https://www.cancerimagingarchive.net/collection/breast-lesions-usg/) (498 images, 500 patients)
+        - CC BY 4.0 - needs attribution but can be used commercially
+        - NOTE: Can be used to see if OOD detection can bias between unseen datasets
+    # TODO: 2. [BUS-BRA dataset](https://zenodo.org/records/8231412) (1875 images, 1064 patients)
+        - NOTE: Need to cite original paper (DOI: 10.1002/mp.16812)
+    # TODO: 3. [BUS-UCLM dataset](https://data.mendeley.com/datasets/7fvgj4jsp7/2) (683 images, 38 patients)
+        - CC BY-NC 4.0 - needs attribution and cannot be used for commercial purposes
+4. Heart Ultrasound
+    # TODO: 1. [CardiacUDA dataset](https://www.kaggle.com/datasets/xiaoweixumedicalai/cardiacudc-dataset) (992 videos, 100 patients)
+        - Apache 2.0 - needs copy of license and changelist when re-distributing
+    # TODO: 2. [CAMUS dataset](https://www.creatis.insa-lyon.fr/Challenge/camus/index.html) (1000 videos, 500 patients)
+        - TODO: Get data license
+        - NOTE: Need to cite original paper (DOI: 10.1109/TMI.2019.2900516)
+5. Lung Ultrasound (1K images)
+    1. Adult [COVID POCUS](https://github.com/jannisborn/covid19_ultrasound) dataset (200 videos; images)
+        - Scraped data, unknown attribution
+        - NOTE: Can be used to see if OOD detection is affected by frame rate
+6. Abdominal Ultrasound (1K images)
+    1. [Pediatric Appendix](https://www.kaggle.com/datasets/joebeachcapital/regensburg-pediatric-appendicitis) (2.1K images; appendix)
+        - CC BY-NC 4.0 - needs attribution and cannot be used for commercial purposes
+    2. Adult [USNotAI](https://github.com/LeeKeyu/abdominal_ultrasound_classification) (360 images; bladder, kidney, bowel, gallbladder, liver, spleen)
+        - Unknown license, made publicly available
+    # TODO: 3. [B-mode-and-CEUS-Liver](https://www.cancerimagingarchive.net/collection/b-mode-and-ceus-liver/) (~600 images, 120 patients)
+        - NOTE: Get first half of photos without dual ultrasound
+    # TODO: 4. [Liver Ultrasound Tracking](https://clust.ethz.ch/data.html) (63 images, 60 patients)
+7. Extremities (Arms / Knee / Legs) Ultrasound (1K images)
+    1. Adult (35-70 years) [Knee Ultrasound](https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/SKP9IB) (>15K images; knee)
+        - CC0 1.0 Universal: Public Domain
+        - NOTE: Can be used to see if OOD detection can has differences between seen/unseen knee views
+    # TODO: 2. Adult [Biceps / Lower Leg Ultrasound](https://data.mendeley.com/datasets/3jykz7wz8d/1) (3917 images, 1283 patients)
+        - CC BY-NC 4.0 - needs attribution and cannot be used for commercial purposes
+8. Pelvic Ultrasound (1K images)
+    1. [Adult ovarian ultrasound dataset](https://figshare.com/articles/dataset/_zip/25058690?file=44222642) (1.2K images; pelvis)
+        - CC BY 4.0 - needs attribution but can be used commercially
+    # TODO: 2. [Prostate Ultrasound](https://zenodo.org/records/10475293) (75 videos, 75 patients)
+        - NOTE: Need to cite paper (DOI: 10.1016/j.compmedimag.2024.102326)
+9. Fetal Ultrasound (1K images)
+    1. [Fetal Planes dataset](https://zenodo.org/records/3904280) (12K images; abdomen, brain, femur and thorax)
+        - CC BY 4.0 - needs attribution but can be used commercially
+        - NOTE: Can be used to see if OOD detection can has differences between seen/unseen plane views
+    # TODO: 2. [PSFHS dataset](https://ps-fh-aop-2023.grand-challenge.org/) (4000 images, 305 patients)
+        - NOTE: Can be used to see if OOD detection can has differences between seen/unseen plane views
+
+
+Excluded Because of License:
+1. [Nerve dataset](https://www.kaggle.com/c/ultrasound-nerve-segmentation/data) (8K images)
+    - Cannot be used outside of the competition
+
+Excluded Because of Data Size:
+1. [Clarius Clinical Gallery](https://clarius.com/about/clinical-gallery/)
+2. Adult [Thyroid dataset](https://www.kaggle.com/datasets/dasmehdixtr/ddti-thyroid-ultrasound-images) (480 images)
+    - "Open Access" - unknown license
+
+Excluded Because of Data Quality:
+1. Adult [BUSI dataset](https://www.kaggle.com/datasets/aryashah2k/breast-ultrasound-images-dataset) (1.57K images, 600 patients)
+    - CC0 1.0 Universal: Public Domain
+    - Letter on BUSI dataset issues (https://www.sciencedirect.com/science/article/pii/S2352340923003669?via%3Dihub#sec0009)
 """
 
 # Standard libraries
@@ -36,14 +101,17 @@ import os
 import random
 import shutil
 import urllib.request
+import re
 import requests
 import zipfile
+from collections import deque
 from glob import glob
 from urllib.error import HTTPError
 
 # Non-standard libraries
 import cv2
 import kagglehub
+import numpy as np
 import pandas as pd
 import shortuuid
 from bs4 import BeautifulSoup
@@ -81,9 +149,12 @@ CLEAN_DSETS = [
 # Mapping of dataset name to directories
 DATASET_TO_DIR = {
     "raw": {
-        "neck_thyroid": os.path.join(RAW_DATA_DIR, "ddti-thyroid-ultrasound-images"),
-        "neck_nerve": os.path.join(RAW_DATA_DIR, "ultrasound-nerve-segmentation"),
+        "brain": os.path.join(RAW_DATA_DIR, "ReMIND"),
+        "neck_thyroid_tn3k": os.path.join(RAW_DATA_DIR, "tn3k"),
+        # "neck_thyroid_ddti": os.path.join(RAW_DATA_DIR, "ddti-thyroid-ultrasound-images"),
+        # "neck_nerve": os.path.join(RAW_DATA_DIR, "ultrasound-nerve-segmentation"),
         "breast": os.path.join(RAW_DATA_DIR, "breast-ultrasound-images-dataset"),
+        "heart": os.path.join(RAW_DATA_DIR, "cardiacudc-dataset"),
         "lung": os.path.join(RAW_DATA_DIR, "covid19_lung_ultrasound"),
         "abdominal_appendix": os.path.join(RAW_DATA_DIR, "regensburg-pediatric-appendicitis"),
         "abdominal_organs": os.path.join(RAW_DATA_DIR, "abdominal_ultrasound_classification"),
@@ -96,9 +167,12 @@ DATASET_TO_DIR = {
         "clarius": os.path.join(RAW_DATA_DIR, "clarius"),
     },
     "clean": {
-        "neck_thyroid": os.path.join(CLEAN_DATA_DIR, "neck"),
-        "neck_nerve": os.path.join(CLEAN_DATA_DIR, "neck"),
+        "brain": os.path.join(CLEAN_DATA_DIR, "brain"),
+        "neck_thyroid_tn3k": os.path.join(CLEAN_DATA_DIR, "neck"),
+        # "neck_thyroid_ddti": os.path.join(CLEAN_DATA_DIR, "neck"),
+        # "neck_nerve": os.path.join(CLEAN_DATA_DIR, "neck"),
         "breast": os.path.join(CLEAN_DATA_DIR, "breast"),
+        "heart": os.path.join(CLEAN_DATA_DIR, "heart"),
         "lung": os.path.join(CLEAN_DATA_DIR, "lung"),
         "abdominal_appendix": os.path.join(CLEAN_DATA_DIR, "abdomen"),
         "abdominal_organs": os.path.join(CLEAN_DATA_DIR, "abdomen"),
@@ -109,6 +183,9 @@ DATASET_TO_DIR = {
         # Held-out test sets
         "pocus_atlas": os.path.join(CLEAN_DATA_DIR, "pocus_atlas"),
         "clarius": os.path.join(CLEAN_DATA_DIR, "clarius"),
+
+        # Background
+        "background": os.path.join(CLEAN_DATA_DIR, "background"),
     }
 }
 
@@ -128,23 +205,29 @@ def download_datasets(*organs):
     print(f"[OOD Ultrasound] Starting download for the following organs: {organs}")
 
     # Mapping of organ to download method
+    # TODO: Add brain
     download_map = {
-        "neck_thyroid": {
-            "func": download_kaggle,
-            "kwargs": {
-                "kaggle_path": "dasmehdixtr/ddti-thyroid-ultrasound-images",
-                "data_type": "dataset",
-                "save_dir": RAW_DATA_DIR,
-            }
+        "neck_thyroid_tn3k": {
+            "func": download_neck_thyroid_tn3k_ultrasound,
         },
-        "neck_nerve": {
-            "func": download_kaggle,
-            "kwargs": {
-                "kaggle_path": "ultrasound-nerve-segmentation",
-                "data_type": "competition",
-                "save_dir": RAW_DATA_DIR,
-            }
-        },
+        # NOTE: DDTI replaced with TN3K
+        # "neck_thyroid_ddti": {
+        #     "func": download_kaggle,
+        #     "kwargs": {
+        #         "kaggle_path": "dasmehdixtr/ddti-thyroid-ultrasound-images",
+        #         "data_type": "dataset",
+        #         "save_dir": RAW_DATA_DIR,
+        #     }
+        # },
+        # NOTE: No longer used due to license
+        # "neck_nerve": {
+        #     "func": download_kaggle,
+        #     "kwargs": {
+        #         "kaggle_path": "ultrasound-nerve-segmentation",
+        #         "data_type": "competition",
+        #         "save_dir": RAW_DATA_DIR,
+        #     }
+        # },
         "breast": {
             "func": download_kaggle,
             "kwargs": {
@@ -152,6 +235,10 @@ def download_datasets(*organs):
                 "data_type": "dataset",
                 "save_dir": RAW_DATA_DIR,
             }
+        },
+        # TODO: Fix  this
+        "heart": {
+            "func": None,
         },
         "lung": {
             "func": download_covid19_ultrasound,
@@ -196,9 +283,9 @@ def download_datasets(*organs):
         "pocus_atlas": {
             "func": download_pocus_atlas,
         },
-        "clarius": {
-            "func": download_clarius,
-        },
+        # "clarius": {
+        #     "func": download_clarius,
+        # },
     }
 
     # If no organs specified, then download all
@@ -219,6 +306,43 @@ def download_datasets(*organs):
             *download_map[organ].get("args", []),
             **download_map[organ].get("kwargs", {}),
         )
+
+
+def download_brain_ultrasound(save_dir=None):
+    """
+    Manually download 3D adult brain ultrasound data from TCIA
+
+    Parameter
+    ---------
+    save_dir : str
+        Path to directory to save images
+    """
+    save_dir = save_dir if save_dir else DATASET_TO_DIR["raw"]["brain"]
+
+    raise NotImplementedError(
+        "TCIA does NOT support automated downloads for the ReMIND (brain ultrasound) dataset!\n"
+        "Please download the dataset at: https://www.cancerimagingarchive.net/collection/remind/\n"
+        f"Using the NBIA, download only the ultrasound DICOM files and metadata to `{save_dir}`"
+    )
+
+
+def download_neck_thyroid_tn3k_ultrasound(save_dir=None):
+    """
+    Manually download neck thyroid ultrasound data from Google Drive
+
+    Parameter
+    ---------
+    save_dir : str
+        Path to directory to save images
+    """
+    save_dir = save_dir if save_dir else DATASET_TO_DIR["raw"]["neck_thyroid_tn3k"]
+
+    raise NotImplementedError(
+        "Neck Thyroid TN3K dataset does NOT support automated downloads!\n"
+        "Please download the dataset at: https://drive.google.com/file/d/1reHyY5eTZ5uePXMVMzFOq5j3eFOSp50F/view?usp=sharing\n"
+        f"And extract `Thyroid Dataset/tn3k` folder to `{save_dir}`\n\n"
+        "For more details, refer to the GitHub page: https://github.com/haifangong/TRFE-Net-for-thyroid-nodule-segmentation/"
+    )
 
 
 def download_covid19_ultrasound(save_dir=None):
@@ -396,6 +520,7 @@ def download_pocus_atlas(save_dir=None):
     df_metadata.to_csv(orig_metadata_path, index=False)
 
 
+# NOTE: The following function is provided not used
 def download_clarius(save_dir=None):
     """
     Download GIFs from Clarius Clinical Gallery (https://clarius.com/about/clinical-gallery/)
@@ -498,7 +623,7 @@ def download_clarius(save_dir=None):
 ################################################################################
 #                    Processing Functions (Image Datasets)                     #
 ################################################################################
-def process_datasets(*organs, aggregate=False):
+def process_datasets(*organs, overwrite=False, aggregate=False):
     """
     Processes downloaded ultrasound datasets using predefined processing functions.
 
@@ -532,11 +657,172 @@ def process_datasets(*organs, aggregate=False):
     print(f"[OOD Ultrasound] Processing data for the following organs: {list(organs)}")
     for organ in organs:
         print(f"Processing dataset: {organ}")
-        process_map[organ]()
+        process_map[organ](overwrite=overwrite)
 
     # If specified, aggregate all clean datasets
     if aggregate:
         aggregate_processed_datasets()
+
+
+def process_brain_dataset(data_dir=None, save_dir=None, seed=SEED, overwrite=False):
+    """
+    Process the Ultrasound Brain dataset from TCIA.
+
+    Parameters
+    ----------
+    data_dir : str
+        Directory containing the downloaded dataset.
+    save_dir : str
+        Directory to store the processed dataset.
+    seed : int, optional
+        Random seed for reproducibility, by default SEED.
+    overwrite : bool, optional
+        If False, skip processing if the dataset already exists, by default False
+    """
+    dataset_name = "Brain - ReMIND"
+    dataset_key = "brain"
+
+    # Set default directories
+    data_dir = data_dir if data_dir else DATASET_TO_DIR["raw"][dataset_key]
+    save_dir = save_dir if save_dir else DATASET_TO_DIR["clean"][dataset_key]
+
+    # Set seed for reproducibility
+    random.seed(seed)
+
+    # Create image and metadata subdirectories
+    video_subdir = os.path.join(save_dir, "video")
+    metadata_subdir = os.path.join(save_dir, "metadata")
+    os.makedirs(video_subdir, exist_ok=True)
+    os.makedirs(metadata_subdir, exist_ok=True)
+
+    # If overwriting, delete existing images
+    if overwrite:
+        cleanup_img_dir(video_subdir)
+
+    # Load metadata
+    df_metadata = pd.read_excel(
+        os.path.join(data_dir, "ReMIND-Dataset-Clinical-Data-September-2023.xlsx"),
+        sheet_name=0,
+    )
+
+    # Rename columns
+    df_metadata = df_metadata.rename(columns={
+        'Case Number': "patient_id",
+        'Age': "age",
+        'Sex': "sex",
+        'Race': "race",
+        'Laterality': "side",
+        'WHO Grade': "who_grade",
+        'Histopathology': "histopathology",
+    })
+
+    # Prepare metadata
+    # Set aside patients for test set
+    accum_test = []
+    # 1. Patients with rare histopathology diagnosis
+    common_histo = ["Astrocytoma", "Glioblastoma", "Oligodendroglioma"]
+    common_histo_mask = df_metadata["histopathology"].isin(common_histo)
+    accum_test.append(df_metadata[~common_histo_mask])
+    df_metadata = df_metadata[common_histo_mask]
+    # 2. The few Asian patients
+    asian_mask = df_metadata["race"] == "Asian"
+    accum_test.append(df_metadata[asian_mask])
+    df_metadata = df_metadata[~asian_mask]
+
+    # Sample 20 patients for training / calibration set, rest is for testing
+    # NOTE: Stratifying by 5 age bins and by sex
+    df_metadata["age_bin"] = pd.cut(df_metadata["age"], bins=5)
+    df_train_calib = df_metadata.groupby(["age_bin", "sex"]).sample(n=2, random_state=seed)
+    accum_test.append(df_metadata[~df_metadata.index.isin(df_train_calib.index)])
+
+    # Create test set from accumulated patients
+    df_test = pd.concat(accum_test, ignore_index=True)
+
+    # Add splits then recombine
+    df_train_calib["split"] = None
+    df_test["split"] = "test"
+    df_metadata = pd.concat([df_train_calib, df_test], ignore_index=True)
+    # Add dataset
+    df_metadata["dset"] = f"{dataset_key}-ReMIND"
+    # Add organ
+    df_metadata["view"] = "brain"
+
+    # Get DICOM paths
+    dicom_paths = glob(os.path.join(data_dir, "ReMIND-*", "*", "*", "*.*"))
+
+    # Extract patient ID and stage
+    df_dicoms = pd.DataFrame({"old_video_path": dicom_paths})
+    local_path = df_dicoms["old_video_path"].map(lambda x: x.split(data_dir + os.path.sep)[-1])
+    # NOTE: Example path: 'ReMIND-001/12-25-1982-NA-Intraop-90478/1.000000-USpredura-64615/1-1.dcm'
+    df_dicoms["patient_id"] = local_path.map(lambda x: x.split(os.path.sep)[0].split("-")[1]).astype(int)
+    # Map stage to integer (pre-dural=1, post-dural=2, pre-iMRI=3)
+    map_stage = {"USpredura": 1, "USpostdura": 2, "USpreimri": 3}
+    df_dicoms["stage"] = local_path.map(lambda x: map_stage[x.split(os.path.sep)[-2].split("-")[1]])
+    # Create new identifier for each video using patient ID and stage when US was taken
+    df_dicoms["video_id"] = dataset_key + "-" + df_dicoms["patient_id"].astype(str) + "-" + df_dicoms["stage"].astype(str)
+
+    # Join DICOM files to metadata
+    df_metadata_dicom = merge_tables(df_dicoms, df_metadata, on="patient_id")
+
+    # Convert each DICOM video into image frames.
+    # NOTE: Sample 15 frames per video
+    accum_old_metadata = {"num_frames": []}
+    accum_new_metadata = {"id": [], "video_id": [], "path": []}
+    for idx in tqdm(range(len(df_metadata_dicom))):
+        row = df_metadata_dicom.iloc[idx]
+        local_path = row["old_video_path"]
+        video_idx = row["video_id"]
+        # Create subdirectory for this video's frames
+        curr_video_subdir = os.path.join(video_subdir, video_idx)
+        os.makedirs(curr_video_subdir, exist_ok=True)
+        # Get at most 15 DICOM video frames
+        frames_paths = convert_dicom_to_frames(
+            local_path, curr_video_subdir, f"{video_idx}-",
+            uniform_num_samples=15,
+            overwrite=overwrite)
+        num_frames = len(frames_paths)
+        # Create indices for each frame/image
+        frame_indices = [f"{video_idx}-{i+1}" for i in range(num_frames)]
+        accum_new_metadata["id"].extend(frame_indices)
+        accum_new_metadata["video_id"].extend([video_idx] * num_frames)
+        # Store new path
+        accum_new_metadata["path"].extend([remove_home_dir(x) for x in frames_paths])
+        # Store number of frames
+        accum_old_metadata["num_frames"].append(num_frames)
+
+    # Remove home directory from old paths
+    df_metadata_dicom["old_video_path"] = df_metadata_dicom["old_video_path"].map(lambda x: remove_home_dir(x))
+    # Store number of frames for each video
+    df_metadata_dicom["num_frames"] = accum_old_metadata["num_frames"]
+
+    # Save dataframe of old metadata to new path
+    df_old_new = df_metadata_dicom[["old_video_path", "video_id", "num_frames"]]
+    df_old_new.to_csv(os.path.join(metadata_subdir, f"{dataset_key}-old_file_mapping.csv"), index=False)
+
+    # Join new metadata back to metadata table and keep specific columns
+    df_new_metadata = pd.DataFrame(accum_new_metadata)
+    df_new_metadata = merge_tables(df_new_metadata, df_metadata_dicom, on="video_id")
+    cols = [
+        "dset", "split", "id", "video_id", "patient_id", "path", "view", "stage",
+        "age", "sex", "race", "side", "histopathology",
+    ]
+    df_new_metadata = df_new_metadata[cols]
+
+    # Save new metadata dataframe
+    df_new_metadata.to_csv(os.path.join(metadata_subdir, f"{dataset_key}-metadata.csv"), index=False)
+
+    # Create a text file with the provenance
+    write_provenance_file(
+        dataset_name, metadata_subdir,
+        {
+            "Source":  "The Cancer Imaging Archive (TCIA)",
+            "URL": "https://www.cancerimagingarchive.net/collection/remind/",
+            "Seed": seed,
+            "(Before) Number of Videos": len(df_metadata),
+            "(After) Number of Images": len(df_new_metadata),
+        }
+    )
+    print(f"[{dataset_name}] Dataset creation started...DONE")
 
 
 def process_neck_datasets(overwrite=False):
@@ -548,7 +834,7 @@ def process_neck_datasets(overwrite=False):
     overwrite : bool, optional
         If True, overwrite existing processed data
     """
-    clean_neck_dir = DATASET_TO_DIR["clean"]["neck_thyroid"]
+    clean_neck_dir = DATASET_TO_DIR["clean"]["neck_thyroid_tn3k"]
     metadata_dir = os.path.join(clean_neck_dir, "metadata")
 
     # Remove provenance before redoing
@@ -556,9 +842,11 @@ def process_neck_datasets(overwrite=False):
     if os.path.exists(provenance_path):
         os.remove(provenance_path)
 
-    # Process both neck and thyroid datasets
-    process_neck_thyroid_dataset(overwrite=overwrite)
-    process_neck_nerve_dataset(overwrite=overwrite)
+    # Process thyroid dataset
+    process_neck_thyroid_tn3k_dataset(overwrite=overwrite)
+    # NOTE: No longer included
+    # process_neck_thyroid_ddti_dataset(overwrite=overwrite)
+    # process_neck_nerve_dataset(overwrite=overwrite)
 
     # Check that metadata directory exists
     assert os.path.exists(metadata_dir), "Metadata directory does not exist!"
@@ -591,16 +879,9 @@ def process_neck_datasets(overwrite=False):
     print("[Neck] Finished processing both Thyroid & Nerve datasets")
 
 
-def process_neck_thyroid_dataset(data_dir=None, save_dir=None, seed=SEED, overwrite=False):
+def process_neck_thyroid_tn3k_dataset(data_dir=None, save_dir=None, seed=SEED, overwrite=False):
     """
-    Process the Neck Thyroid Ultrasound dataset from Kaggle.
-
-    Note
-    ----
-    The dataset is downloaded using `kagglehub`. The dataset is processed by
-    randomly selecting 1 image per case ID. The images are stored in the
-    `images` subdirectory and the metadata is stored in the `metadata`
-    subdirectory.
+    Process the TN3K: Neck Thyroid Ultrasound dataset from GitHub/Google Drive.
 
     Parameters
     ----------
@@ -613,8 +894,8 @@ def process_neck_thyroid_dataset(data_dir=None, save_dir=None, seed=SEED, overwr
     overwrite : bool, optional
         If False, skip processing if the dataset already exists, by default False
     """
-    dataset_name = "Neck - Thyroid"
-    dataset_key = "neck_thyroid"
+    dataset_name = "Neck - Thyroid (TN3K)"
+    dataset_key = "neck_thyroid_tn3k"
 
     # Set default directories
     data_dir = data_dir if data_dir else DATASET_TO_DIR["raw"][dataset_key]
@@ -633,96 +914,25 @@ def process_neck_thyroid_dataset(data_dir=None, save_dir=None, seed=SEED, overwr
     if overwrite:
         cleanup_img_dir(img_subdir)
 
-    # Get all the XML files that correspond to each case
-    xml_paths = glob(os.path.join(data_dir, "versions", "1", "*.xml"))
-    orig_img_paths = glob(os.path.join(data_dir, "versions", "1", "*.jpg"))
+    # Get all images
+    train_img_paths = glob(os.path.join(data_dir, "trainval-image", "*.jpg"))
+    test_img_paths = glob(os.path.join(data_dir, "test-image", "*.jpg"))
 
-    # Convert each XML file to a case ID
-    case_ids = [os.path.basename(xml_path).split(".")[0] for xml_path in xml_paths]
+    # From training images, sample 600 images
+    sampled_train_img_paths = random.sample(train_img_paths, 600)
+    # Final dataset contains 600 from training set and remaining from test set
+    sampled_img_paths = sampled_train_img_paths + test_img_paths
 
-    # If a patient has multiple images, only select one
-    sampled_img_paths = []
-    for case_id in tqdm(case_ids):
-        jpeg_paths = glob(os.path.join(data_dir, "versions", "1", f"{case_id}*.jpg"))
-        # If more than 1 JPEG image, randomly choose 1
-        if len(jpeg_paths) > 1:
-            jpeg_paths = random.sample(jpeg_paths, 1)
-        sampled_img_paths.append(jpeg_paths[0])
+    # Create splits, only for test split
+    # NOTE: The remaining data will be split between train and calibration
+    splits = [None] * len(sampled_train_img_paths)
+    splits.extend(["test"] * len(test_img_paths))
 
-    # Add metadata for view (organ)
-    extra_metadata_cols = {"view": ["thyroid"] * len(sampled_img_paths)}
-
-    # Save sampled images as PNG
-    df_metadata = re_anonymize_and_save_as_png(
-        sampled_img_paths, dataset_key, img_subdir, metadata_subdir,
-        overwrite=overwrite,
-        **extra_metadata_cols,
-    )
-
-    # Create a text file with the provenance
-    write_provenance_file(
-        dataset_name, metadata_subdir,
-        {
-            "Source": "Kaggle",
-            "URL": "https://www.kaggle.com/datasets/dasmehdixtr/ddti-thyroid-ultrasound-images",
-            "Seed": seed,
-            "(Before) Number of Images": len(orig_img_paths),
-            "(After) Number of Images": len(df_metadata),
-        }
-    )
-    print(f"[{dataset_name}] Dataset creation started...DONE")
-
-
-def process_neck_nerve_dataset(data_dir=None, save_dir=None, seed=SEED,
-                               overwrite=False, n=500):
-    """
-    Process the Neck Nerve Ultrasound dataset from Kaggle.
-
-    Parameters
-    ----------
-    data_dir : str
-        Directory containing the downloaded dataset.
-    save_dir : str
-        Directory to store the processed dataset.
-    seed : int, optional
-        Random seed for reproducibility, by default SEED.
-    overwrite : bool, optional
-        If True, overwrite existing files, by default False.
-    n : int, optional
-        Number of images to sample, by default 500.
-    """
-    dataset_name = "Neck - Nerve"
-    dataset_key = "neck_nerve"
-
-    # Set default directories
-    data_dir = data_dir if data_dir else DATASET_TO_DIR["raw"]["neck_nerve"]
-    save_dir = save_dir if save_dir else DATASET_TO_DIR["clean"]["neck_nerve"]
-
-    # Set seed for reproducibility
-    random.seed(seed)
-
-    # Create image and metadata subdirectories
-    img_subdir = os.path.join(save_dir, "images")
-    metadata_subdir = os.path.join(save_dir, "metadata")
-    os.makedirs(img_subdir, exist_ok=True)
-    os.makedirs(metadata_subdir, exist_ok=True)
-
-    # If overwriting, delete existing images
-    if overwrite:
-        cleanup_img_dir(img_subdir)
-
-    # Get all the image files
-    print(f"[{dataset_name}] Dataset creation started...")
-    orig_img_paths = glob(os.path.join(data_dir, "train", "*.tif"))
-    orig_img_paths = orig_img_paths + glob(os.path.join(data_dir, "test", "*.tif"))
-    orig_img_paths = filter_paths_for_masks(orig_img_paths)
-
-    # Randomly sample N images
-    sampled_img_paths = random.sample(orig_img_paths, n)
-    print(f"[{dataset_name}] Sampling {n}/{len(orig_img_paths)} images...")
-
-    # Add metadata for view (organ)
-    extra_metadata_cols = {"view": ["neck_nerve"] * len(sampled_img_paths)}
+    # Add metadata for view (organ) and split
+    extra_metadata_cols = {
+        "view": ["thyroid"] * len(sampled_img_paths),
+        "split": splits,
+    }
 
     # Save sampled images as PNG
     df_metadata = re_anonymize_and_save_as_png(
@@ -735,10 +945,10 @@ def process_neck_nerve_dataset(data_dir=None, save_dir=None, seed=SEED,
     write_provenance_file(
         dataset_name, metadata_subdir,
         {
-            "Source":  "Kaggle",
-            "URL": "https://www.kaggle.com/c/ultrasound-nerve-segmentation/data",
+            "Source": "GitHub / Google Drive",
+            "URL": "https://github.com/haifangong/TRFE-Net-for-thyroid-nodule-segmentation",
             "Seed": seed,
-            "(Before) Number of Images": len(orig_img_paths),
+            "(Before) Number of Images": len(train_img_paths + test_img_paths),
             "(After) Number of Images": len(df_metadata),
         }
     )
@@ -1435,7 +1645,7 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
         Random seed for reproducibility, by default SEED.
     overwrite : bool, optional
         If True, overwrite existing files, by default False.
-    """
+    """    
     dataset_name = "POCUS Atlas"
     dataset_key = "pocus_atlas"
 
@@ -1446,9 +1656,16 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
     # Set seed for reproducibility
     random.seed(seed)
 
-    # Create image and metadata subdirectories
+    # Create directory paths
     video_subdir = os.path.join(save_dir, "video")
     metadata_subdir = os.path.join(save_dir, "metadata")
+
+    # If overwriting, delete existing images
+    if overwrite and os.path.exists(video_subdir):
+        print(f"[{dataset_name}] Removing existing videos...")
+        cleanup_img_dir(video_subdir)
+
+    # Create directories
     os.makedirs(video_subdir, exist_ok=True)
     os.makedirs(metadata_subdir, exist_ok=True)
     print(f"[{dataset_name}] Dataset creation started...")
@@ -1458,6 +1675,8 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
 
     # Get all the video files
     local_paths = df_metadata["local_save_path"].map(lambda x: os.path.join(RAW_DATA_DIR, x)).tolist()
+
+
 
     # Convert each video into image frames
     accum_old_new_mapping = {"old_video_path": [], "new_video_id": [], "num_frames": []}
@@ -1481,9 +1700,12 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
         os.makedirs(curr_video_subdir, exist_ok=True)
 
         # Convert video to frames
+        # NOTE: Separate foreground/background from ultrasound
         frames_paths = convert_video_to_frames(
             local_path, curr_video_subdir, f"{video_idx}-",
-            overwrite=overwrite)
+            background_dir=DATASET_TO_DIR["clean"]["background"],
+            overwrite=overwrite,
+        )
         num_frames = len(frames_paths)
 
         # Create indices for each frame/image
@@ -1612,6 +1834,7 @@ def download_kaggle(kaggle_path, save_dir=RAW_DATA_DIR, data_type="dataset"):
 
 
 def download_github(repo_owner, repo_name, dir_paths, save_dir=RAW_DATA_DIR,
+                    fname_regex=None,
                     branch="master"):
     """
     Download files from specified folders from GitHub
@@ -1645,6 +1868,10 @@ def download_github(repo_owner, repo_name, dir_paths, save_dir=RAW_DATA_DIR,
         if response.status_code != 200:
             raise RuntimeError(f"Failed to retrieve files from GitHub: `{repo_owner}/{repo_name}/{dir_path}`")
         filenames = [file['name'] for file in response.json() if file['type'] == 'file']
+
+        # If filename regex provided, filter filenames
+        if fname_regex:
+            filenames = [fname for fname in filenames if re.match(fname_regex, fname)]
 
         # Download all files
         for filename in tqdm(filenames):
@@ -1706,6 +1933,22 @@ def remove_home_dir(path):
         Path without home directory
     """
     return path.replace("~/", "").replace(f"{RAW_DATA_DIR}/", "").replace(f"{CLEAN_DATA_DIR}/", "")
+
+
+def cleanup_img_dir(img_dir):
+    """
+    Remove all images in the specified directory if it is empty.
+
+    Parameters
+    ----------
+    img_dir : str
+        Path to the directory containing images to be removed.
+    """
+    if not os.listdir(img_dir):
+        return
+    print(f"Removing images processed from earlier run...")
+    shutil.rmtree(img_dir)
+    print(f"Removing images processed from earlier run...DONE")
 
 
 def write_provenance_file(dataset_name, metadata_dir, text_kwargs):
@@ -1866,7 +2109,11 @@ def try_video_download_all_exts(path, extensions, save_dir):
     return None
 
 
-def convert_video_to_frames(path, save_dir, prefix_fname="", overwrite=False):
+def convert_video_to_frames(
+        path, save_dir, prefix_fname="",
+        background_dir=None,
+        overwrite=False,
+    ):
     """
     Convert video to image frames
 
@@ -1878,6 +2125,8 @@ def convert_video_to_frames(path, save_dir, prefix_fname="", overwrite=False):
         Path to directory to save video
     prefix_fname : str
         Prefix to prepend to all image frames
+    background_dir : str
+        If provided, save extracted background to a directory
     overwrite : bool
         If True, overwrite existing frames, by default False. Otherwise, simply
         return filenames
@@ -1896,38 +2145,153 @@ def convert_video_to_frames(path, save_dir, prefix_fname="", overwrite=False):
         # Recreate filenames
         idx = 1
         paths = [f"{save_dir}/{prefix_fname}{idx+i}.png" for i in range(num_files)]
+        assert (
+            set(paths) == set(os.listdir(save_dir)),
+            f"Unexpected error! Previously extracted video frames have "
+            "unexpected file names. Please delete `{save_dir}`"
+        )
         return paths
 
     # Convert video to frames
     vidcap = cv2.VideoCapture(path)
-    success, image = vidcap.read()
+    success, img_arr = vidcap.read()
     idx = 1
-    converted_imgs = []
+    accum_imgs = []
+    saved_img_paths = []
     while success:
         curr_img_path = f"{save_dir}/{prefix_fname}{idx}.png"
-        cv2.imwrite(curr_img_path, image)
-        success, image = vidcap.read()
+        # Preprocess image and save to path
+        accum_imgs.append(preprocess_and_save_img_array(
+            img_arr,
+            grayscale=False,
+            extract_beamform=True,
+            crop=False,
+            apply_filter=False,
+        ))
+        # Load next image
+        success, img_arr = vidcap.read()
         idx += 1
-        converted_imgs.append(curr_img_path)
+        saved_img_paths.append(curr_img_path)
 
-    return converted_imgs
+    # Early return, if no images extracted
+    if not accum_imgs:
+        return []
+
+    # Separate out ultrasound & non-ultrasound part of sequence
+    # CASE 1: Only 1 image frame
+    if len(accum_imgs) == 1:
+        foreground, background = extract_ultrasound_image_foreground(accum_imgs[0])
+        foreground = [foreground]
+    # CASE 2: Video
+    else:
+        foreground, background = extract_ultrasound_video_foreground(np.array(accum_imgs))
+
+    # Save extracted ultrasound part to save paths
+    for image_idx, save_img_path in enumerate(saved_img_paths):
+        cv2.imwrite(save_img_path, foreground[image_idx])
+
+    # If specified, extract background image
+    if background_dir:
+        # NOTE: Only save if background has at least 25 non-zero pixels
+        if background is not None and (background > 30).sum() > 25:
+            os.makedirs(background_dir, exist_ok=True)
+            cv2.imwrite(f"{background_dir}/{prefix_fname}.png", background)
+
+    return saved_img_paths
 
 
-def cleanup_img_dir(img_dir):
+def convert_dicom_to_frames(
+        path, save_dir, prefix_fname="", grayscale=True,
+        uniform_num_samples=-1,
+        overwrite=False):
     """
-    Remove all images in the specified directory if it is empty.
+    Convert DICOM image/video to 1+ image frames
 
     Parameters
     ----------
-    img_dir : str
-        Path to the directory containing images to be removed.
+    path : str
+        Path to video
+    save_dir : str
+        Path to directory to save video
+    prefix_fname : str
+        Prefix to prepend to all image frames
+    grayscale : bool
+        If True, save as grayscale image.
+    uniform_num_samples : int, optional
+        If DICOM contains a video and this value is > 0, sample uniformly across
+        the number of frames in the video.
+    overwrite : bool
+        If True, overwrite existing frames, by default False. Otherwise, simply
+        return filenames
+
+    Returns
+    -------
+    list of str
+        Path to saved image frames
     """
-    if not os.listdir(img_dir):
-        return
-    print(f"Removing images processed from earlier run...")
-    for img_path in tqdm(os.listdir(img_dir)):
-        os.remove(os.path.join(img_dir, img_path))
-    print(f"Removing images processed from earlier run...DONE")
+    # Lazy import to speed up file loading
+    try:
+        import pydicom
+    except ImportError:
+        raise ImportError(
+            "pydicom is not installed. Please install it using `pip install pydicom`"
+        )
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Simply return filenames if already exists
+    if not overwrite and os.listdir(save_dir):
+        print("[DICOM Conversion] Already exists, skipping...")
+        exist_paths = os.listdir(save_dir)
+        num_files = len(exist_paths)
+        # Recreate filenames
+        paths = [f"{save_dir}/{prefix_fname}{1+i}.png" for i in range(num_files)]
+        assert (
+            set(paths) == set(exist_paths),
+            "Unexpected error! Previously extracted video frames have "
+            f"unexpected file names. Please delete `{save_dir}`"
+        )
+        return paths
+
+    # Load DICOM
+    assert os.path.exists(path), f"DICOM does not exist at path! \n\tPath: {path}"
+    dicom_obj = pydicom.dcmread(path)
+
+    # CASE 1: A single image
+    if not hasattr(dicom_obj, "NumberOfFrames"):
+        img_arr = dicom_obj.pixel_array
+
+        # Preprocess image and save to path
+        preprocess_and_save_img_array(
+            img_arr, grayscale,
+            save_path=f"{save_dir}/{prefix_fname}1.png"
+        )
+
+    # CASE 2: A sequence of image frames
+    num_frames = int(dicom_obj.NumberOfFrames)
+
+    # Get frame indices based on sampling choice
+    img_indices = list(range(num_frames))
+    # 1. Deterministically sample uniformly across the sequence
+    if uniform_num_samples > 0:
+        if uniform_num_samples > num_frames:
+            print("Cannot sample more frames than available! Defaulting to all frames...")
+        # Uniformly sampling
+        else:
+            img_indices = list(np.linspace(0, num_frames-1, uniform_num_samples, dtype=int))
+
+    # Get all image frames and save them
+    converted_imgs = []
+    for idx, arr_idx in enumerate(img_indices):
+        curr_img_path = f"{save_dir}/{prefix_fname}{idx+1}.png"
+        img_arr = dicom_obj.pixel_array[arr_idx]
+
+        # Preprocess image and save to path
+        preprocess_and_save_img_array(
+            img_arr, grayscale,
+            save_path=curr_img_path
+        )
+        converted_imgs.append(curr_img_path)
+    return converted_imgs
 
 
 def create_train_calib_test_splits(df_metadata):
@@ -1940,6 +2304,15 @@ def create_train_calib_test_splits(df_metadata):
     df_metadata : pd.DataFrame
         Cleaned metadata for 1 organ (e.g., abdomen/lung)
     """
+    # Check if split column exists and found splits
+    contains_split_col = "split" in df_metadata.columns.tolist()
+    found_splits = []
+    if contains_split_col:
+        found_splits = df_metadata["split"].unique().tolist()
+        # Skip, if train/calib/test splits already made
+        if len(found_splits) == 3:
+            return df_metadata
+
     # Create copy to avoid in-place modification
     df_metadata = df_metadata.copy()
 
@@ -1952,21 +2325,542 @@ def create_train_calib_test_splits(df_metadata):
     df_metadata = df_metadata.sample(frac=1, random_state=SEED)
     ids = df_metadata[id_col].unique()
 
-    # Set aside 50% for held-out testing
-    test_size = int(0.5 * len(ids))
-    test_ids, other_ids, = ids[:test_size], ids[test_size:]
+    # Add split column if not already present
+    if not contains_split_col:
+        df_metadata["split"] = None
 
-    # Set aside remaining 25% for calibration and 25% for training
-    calib_size = int(0.5 * len(other_ids))
-    calib_ids, train_ids = other_ids[:calib_size], other_ids[calib_size:]
+    # Create test split, if not already done
+    # NOTE: Set aside 50% for held-out testing
+    if "test" not in found_splits:
+        test_size = int(0.5 * len(ids))
+        test_ids = ids[:test_size]
+        test_mask = df_metadata[id_col].isin(test_ids)
+        df_metadata.loc[test_mask, "split"] = "test"
+    other_ids = df_metadata[df_metadata["split"] != "test"][id_col].unique()
 
-    # Assign splits
-    df_metadata["split"] = None
-    for split, ids in [("train", train_ids), ("calib", calib_ids), ("test", test_ids)]:
-        mask = df_metadata[id_col].isin(ids)
-        df_metadata.loc[mask, "split"] = split
+    # Create calibration set split, if not already done
+    if "calib" not in found_splits:
+        calib_size = int(0.5 * len(other_ids))
+        calib_ids = other_ids[:calib_size]
+        calib_mask = df_metadata[id_col].isin(calib_ids)
+        df_metadata.loc[calib_mask, "split"] = "calib"
+
+    # Remaining unassigned samples will be used for training
+    df_metadata["split"] = df_metadata["split"].fillna("train")
+
+    # Sort by image IDs
+    df_metadata = df_metadata.sort_values(id_col, ignore_index=True)
 
     return df_metadata
+
+
+def convert_img_to_uint8(img_arr):
+    """
+    Convert images (e.g., UINT16) to UINT8.
+
+    Parameters
+    ----------
+    img_arr : np.ndarray
+        Image array to be converted.
+
+    Returns
+    -------
+    img_arr : np.ndarray
+        Converted image array.
+    """
+    # CASE 0: Image is already UINT8
+    if img_arr.dtype == np.uint8:
+        return img_arr
+
+    # CASE 1: If image is UINT16, convert to UINT8 by dividing by 256
+    if img_arr.dtype == np.uint16:
+        img_arr = img_arr.astype(np.float32)
+        assert img_arr.max() > 255, f"[UINT16 to UINT8] Image has pixel value > 255! Max: {img_arr.max()}"
+        return np.clip((img_arr / 256), 0, 255).astype(np.uint8)
+    # CASE 2: If image is between 0 and 1, then multiply by 255
+    elif img_arr.min() >= 0 and img_arr.max() <= 1:
+        return np.clip((img_arr * 255), 0, 255).astype(np.uint8)
+
+    # Raise error with unhandled dtype
+    raise NotImplementedError(f"[UINT16 to UINT8] Unsupported image type! dtype: `{img_arr.dtype}`")
+
+
+def preprocess_and_save_img_array(
+        img_arr, grayscale=True, extract_beamform=False,
+        save_path=None, background_save_path=None,
+        **kwargs,
+    ):
+    """
+    Preprocess the input image array by converting it to UINT8 and optionally 
+    ensuring it is in grayscale format.
+
+    Parameters
+    ----------
+    img_arr : np.ndarray
+        Image array to be preprocessed. Expected to be in either UINT16 or 
+        RGB format if conversion is necessary.
+    grayscale : bool, optional
+        If True, ensures the output image is in grayscale format. Default is True.
+    extract_beamform : bool, optional
+        If True, extract ultrasound beamform part from image. Default is False.
+    save_path : str, optional
+        Path to save the preprocessed image array. Default is None.
+    background_save_path : str, optional
+        If `extract_beamform` and provided, save the non-ultrasound part of the image.
+        Default is None.
+    **kwargs : Keyword arguments
+        Additional keyword arguments to be passed to `extract_ultrasound_image_foreground`
+
+    Returns
+    -------
+    np.ndarray
+        The processed image array in UINT8 format and optionally in grayscale.
+    """
+    # Preprocess image
+    # 1. Convert to UINT8
+    img_arr = convert_img_to_uint8(img_arr)
+
+    # If specified, extract beamform part of ultrasound image
+    if extract_beamform:
+        img_arr, background_arr = extract_ultrasound_image_foreground(img_arr, **kwargs)
+        # Save background, if specified
+        if background_save_path:
+            cv2.imwrite(background_save_path, background_arr)
+
+    # 2. Ensure grayscale image, if specified
+    if grayscale and len(img_arr.shape) == 3 and img_arr.shape[2] == 3:
+        img_arr = cv2.cvtColor(img_arr, cv2.COLOR_RGB2GRAY)
+
+    # Save image to file, if specified
+    if save_path:
+        cv2.imwrite(save_path, img_arr)
+
+    return img_arr
+
+
+def is_image_dark(img_arr):
+    """
+    Return True if image is more than 75% of the image is dark/black pixels,
+    and False otherwise
+
+    Parameters
+    ----------
+    img_arr : np.array
+        Image array with pixel values in [0, 255]
+
+    Returns
+    -------
+    bool
+        True if image is dark, False otherwise
+    """
+    # Convert to grayscale if not already
+    if len(img_arr.shape) == 3 and img_arr.shape[2] == 3:
+        img_arr = cv2.cvtColor(img_arr, cv2.COLOR_RGB2GRAY)
+    # Checks if more than 75% of the image is dark pixels
+    return np.mean(img_arr < 30) >= 0.60
+
+
+def extract_ultrasound_video_foreground(img_sequence, apply_filter=True, crop=True):
+    """
+    Split ultrasound video into foreground (ultrasound beamform) and background
+    (unecessary static parts).
+
+    Parameters
+    ----------
+    img_sequence : np.ndarray
+        Image sequence to separate foreground from background. Of shape (N, H, W, C)
+    apply_filter : bool, optional
+        If True, apply median blur filter to image
+    crop : bool, optional
+        If True, return cropped image
+
+    Returns
+    -------
+    (np.ndarray, np.ndarray)
+        (i) Ultrasound video with be beamform extracted of shape (N, H, W)
+        (ii) Non-ultrasound part of image frames of shape (H, W) or None if not
+             exists
+    """
+    img_sequence = img_sequence.astype(np.uint8)
+
+    # Convert to grayscale
+    if len(img_sequence.shape) == 4 and img_sequence.shape[3] == 3:
+        grayscale_imgs = []
+        for idx in range(len(img_sequence)):
+            grayscale_imgs.append(cv2.cvtColor(img_sequence[idx], cv2.COLOR_RGB2GRAY))
+        img_sequence = np.stack(grayscale_imgs, axis=0)
+
+    # Create mask of shape (H, W) that indicates parts of image with no variation
+    dynamic_mask = (np.std(img_sequence, axis=0) != 0)
+    dynamic_mask = (255*dynamic_mask).astype(np.uint8)
+
+    # Use maximum pixel intensity to fill in the mask
+    # NOTE: Bright pixels by the mask should be included
+    max_img = img_sequence.max(0)
+    dynamic_mask = fill_mask(max_img, dynamic_mask, intensity_threshold=15)
+
+    # If specified, use median blur filter to fill in the gaps and remove noise
+    if apply_filter:
+        dynamic_mask = cv2.medianBlur(dynamic_mask, 5)
+        # Convert back to binary mask
+        dynamic_mask = (255*(dynamic_mask > 0)).astype(np.uint8)
+
+    # Split ultrasound video into ultrasound video and non-ultrasound image
+    ultrasound_part, non_ultrasound_part = img_sequence.copy(), img_sequence.copy()
+    ultrasound_part[:, ~dynamic_mask.astype(bool)] = 0
+    non_ultrasound_part[:, dynamic_mask.astype(bool)] = 0
+    # NOTE: Assume that non-ultrasound static part only needs 1 image
+    non_ultrasound_part = non_ultrasound_part[0]
+
+    # Early return, if not cropping
+    if not crop:
+        if non_ultrasound_part.astype(bool).sum() == 0:
+            non_ultrasound_part = None
+        return ultrasound_part, non_ultrasound_part
+
+    # Get tightest crop of ultrasound image
+    y_min, y_max, x_min, x_max = create_tight_crop(dynamic_mask)
+    ultrasound_part = ultrasound_part[:, y_min:y_max, x_min:x_max]
+
+    # Get tightest crop of background information
+    if non_ultrasound_part.astype(bool).sum() > 0:
+        y_min, y_max, x_min, x_max = create_tight_crop(non_ultrasound_part)
+        non_ultrasound_part = non_ultrasound_part[y_min:y_max, x_min:x_max]
+    else:
+        non_ultrasound_part = None
+    return ultrasound_part, non_ultrasound_part
+
+
+def extract_ultrasound_image_foreground(img, apply_filter=True, crop=True):
+    """
+    Split ultrasound image into ultrasound (beamform) and non-ultrasound (unecessary static parts).
+
+    Parameters
+    ----------
+    img : np.ndarray
+        Ultrasound image to separate ultrasound from non-ultrasound part.
+        Of shape (H, W, C) or (H, W)
+    apply_filter : bool, optional
+        If True, apply median blur filter to image
+    crop : bool, optional
+        If True, return cropped image
+
+    Returns
+    -------
+    (np.ndarray, np.ndarray)
+        (i) Cropped ultrasound part of image of shape (?, ?)
+        (ii) Cropped non-ultrasound part of image of shape (?, ?)
+    """
+    middle_idx = img.shape[1] // 2
+
+    # Convert to grayscale and get is colored mask for center column of image
+    is_colored_center_mask = np.zeros_like(len(img), dtype=bool)
+    if len(img.shape) == 3 and img.shape[2] == 3:
+        is_colored_center_mask = (np.std(img[:, middle_idx], axis=1) >= 5)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+    # For center pixels that are greater than 50 and not colored, assume it's part of the mask
+    active_mask = np.zeros_like(img, dtype=bool)
+    active_mask[:, middle_idx] = (img[:, middle_idx] >= 50) & (~is_colored_center_mask)
+
+    # From the center-filled mask, fill in the remaining part of mask
+    active_mask = fill_mask(img, active_mask, intensity_threshold=15)
+
+    # If specified, use median blur filter to fill in the gaps and remove noise
+    if apply_filter:
+        active_mask = cv2.medianBlur(active_mask, 5)
+        # Convert back to binary mask
+        active_mask = (active_mask > 0)
+
+    # Split ultrasound image into ultrasound part and non-ultrasound part
+    active_mask_bool = active_mask.astype(bool)
+    ultrasound_part, non_ultrasound_part = img, img.copy()
+    ultrasound_part[~active_mask_bool] = 0
+    non_ultrasound_part[active_mask_bool] = 0
+
+    # Early return, if not cropping
+    if not crop:
+        if non_ultrasound_part.astype(bool).sum() == 0:
+            non_ultrasound_part = None
+        return ultrasound_part, non_ultrasound_part
+
+    # Get tightest crop of ultrasound image
+    y_min, y_max, x_min, x_max = create_tight_crop(active_mask)
+    ultrasound_part = ultrasound_part[y_min:y_max, x_min:x_max]
+
+    # Get tightest crop of background information
+    if non_ultrasound_part.astype(bool).sum() > 0:
+        y_min, y_max, x_min, x_max = create_tight_crop(non_ultrasound_part)
+        non_ultrasound_part = non_ultrasound_part[y_min:y_max, x_min:x_max]
+    else:
+        non_ultrasound_part = None
+    return ultrasound_part, non_ultrasound_part
+
+
+def fill_mask(image, mask, intensity_threshold=1):
+    """
+    Fill the mask by using the pixel intensity values that are greater than the threshold.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        The ultrasound image.
+    mask : np.ndarray
+        The incomplete mask.
+    intensity_threshold : int, optional
+        The intensity threshold to consider pixels as part of the mask.
+
+    Returns
+    -------
+    np.ndarray
+        The filled mask.
+    """
+    # Convert the image to grayscale if it's not already
+    if len(image.shape) == 3:
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray_image = image
+    # Create a copy of the mask to update
+    filled_mask = mask.copy()
+
+    # Get the coordinates of the initial mask pixels
+    initial_points = np.argwhere(mask > 0)
+
+    # Define the 8-connected neighborhood
+    neighbors = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+    # Use a deque for efficient queue operations
+    queue = deque(initial_points)
+
+    # Region growing algorithm
+    while queue:
+        x, y = queue.popleft()
+        for dx, dy in neighbors:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < gray_image.shape[0] and 0 <= ny < gray_image.shape[1]:
+                if filled_mask[nx, ny] == 0 and gray_image[nx, ny] > intensity_threshold:
+                    filled_mask[nx, ny] = 255
+                    queue.append((nx, ny))
+
+    return filled_mask
+
+
+def create_tight_crop(image):
+    """
+    Get tightest crop that doesn't remove any non-zero pixels
+
+    Parameters
+    ----------
+    image : np.ndarray
+        The image to be cropped.
+
+    Returns
+    -------
+    tuple of int
+        Coordinates to get the tightest crop (y_min, y_max, x_min, x_max)
+        Returns (None, None, None, None) if image has no active pixel
+    """
+    # Find the coordinates of non-zero pixels
+    non_zero_coords = np.argwhere(image > 0)
+
+    # Early return, if image is empty
+    if len(non_zero_coords) == 0:
+        return None, None, None, None
+
+    # Get the bounding box of the non-zero pixels
+    top_left = non_zero_coords.min(axis=0)
+    bottom_right = non_zero_coords.max(axis=0)
+    # Crop the image using the bounding box coordinates
+    y_min, y_max, x_min, x_max = top_left[0], bottom_right[0]+1, top_left[1], bottom_right[1]+1
+    return y_min, y_max, x_min, x_max
+
+
+def merge_tables(left, right, on, how="inner", reset_index=True):
+    """
+    Merge two tables.
+
+    Parameters
+    ----------
+    left : pd.DataFrame
+        First table to merge
+    right : pd.DataFrame
+        Second table to merge
+    on : str
+        Column to join on
+    how : str, optional
+        Join type, by default "inner"
+    reset_index : bool, optional
+        Reset index of merged table, by default True`
+
+    Returns
+    -------
+    pd.DataFrame
+        Merged table
+    """
+    df_all = left.merge(right, how=how, on=on, suffixes=("", "__dup"))
+    df_all = df_all.loc[:, ~df_all.columns.str.endswith('__dup')]
+    if reset_index:
+        df_all = df_all.reset_index(drop=True)
+    return df_all
+
+
+################################################################################
+#                             Deprecated Functions                             #
+################################################################################
+# NOTE: DDTI neck thyroid dataset was replaced by TN3K neck thyroid dataset
+def process_neck_thyroid_ddti_dataset(data_dir=None, save_dir=None, seed=SEED, overwrite=False):
+    """
+    Process the DDTI: Neck Thyroid Ultrasound dataset from Kaggle.
+
+    Note
+    ----
+    The dataset is downloaded using `kagglehub`. The dataset is processed by
+    randomly selecting 1 image per case ID. The images are stored in the
+    `images` subdirectory and the metadata is stored in the `metadata`
+    subdirectory.
+
+    Parameters
+    ----------
+    data_dir : str
+        Directory containing the downloaded dataset.
+    save_dir : str
+        Directory to store the processed dataset.
+    seed : int, optional
+        Random seed for reproducibility, by default SEED.
+    overwrite : bool, optional
+        If False, skip processing if the dataset already exists, by default False
+    """
+    dataset_name = "Neck - Thyroid (Kaggle)"
+    dataset_key = "neck_thyroid_ddti"
+
+    # Set default directories
+    data_dir = data_dir if data_dir else DATASET_TO_DIR["raw"][dataset_key]
+    save_dir = save_dir if save_dir else DATASET_TO_DIR["clean"][dataset_key]
+
+    # Set seed for reproducibility
+    random.seed(seed)
+
+    # Create image and metadata subdirectories
+    img_subdir = os.path.join(save_dir, "images")
+    metadata_subdir = os.path.join(save_dir, "metadata")
+    os.makedirs(img_subdir, exist_ok=True)
+    os.makedirs(metadata_subdir, exist_ok=True)
+
+    # If overwriting, delete existing images
+    if overwrite:
+        cleanup_img_dir(img_subdir)
+
+    # Get all the XML files that correspond to each case
+    xml_paths = glob(os.path.join(data_dir, "versions", "1", "*.xml"))
+    orig_img_paths = glob(os.path.join(data_dir, "versions", "1", "*.jpg"))
+
+    # Convert each XML file to a case ID
+    case_ids = [os.path.basename(xml_path).split(".")[0] for xml_path in xml_paths]
+
+    # If a patient has multiple images, only select one
+    sampled_img_paths = []
+    for case_id in tqdm(case_ids):
+        jpeg_paths = glob(os.path.join(data_dir, "versions", "1", f"{case_id}*.jpg"))
+        # If more than 1 JPEG image, randomly choose 1
+        if len(jpeg_paths) > 1:
+            jpeg_paths = random.sample(jpeg_paths, 1)
+        sampled_img_paths.append(jpeg_paths[0])
+
+    # Add metadata for view (organ)
+    extra_metadata_cols = {"view": ["thyroid"] * len(sampled_img_paths)}
+
+    # Save sampled images as PNG
+    df_metadata = re_anonymize_and_save_as_png(
+        sampled_img_paths, dataset_key, img_subdir, metadata_subdir,
+        overwrite=overwrite,
+        **extra_metadata_cols,
+    )
+
+    # Create a text file with the provenance
+    write_provenance_file(
+        dataset_name, metadata_subdir,
+        {
+            "Source": "Kaggle",
+            "URL": "https://www.kaggle.com/datasets/dasmehdixtr/ddti-thyroid-ultrasound-images",
+            "Seed": seed,
+            "(Before) Number of Images": len(orig_img_paths),
+            "(After) Number of Images": len(df_metadata),
+        }
+    )
+    print(f"[{dataset_name}] Dataset creation started...DONE")
+
+
+# NOTE: Kaggle neck nerve dataset is not used due to its restrictive license
+def process_neck_nerve_dataset(data_dir=None, save_dir=None, seed=SEED,
+                               overwrite=False, n=500):
+    """
+    Process the Neck Nerve Ultrasound dataset from Kaggle.
+
+    Parameters
+    ----------
+    data_dir : str
+        Directory containing the downloaded dataset.
+    save_dir : str
+        Directory to store the processed dataset.
+    seed : int, optional
+        Random seed for reproducibility, by default SEED.
+    overwrite : bool, optional
+        If True, overwrite existing files, by default False.
+    n : int, optional
+        Number of images to sample, by default 500.
+    """
+    dataset_name = "Neck - Nerve"
+    dataset_key = "neck_nerve"
+
+    # Set default directories
+    data_dir = data_dir if data_dir else DATASET_TO_DIR["raw"]["neck_nerve"]
+    save_dir = save_dir if save_dir else DATASET_TO_DIR["clean"]["neck_nerve"]
+
+    # Set seed for reproducibility
+    random.seed(seed)
+
+    # Create image and metadata subdirectories
+    img_subdir = os.path.join(save_dir, "images")
+    metadata_subdir = os.path.join(save_dir, "metadata")
+    os.makedirs(img_subdir, exist_ok=True)
+    os.makedirs(metadata_subdir, exist_ok=True)
+
+    # If overwriting, delete existing images
+    if overwrite:
+        cleanup_img_dir(img_subdir)
+
+    # Get all the image files
+    print(f"[{dataset_name}] Dataset creation started...")
+    orig_img_paths = glob(os.path.join(data_dir, "train", "*.tif"))
+    orig_img_paths = orig_img_paths + glob(os.path.join(data_dir, "test", "*.tif"))
+    orig_img_paths = filter_paths_for_masks(orig_img_paths)
+
+    # Randomly sample N images
+    sampled_img_paths = random.sample(orig_img_paths, n)
+    print(f"[{dataset_name}] Sampling {n}/{len(orig_img_paths)} images...")
+
+    # Add metadata for view (organ)
+    extra_metadata_cols = {"view": ["neck_nerve"] * len(sampled_img_paths)}
+
+    # Save sampled images as PNG
+    df_metadata = re_anonymize_and_save_as_png(
+        sampled_img_paths, dataset_key, img_subdir, metadata_subdir,
+        overwrite=overwrite,
+        **extra_metadata_cols,
+    )
+
+    # Create a text file with the provenance
+    write_provenance_file(
+        dataset_name, metadata_subdir,
+        {
+            "Source":  "Kaggle",
+            "URL": "https://www.kaggle.com/c/ultrasound-nerve-segmentation/data",
+            "Seed": seed,
+            "(Before) Number of Images": len(orig_img_paths),
+            "(After) Number of Images": len(df_metadata),
+        }
+    )
+    print(f"[{dataset_name}] Dataset creation started...DONE")
 
 
 ################################################################################
