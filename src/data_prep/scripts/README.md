@@ -27,9 +27,14 @@ export OOD_DATA_DIR="."
 python -m src.data_prep.scripts.prep_ood_us_dataset download_datasets
 ```
 
-#### 3. Download one dataset (manually)
+#### 3. Download datasets (manually)
 ```
-# 1. JoCo Knee Ultrasound (from Harvard Dataverse)
+# 1. Download TN3K Neck Thyroid Ultrasound dataset (from Google Drive)
+#       a. Download https://drive.google.com/file/d/1reHyY5eTZ5uePXMVMzFOq5j3eFOSp50F/view?usp=sharing
+#       b. Extract RAR file
+#       c. Copy the directory `ThyroidDataset/tn3k` to `${OOD_DATA_DIR}/raw`
+#       d. (Optional) Remove everything under that directory except for `trainval-image` and `test-image`
+# 2. JoCo Knee Ultrasound (from Harvard Dataverse)
 #       a. Create new directory `${OOD_DATA_DIR}/raw/knee_ultrasound`
 #       b. Please download from https://dataverse.harvard.edu/dataset.xhtml?persistentId=doi:10.7910/DVN/SKP9IB#
 #       c. Move `dataverse_files/data/*` to a new directory `${OOD_DATA_DIR}/raw/knee_ultrasound`
