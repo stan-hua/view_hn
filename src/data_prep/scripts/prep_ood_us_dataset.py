@@ -801,19 +801,19 @@ def process_brain_dataset(data_dir=None, save_dir=None, seed=SEED, overwrite=Fal
     accum_test.append(df_metadata[asian_mask])
     df_metadata = df_metadata[~asian_mask]
 
-    # Sample 20 patients for training / calibration set, rest is for testing
+    # Sample 20 patients for training / validation set, rest is for testing
     # NOTE: Stratifying by 5 age bins and by sex
     df_metadata["age_bin"] = pd.cut(df_metadata["age"], bins=5)
-    df_train_calib = df_metadata.groupby(["age_bin", "sex"]).sample(n=2, random_state=seed)
-    accum_test.append(df_metadata[~df_metadata.index.isin(df_train_calib.index)])
+    df_train_val = df_metadata.groupby(["age_bin", "sex"]).sample(n=2, random_state=seed)
+    accum_test.append(df_metadata[~df_metadata.index.isin(df_train_val.index)])
 
     # Create test set from accumulated patients
     df_test = pd.concat(accum_test, ignore_index=True)
 
     # Add splits then recombine
-    df_train_calib["split"] = None
+    df_train_val["split"] = None
     df_test["split"] = "test"
-    df_metadata = pd.concat([df_train_calib, df_test], ignore_index=True)
+    df_metadata = pd.concat([df_train_val, df_test], ignore_index=True)
     # Add dataset
     df_metadata["dset"] = f"{dataset_key}-ReMIND"
     # Add organ
@@ -996,7 +996,7 @@ def process_neck_thyroid_tn3k_dataset(data_dir=None, save_dir=None, seed=SEED, o
     sampled_img_paths = sampled_train_img_paths + test_img_paths
 
     # Create splits, only for test split
-    # NOTE: The remaining data will be split between train and calibration
+    # NOTE: The remaining data will be split between train and validation
     splits = [None] * len(sampled_train_img_paths)
     splits.extend(["test"] * len(test_img_paths))
 
@@ -1811,7 +1811,7 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
     df_new_metadata = pd.DataFrame(accum_metadata)
 
     # Assign OOD splits
-    df_new_metadata = assign_ood_splits(df_new_metadata, test_split=0.5, calib_split=0.25)
+    df_new_metadata = assign_ood_splits(df_new_metadata, test_split=0.5, val_split=0.25)
 
     # Save table
     df_new_metadata.to_csv(os.path.join(metadata_subdir, f"{dataset_key}-metadata.csv"), index=False)
@@ -1869,10 +1869,10 @@ def aggregate_processed_datasets():
     print("[OOD Dataset] Aggregating processed datasets...DONE")
 
 
-def assign_ood_splits(df_metadata, test_split=0.5, calib_split=0.25):
+def assign_ood_splits(df_metadata, test_split=0.5, val_split=0.25):
     """
     Assigns out-of-distribution (OOD) splits for the dataset into training,
-    calibration, and test sets based on specified proportions.
+    validation, and test sets based on specified proportions.
 
     Parameters
     ----------
@@ -1881,9 +1881,9 @@ def assign_ood_splits(df_metadata, test_split=0.5, calib_split=0.25):
         including a 'video_id' column for identification.
     test_split : float, optional
         The proportion of the dataset to be used for the test set, by default 0.5.
-    calib_split : float, optional
+    val_split : float, optional
         The proportion of the remaining data (after test set) to be used for the
-        calibration set, by default 0.25.
+        validation set, by default 0.25.
 
     Returns
     -------
@@ -1898,7 +1898,7 @@ def assign_ood_splits(df_metadata, test_split=0.5, calib_split=0.25):
     - The splitting is performed based on 'video_id' to ensure that all frames
       from the same video are in the same split.
     """
-    print(f"[OOD Dataset] Assigning splits (Calib: {calib_split}, Test: {test_split})...")
+    print(f"[OOD Dataset] Assigning splits (Val: {val_split}, Test: {test_split})...")
 
     # HACK: Add temporary label column to create split
     remove_label = False
@@ -1913,24 +1913,24 @@ def assign_ood_splits(df_metadata, test_split=0.5, calib_split=0.25):
         id_col="video_id", overwrite=True,
     )
     test_mask = df_metadata["split"] == "ood_test"
-    df_test, df_train_calib = df_metadata[test_mask], df_metadata[~test_mask]
+    df_test, df_train_val = df_metadata[test_mask], df_metadata[~test_mask]
 
     # Compute training split from remaining percent
-    calib_train_split = (1-calib_split) / (1-test_split)
+    train_split = (1-val_split) / (1-test_split)
 
-    # Set aside data for calibration and for training
-    df_train_calib = data_utils.assign_split_table(
-        df_train_calib, other_split="ood_calib", train_split=calib_train_split,
+    # Set aside data for validation and for training
+    df_train_val = data_utils.assign_split_table(
+        df_train_val, other_split="ood_val", train_split=train_split,
         id_col="video_id", overwrite=True,
     )
-    calib_mask = df_train_calib["split"] == "ood_calib"
-    df_calib, df_train = df_train_calib[calib_mask], df_train_calib[~calib_mask]
+    val_mask = df_train_val["split"] == "ood_val"
+    df_val, df_train = df_train_val[val_mask], df_train_val[~val_mask]
 
     # Rename training split to "ood_train"
     df_train["split"] = "ood_train"
 
     # Concatenate dataframes
-    df_metadata = pd.concat([df_train, df_calib, df_test], ignore_index=True)
+    df_metadata = pd.concat([df_train, df_val, df_test], ignore_index=True)
 
     # Remove label, if added
     if remove_label:
@@ -2493,7 +2493,7 @@ def convert_dicom_to_frames(
 
 def create_train_calib_test_splits(df_metadata):
     """
-    Given the "cleaned" metadata for 1 organ dataset, create train, calibration,
+    Given the "cleaned" metadata for 1 organ dataset, create train, validation,
     and test splits
 
     Parameters
@@ -2535,12 +2535,12 @@ def create_train_calib_test_splits(df_metadata):
         df_metadata.loc[test_mask, "split"] = "test"
     other_ids = df_metadata[df_metadata["split"] != "test"][id_col].unique()
 
-    # Create calibration set split, if not already done
+    # Create validation set split, if not already done
     if "calib" not in found_splits:
         calib_size = int(0.5 * len(other_ids))
         calib_ids = other_ids[:calib_size]
-        calib_mask = df_metadata[id_col].isin(calib_ids)
-        df_metadata.loc[calib_mask, "split"] = "calib"
+        val_mask = df_metadata[id_col].isin(calib_ids)
+        df_metadata.loc[val_mask, "split"] = "calib"
 
     # Remaining unassigned samples will be used for training
     df_metadata["split"] = df_metadata["split"].fillna("train")
