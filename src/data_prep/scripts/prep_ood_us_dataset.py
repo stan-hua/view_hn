@@ -19,6 +19,7 @@ The following datasets are used to create the "POCUS Out-Of-View Dataset"
 - TODO: Consider simulating multiple images in one pane
 - TODO: Consider using MixUp between outliers
 - TODO: Consider impact of removed background details
+# TODO: Consider augmentation with different tickers or rectangles to simulate ultrasound machine overlays
 
 
 The following datasets are used to create the "Ultrasound Out-Of-View Dataset"
@@ -102,10 +103,10 @@ import random
 import shutil
 import urllib.request
 import re
-import requests
 import zipfile
 from collections import deque
 from glob import glob
+from joblib import Parallel, delayed
 from urllib.error import HTTPError
 
 # Non-standard libraries
@@ -113,11 +114,15 @@ import cv2
 import kagglehub
 import numpy as np
 import pandas as pd
+import requests
 import shortuuid
 from bs4 import BeautifulSoup
 from fire import Fire
 from PIL import Image
 from tqdm import tqdm
+
+# Custom libraries
+from src.data_prep import utils as data_utils
 
 
 ################################################################################
@@ -444,7 +449,7 @@ def download_pocus_atlas(save_dir=None):
 
     # List of website paths to visit
     base_url = "https://www.thepocusatlas.com/"
-    focus_to_sub_url = {
+    view_to_sub_url = {
         # Adult Data
         "aorta": "aorta",
         "biliary": "hepatobiliary",
@@ -471,53 +476,120 @@ def download_pocus_atlas(save_dir=None):
     # NOTE: Store case text associated with each GIF for later reference
     # NOTE: Also create a new ID for each image
     accum_data = {
-        "local_save_path": [],
-        "focus": [],
+        "view": [],
         "description": [],
-        "video_id": [],
         "src_url": [],
     }
-    print("[POCUS Atlas] Beginning GIF downloads...")
-    for focus, sub_path in focus_to_sub_url.items():
-        print(f"[POCUS Atlas] Downloading GIFs for {focus}...")
-        # Create a new subdirectory for each focus
-        focus_dir = os.path.join(save_dir, focus)
-        os.makedirs(focus_dir, exist_ok=True)
-
+    print("[POCUS Atlas] Finding GIFs to download...")
+    for view, sub_path in view_to_sub_url.items():
+        print(f"[POCUS Atlas] Finding GIFs for {view}...")
         # Create new URL
         curr_url = f"{base_url}{sub_path}"
-
         # Load website
         response = requests.get(curr_url)
         soup = BeautifulSoup(response.content, 'html.parser')
-
         # Get all GIFs on website
         gifs = soup.find_all('img', {'data-src': lambda x: x and x.endswith('.gif')})
 
-        # Download each GIF and store
-        for gif_idx, gif in tqdm(enumerate(gifs)):
-            # Download the GIF
-            curr_save_path = os.path.join(focus_dir, f"{focus}-{gif_idx}.gif")
-            gif_response = requests.get(gif["data-src"])
-            with open(curr_save_path, 'wb') as f:
-                f.write(gif_response.content)
-
-            # Store metadata associated with GIF
-            accum_data["local_save_path"].append(curr_save_path)
-            accum_data["focus"].append(focus)
+        # Store metadata associated with GIF
+        for gif in gifs:
+            accum_data["view"].append(view)
             accum_data["description"].append(gif["alt"])
-            accum_data["video_id"].append(f"{focus}-{gif_idx}")
             accum_data["src_url"].append(gif["data-src"])
-        print(f"[POCUS Atlas] Downloading GIFs for {focus}...DONE")
-    print(f"[POCUS Atlas] Final number of downloaded GIFs: {len(accum_data['local_save_path'])}")
+        print(f"[POCUS Atlas] Finding GIFs for {view}...DONE")
+    print(f"[POCUS Atlas] Number of GIFs found: {len(accum_data['src_url'])}")
+
+    # Deduplicate found URLs
+    df_metadata = pd.DataFrame(accum_data)
+    df_metadata = df_metadata.groupby("src_url").apply(
+        pocus_filter_duplicate_views
+    ).reset_index(drop=True)
+    print(f"[POCUS Atlas] Number of deduplicated GIFs: {len(df_metadata)}")
+
+    # Create new IDs for each image in each view
+    df_metadata["video_id"] = df_metadata.groupby("view").apply(
+        lambda x: pd.Series(range(len(x)), index=x.index).map(
+            lambda y: f"{x['view'].iloc[0]}-{y}")
+    ).reset_index(level="view", drop=True).sort_index()
+
+    # Create local save path
+    df_metadata["local_save_path"] = df_metadata.apply(
+        lambda row: os.path.join(save_dir, row["view"], f"{row['video_id']}.gif"),
+        axis=1
+    )
+
+    # Download the GIFs in parallel
+    print(f"[POCUS Atlas] Downloading GIFs in Parallel...")
+    src_urls = df_metadata["src_url"].tolist()
+    local_save_paths = df_metadata["local_save_path"].tolist()
+    download_from_url_parallel(src_urls, local_save_paths, save_dir=".")
+    print(f"[POCUS Atlas] Downloading GIFs in Parallel...DONE")
+
+    # Remove images, which weren't downloaded properly
+    exists_mask = df_metadata["local_save_path"].map(os.path.exists)
+    print(f"[POCUS Atlas] Number of downloaded GIFs: {exists_mask.sum()} / {len(exists_mask)}")
+    df_metadata = df_metadata[exists_mask]
 
     # Save metadata
     orig_metadata_path = os.path.join(save_dir, "metadata.csv")
-    df_metadata = pd.DataFrame(accum_data)
 
     # Remove data directory from path
     df_metadata["local_save_path"] = df_metadata["local_save_path"].map(remove_home_dir)
     df_metadata.to_csv(orig_metadata_path, index=False)
+
+
+def pocus_filter_duplicate_views(df):
+    """
+    If a POCUS atlas video appears in multiple collections, select only one
+    collection / view to be part of.
+
+    Note
+    ----
+    Prioritize in the following order:
+    1. "peds_" if 1+ views is in the "peds" view-specific collection
+    2. "pediatric" if other views are adult views
+    3. Otherwise, remaining are assumed to be among adult views. Randomly
+        choose one (only known case = (echocardiography, lung))
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing the entries to deduplicate. Must contain a column
+        "view" with view types.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame with only one row retained based on the deduplication logic.
+    """
+    if len(df) == 1:
+        return df
+    # Get unique views
+    views = df["view"].unique().tolist()
+    # CASE 0: Only 1 unique view, choose the first
+    if len(views) == 1:
+        return df.iloc[[0]]
+    # CASE 1: Views part of peds collection
+    peds_views = [view for view in views if view.startswith("peds_")]
+    if peds_views:
+        # TODO: If this case is encountered, consider just sampling one or
+        #       adding a special case.
+        assert len(peds_views) == 1, f"[POCUS Deduplication] Unexpected error! Multiple 'peds_' views found: `{peds_views}`"
+        return df[df["view"] == peds_views[0]].iloc[[0]]
+    # CASE 2: Views part of general pediatric collection
+    # NOTE: Part of pediatric category & another view (e.g., renal)
+    if "pediatric" in views:
+        return df[df["view"] == "pediatric"].iloc[[0]]
+    # CASE 3: Multiple views that are from different collections
+    # SPECIAL CASE: Echocardiography & Lung
+    # NOTE: Was observed to be lung
+    if "echocardiography" in views and "lung" in views:
+        return df[df["view"] == "lung"].iloc[[0]]
+    # GENERAL CASE: Randomly select one
+    random.seed(seed)
+    chosen_view = random.choice(views)
+    print(f"[POCUS Deduplication] Chosen view: `{chosen_view}` of {views}")
+    return df[df["view"] == chosen_view].iloc[[0]]
 
 
 # NOTE: The following function is provided not used
@@ -538,7 +610,7 @@ def download_clarius(save_dir=None):
 
     # List of website paths to visit
     base_url = "https://clarius.com/about/clinical-gallery/?filter_ultrasound_category="
-    focus_to_filters = {
+    view_to_filters = {
         "abdomen": "abdomen",
         "bladder": "bladder",
         "breast": "breast",
@@ -564,16 +636,16 @@ def download_clarius(save_dir=None):
     # NOTE: Also create a new ID for each image
     accum_data = {
         "local_save_path": [],
-        "focus": [],
+        "view": [],
         "description": [],
         "video_id": [],
     }
     print("[Clarius] Beginning image downloads...")
-    for focus, filter_str in focus_to_filters.items():
-        print(f"[Clarius] Downloading images for {focus}...")
-        # Create a new subdirectory for each focus
-        focus_dir = os.path.join(save_dir, focus)
-        os.makedirs(focus_dir, exist_ok=True)
+    for view, filter_str in view_to_filters.items():
+        print(f"[Clarius] Downloading images for {view}...")
+        # Create a new subdirectory for each view
+        view_dir = os.path.join(save_dir, view)
+        os.makedirs(view_dir, exist_ok=True)
 
         # Create new URL
         curr_url = f"{base_url}{filter_str}"
@@ -595,20 +667,20 @@ def download_clarius(save_dir=None):
 
             # Download the GIF
             ext = os.path.basename(img_html["data-src"]).split(".")[-1]
-            curr_save_path = os.path.join(focus_dir, f"{focus}-{img_idx}.{ext}")
+            curr_save_path = os.path.join(view_dir, f"{view}-{img_idx}.{ext}")
             gif_response = requests.get(img_html["data-src"])
             with open(curr_save_path, 'wb') as f:
                 f.write(gif_response.content)
 
             # Store metadata associated with GIF
             accum_data["local_save_path"].append(curr_save_path)
-            accum_data["focus"].append(focus)
+            accum_data["view"].append(view)
             accum_data["description"].append(img_html["alt"])
-            accum_data["video_id"].append(f"{focus}-{img_idx}")
+            accum_data["video_id"].append(f"{view}-{img_idx}")
 
             # Increment image index
             img_idx += 1
-        print(f"[Clarius] Downloading images for {focus}...DONE")
+        print(f"[Clarius] Downloading images for {view}...DONE")
     print(f"[Clarius] Final number of downloaded images: {len(accum_data['local_save_path'])}")
 
     # Save metadata
@@ -1676,8 +1748,6 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
     # Get all the video files
     local_paths = df_metadata["local_save_path"].map(lambda x: os.path.join(RAW_DATA_DIR, x)).tolist()
 
-
-
     # Convert each video into image frames
     accum_old_new_mapping = {"old_video_path": [], "new_video_id": [], "num_frames": []}
     # NOTE: `id` refer to image/frame ID, while `video_id` refers to video ID
@@ -1687,14 +1757,15 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
         "path": [],
         "view": [],
         "description": [],
+        "background_removed": [],
     }
     for idx, local_path in tqdm(enumerate(local_paths)):
-        # Get focus (e.g., organ/pathology)
-        focus = df_metadata["focus"].iloc[idx]
+        # Get view (e.g., organ/pathology)
+        view = df_metadata["view"].iloc[idx]
         description = df_metadata["description"].iloc[idx]
 
-        # Create video index using dataset, focus and index
-        video_idx = f"{dataset_key}-{focus}-{idx+1}"
+        # Create video index using dataset, view and index
+        video_idx = f"{dataset_key}-{view}-{idx+1}"
         # Create subdirectory for this video's frames
         curr_video_subdir = os.path.join(video_subdir, video_idx)
         os.makedirs(curr_video_subdir, exist_ok=True)
@@ -1708,15 +1779,21 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
         )
         num_frames = len(frames_paths)
 
+        # Check if background was extracted properly
+        background_img_path = os.path.join(DATASET_TO_DIR["clean"]["background"], f"{video_idx}-background.png")
+        was_background_removed = os.path.exists(background_img_path)
+
         # Create indices for each frame/image
         frame_indices = [f"{video_idx}-{i+1}" for i in range(num_frames)]
         accum_metadata["id"].extend(frame_indices)
         accum_metadata["video_id"].extend([video_idx] * num_frames)
         # Store new path
         accum_metadata["path"].extend([remove_home_dir(x) for x in frames_paths])
-        # Store focus (renamed to view) and description
-        accum_metadata["view"].extend([focus] * num_frames)
+        # Store view and description
+        accum_metadata["view"].extend([view] * num_frames)
         accum_metadata["description"].extend([description] * num_frames)
+        # Store if the background was extracted properly
+        accum_metadata["background_removed"].extend([was_background_removed] * num_frames)
 
         # Store old video filename and new assigned filename
         accum_old_new_mapping["old_video_path"].append(remove_home_dir(local_path))
@@ -1724,15 +1801,19 @@ def process_pocus_atlas_dataset(data_dir=None, save_dir=None, seed=SEED,
         accum_old_new_mapping["num_frames"].append(num_frames)
 
     # Save dataframe of old path to new path
-    # NOTE: Rename `focus` to `view`
     df_old_new = pd.DataFrame(accum_old_new_mapping)
     df_old_new["src_url"] = df_metadata["src_url"]
-    df_old_new["view"] = df_metadata["focus"]
+    df_old_new["view"] = df_metadata["view"]
     df_old_new["description"] = df_metadata["description"]
     df_old_new.to_csv(os.path.join(metadata_subdir, f"{dataset_key}-old_file_mapping.csv"), index=False)
 
-    # Save new metadata dataframe
+    # Prepare new metadata table
     df_new_metadata = pd.DataFrame(accum_metadata)
+
+    # Assign OOD splits
+    df_new_metadata = assign_ood_splits(df_new_metadata, test_split=0.5, calib_split=0.25)
+
+    # Save table
     df_new_metadata.to_csv(os.path.join(metadata_subdir, f"{dataset_key}-metadata.csv"), index=False)
 
     # Create a text file with the provenance
@@ -1786,6 +1867,77 @@ def aggregate_processed_datasets():
     # Save metadata
     df_metadata.to_csv(save_metadata_path, index=False)
     print("[OOD Dataset] Aggregating processed datasets...DONE")
+
+
+def assign_ood_splits(df_metadata, test_split=0.5, calib_split=0.25):
+    """
+    Assigns out-of-distribution (OOD) splits for the dataset into training,
+    calibration, and test sets based on specified proportions.
+
+    Parameters
+    ----------
+    df_metadata : pd.DataFrame
+        The metadata dataframe containing information about the dataset,
+        including a 'video_id' column for identification.
+    test_split : float, optional
+        The proportion of the dataset to be used for the test set, by default 0.5.
+    calib_split : float, optional
+        The proportion of the remaining data (after test set) to be used for the
+        calibration set, by default 0.25.
+
+    Returns
+    -------
+    pd.DataFrame
+        The updated metadata dataframe with an assigned 'split' column
+        indicating the split type ('train', 'calib', or 'test') for each entry.
+
+    Notes
+    -----
+    - If a 'label' column is not present in the dataframe, a temporary one is
+      added to facilitate splitting and removed afterwards.
+    - The splitting is performed based on 'video_id' to ensure that all frames
+      from the same video are in the same split.
+    """
+    print(f"[OOD Dataset] Assigning splits (Calib: {calib_split}, Test: {test_split})...")
+
+    # HACK: Add temporary label column to create split
+    remove_label = False
+    if "label" not in df_metadata.columns.tolist():
+        remove_label = True
+        df_metadata["label"] = -1
+
+    # Split data
+    # Set aside data for evaluation
+    df_metadata = data_utils.assign_split_table(
+        df_metadata, other_split="ood_test", train_split=(1-test_split),
+        id_col="video_id", overwrite=True,
+    )
+    test_mask = df_metadata["split"] == "ood_test"
+    df_test, df_train_calib = df_metadata[test_mask], df_metadata[~test_mask]
+
+    # Compute training split from remaining percent
+    calib_train_split = (1-calib_split) / (1-test_split)
+
+    # Set aside data for calibration and for training
+    df_train_calib = data_utils.assign_split_table(
+        df_train_calib, other_split="ood_calib", train_split=calib_train_split,
+        id_col="video_id", overwrite=True,
+    )
+    calib_mask = df_train_calib["split"] == "ood_calib"
+    df_calib, df_train = df_train_calib[calib_mask], df_train_calib[~calib_mask]
+
+    # Rename training split to "ood_train"
+    df_train["split"] = "ood_train"
+
+    # Concatenate dataframes
+    df_metadata = pd.concat([df_train, df_calib, df_test], ignore_index=True)
+
+    # Remove label, if added
+    if remove_label:
+        df_metadata = df_metadata.drop(columns=["label"])
+
+    return df_metadata
+
 
 
 ################################################################################
@@ -1902,9 +2054,12 @@ def download_from_url(url, save_name, save_dir=RAW_DATA_DIR, unzip=False):
     # Download file from the internet
     save_path = os.path.join(save_dir, save_name)
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    print(f"Downloading file from URL: `{url}`")
-    urllib.request.urlretrieve(url, save_path)
-    print("Downloading file from URL...DONE")
+    try:
+        urllib.request.urlretrieve(url, save_path)
+    except Exception as error_msg:
+        print(f"Failed to download file from URL: `{url}`")
+        print(f"\tError Message: {error_msg}")
+        return None
 
     # If specified, unzip file
     if unzip:
@@ -1914,8 +2069,35 @@ def download_from_url(url, save_name, save_dir=RAW_DATA_DIR, unzip=False):
             print(f"Unzipping file: `{save_path}` to `{new_save_path}`")
             zip_handler.extractall(new_save_path)
             print("Unzipping file...DONE")
+        save_path = new_save_path
 
-    return new_save_path
+    return save_path
+
+
+def download_from_url_parallel(urls, save_paths, save_dir=RAW_DATA_DIR, n_jobs=4, **kwargs):
+    """
+    Download multiple files from specified URLs in parallel.
+
+    Parameters
+    ----------
+    urls : list of str
+        List of URLs of files to download
+    save_paths : list of str
+        List of filenames / subpath to download file to
+    save_dir : str, optional
+        Directory to save files in, by default RAW_DATA_DIR
+    unzip : bool, optional
+        If True, unzip files after saving, by default False
+    **kwargs : dict, optional
+        Keyword arguments to pass to `download_from_url`
+    """
+    n_jobs = min(n_jobs, os.cpu_count())
+
+    # Download files in parallel
+    Parallel(n_jobs=n_jobs)(
+        delayed(download_from_url)(url, save_path, save_dir, **kwargs)
+        for url, save_path in zip(urls, save_paths)
+    )
 
 
 def remove_home_dir(path):
@@ -2136,17 +2318,27 @@ def convert_video_to_frames(
     list of str
         Path to saved image frames
     """
-    os.makedirs(save_dir, exist_ok=True)
+    # Local function to process image frame
+    def process_frame(idx, img_arr):
+        curr_save_path = f"{save_dir}/{prefix_fname}{idx}.png"
+        processed_image = preprocess_and_save_img_array(
+            img_arr,
+            grayscale=False,
+            extract_beamform=True,
+            crop=False,
+            apply_filter=False,
+        )
+        return curr_save_path, processed_image
 
+    os.makedirs(save_dir, exist_ok=True)
     # Simply return filenames if already exists
     if not overwrite and os.listdir(save_dir):
         print("[Video Conversion] Already exists, skipping...")
         num_files = len(os.listdir(save_dir))
         # Recreate filenames
         idx = 1
-        paths = [f"{save_dir}/{prefix_fname}{idx+i}.png" for i in range(num_files)]
-        assert (
-            set(paths) == set(os.listdir(save_dir)),
+        paths = [f"{prefix_fname}{idx+i}.png" for i in range(num_files)]
+        assert set(paths) == set(os.listdir(save_dir)), (
             f"Unexpected error! Previously extracted video frames have "
             "unexpected file names. Please delete `{save_dir}`"
         )
@@ -2156,22 +2348,25 @@ def convert_video_to_frames(
     vidcap = cv2.VideoCapture(path)
     success, img_arr = vidcap.read()
     idx = 1
-    accum_imgs = []
-    saved_img_paths = []
+    frames_args = []
     while success:
-        curr_img_path = f"{save_dir}/{prefix_fname}{idx}.png"
-        # Preprocess image and save to path
-        accum_imgs.append(preprocess_and_save_img_array(
-            img_arr,
-            grayscale=False,
-            extract_beamform=True,
-            crop=False,
-            apply_filter=False,
-        ))
+        frames_args.append((idx, img_arr))
         # Load next image
         success, img_arr = vidcap.read()
         idx += 1
-        saved_img_paths.append(curr_img_path)
+
+    # Process images in parallel
+    ordered_results = Parallel(n_jobs=-1)(
+        delayed(process_frame)(idx, img_arr)
+        for idx, img_arr in frames_args
+    )
+
+    # Get processed images and their save paths
+    accum_imgs = []
+    img_save_paths = []
+    for curr_img_path, curr_img in ordered_results:
+        accum_imgs.append(curr_img)
+        img_save_paths.append(curr_img_path)
 
     # Early return, if no images extracted
     if not accum_imgs:
@@ -2180,24 +2375,27 @@ def convert_video_to_frames(
     # Separate out ultrasound & non-ultrasound part of sequence
     # CASE 1: Only 1 image frame
     if len(accum_imgs) == 1:
-        foreground, background = extract_ultrasound_image_foreground(accum_imgs[0])
+        foreground, static_mask = extract_ultrasound_image_foreground(accum_imgs[0])
         foreground = [foreground]
     # CASE 2: Video
     else:
-        foreground, background = extract_ultrasound_video_foreground(np.array(accum_imgs))
+        foreground, static_mask = extract_ultrasound_video_foreground(np.array(accum_imgs))
 
     # Save extracted ultrasound part to save paths
-    for image_idx, save_img_path in enumerate(saved_img_paths):
+    for image_idx, save_img_path in enumerate(img_save_paths):
         cv2.imwrite(save_img_path, foreground[image_idx])
 
-    # If specified, extract background image
-    if background_dir:
-        # NOTE: Only save if background has at least 25 non-zero pixels
-        if background is not None and (background > 30).sum() > 25:
+    # If specified, extract background image from first image
+    if background_dir and static_mask is not None:
+        first_img = frames_args[0][1]
+        background_img = convert_img_to_uint8(first_img)
+        background_img[~static_mask] = 0
+        # NOTE: Only save if background image has at least 25 non-zero pixels
+        if background_img.sum() >= 25:
             os.makedirs(background_dir, exist_ok=True)
-            cv2.imwrite(f"{background_dir}/{prefix_fname}.png", background)
+            cv2.imwrite(f"{background_dir}/{prefix_fname}background.png", background_img)
 
-    return saved_img_paths
+    return img_save_paths
 
 
 def convert_dicom_to_frames(
@@ -2244,9 +2442,8 @@ def convert_dicom_to_frames(
         exist_paths = os.listdir(save_dir)
         num_files = len(exist_paths)
         # Recreate filenames
-        paths = [f"{save_dir}/{prefix_fname}{1+i}.png" for i in range(num_files)]
-        assert (
-            set(paths) == set(exist_paths),
+        paths = [f"{prefix_fname}{1+i}.png" for i in range(num_files)]
+        assert set(paths) == set(exist_paths), (
             "Unexpected error! Previously extracted video frames have "
             f"unexpected file names. Please delete `{save_dir}`"
         )
@@ -2422,10 +2619,10 @@ def preprocess_and_save_img_array(
 
     # If specified, extract beamform part of ultrasound image
     if extract_beamform:
-        img_arr, background_arr = extract_ultrasound_image_foreground(img_arr, **kwargs)
+        img_arr, static_mask = extract_ultrasound_image_foreground(img_arr, **kwargs)
         # Save background, if specified
         if background_save_path:
-            cv2.imwrite(background_save_path, background_arr)
+            cv2.imwrite(background_save_path, img_arr[static_mask])
 
     # 2. Ensure grayscale image, if specified
     if grayscale and len(img_arr.shape) == 3 and img_arr.shape[2] == 3:
@@ -2468,7 +2665,7 @@ def extract_ultrasound_video_foreground(img_sequence, apply_filter=True, crop=Tr
     Parameters
     ----------
     img_sequence : np.ndarray
-        Image sequence to separate foreground from background. Of shape (N, H, W, C)
+        Image sequence to separate foreground from background. Of shape (T, H, W, C)
     apply_filter : bool, optional
         If True, apply median blur filter to image
     crop : bool, optional
@@ -2477,9 +2674,10 @@ def extract_ultrasound_video_foreground(img_sequence, apply_filter=True, crop=Tr
     Returns
     -------
     (np.ndarray, np.ndarray)
-        (i) Ultrasound video with be beamform extracted of shape (N, H, W)
-        (ii) Non-ultrasound part of image frames of shape (H, W) or None if not
-             exists
+        (i) Ultrasound video with beamform extracted of shape (T, H, W), where
+            H and W can be smaller due to cropping
+        (ii) Boolean mask of shape (H, W) that highlights static parts of video
+             frames that denote the background
     """
     img_sequence = img_sequence.astype(np.uint8)
 
@@ -2491,7 +2689,7 @@ def extract_ultrasound_video_foreground(img_sequence, apply_filter=True, crop=Tr
         img_sequence = np.stack(grayscale_imgs, axis=0)
 
     # Create mask of shape (H, W) that indicates parts of image with no variation
-    dynamic_mask = (np.std(img_sequence, axis=0) != 0)
+    dynamic_mask = (np.std(img_sequence, axis=0) >= 5)
     dynamic_mask = (255*dynamic_mask).astype(np.uint8)
 
     # Use maximum pixel intensity to fill in the mask
@@ -2508,27 +2706,19 @@ def extract_ultrasound_video_foreground(img_sequence, apply_filter=True, crop=Tr
     # Split ultrasound video into ultrasound video and non-ultrasound image
     ultrasound_part, non_ultrasound_part = img_sequence.copy(), img_sequence.copy()
     ultrasound_part[:, ~dynamic_mask.astype(bool)] = 0
-    non_ultrasound_part[:, dynamic_mask.astype(bool)] = 0
-    # NOTE: Assume that non-ultrasound static part only needs 1 image
-    non_ultrasound_part = non_ultrasound_part[0]
+
+    # Extract static part of video
+    static_mask = ~dynamic_mask.astype(bool)
 
     # Early return, if not cropping
     if not crop:
-        if non_ultrasound_part.astype(bool).sum() == 0:
-            non_ultrasound_part = None
-        return ultrasound_part, non_ultrasound_part
+        return ultrasound_part, static_mask
 
     # Get tightest crop of ultrasound image
     y_min, y_max, x_min, x_max = create_tight_crop(dynamic_mask)
     ultrasound_part = ultrasound_part[:, y_min:y_max, x_min:x_max]
 
-    # Get tightest crop of background information
-    if non_ultrasound_part.astype(bool).sum() > 0:
-        y_min, y_max, x_min, x_max = create_tight_crop(non_ultrasound_part)
-        non_ultrasound_part = non_ultrasound_part[y_min:y_max, x_min:x_max]
-    else:
-        non_ultrasound_part = None
-    return ultrasound_part, non_ultrasound_part
+    return ultrasound_part, static_mask
 
 
 def extract_ultrasound_image_foreground(img, apply_filter=True, crop=True):
@@ -2548,20 +2738,27 @@ def extract_ultrasound_image_foreground(img, apply_filter=True, crop=True):
     Returns
     -------
     (np.ndarray, np.ndarray)
-        (i) Cropped ultrasound part of image of shape (?, ?)
-        (ii) Cropped non-ultrasound part of image of shape (?, ?)
+        (i) Ultrasound image with beamform extracted of shape (H, W), where
+            H and W can be smaller due to cropping
+        (ii) Boolean mask of shape (H, W) that highlights static parts of the
+             image that denote the background
     """
-    middle_idx = img.shape[1] // 2
+    # Get 10 points within 30% of the width at the center of the image
+    width = img.shape[1]
+    middle_idx = int(width * 0.5)
+    width_range = int(width * 0.15)
+    lower, upper = max(0, middle_idx - width_range), min(width, middle_idx + width_range)
+    indices = sorted(np.linspace(lower, upper, 10, dtype=int))
 
     # Convert to grayscale and get is colored mask for center column of image
-    is_colored_center_mask = np.zeros_like(len(img), dtype=bool)
+    is_colored_center_mask = np.zeros_like(img[:, indices], dtype=bool)
     if len(img.shape) == 3 and img.shape[2] == 3:
-        is_colored_center_mask = (np.std(img[:, middle_idx], axis=1) >= 5)
+        is_colored_center_mask = (np.std(img[:, indices], axis=2) >= 5)
         img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 
     # For center pixels that are greater than 50 and not colored, assume it's part of the mask
     active_mask = np.zeros_like(img, dtype=bool)
-    active_mask[:, middle_idx] = (img[:, middle_idx] >= 50) & (~is_colored_center_mask)
+    active_mask[:, indices] = (img[:, indices] >= 30) & (~is_colored_center_mask)
 
     # From the center-filled mask, fill in the remaining part of mask
     active_mask = fill_mask(img, active_mask, intensity_threshold=15)
@@ -2574,27 +2771,19 @@ def extract_ultrasound_image_foreground(img, apply_filter=True, crop=True):
 
     # Split ultrasound image into ultrasound part and non-ultrasound part
     active_mask_bool = active_mask.astype(bool)
-    ultrasound_part, non_ultrasound_part = img, img.copy()
+    ultrasound_part, non_ultrasound_part = img.copy(), img.copy()
     ultrasound_part[~active_mask_bool] = 0
-    non_ultrasound_part[active_mask_bool] = 0
+    static_mask = ~active_mask_bool
 
     # Early return, if not cropping
     if not crop:
-        if non_ultrasound_part.astype(bool).sum() == 0:
-            non_ultrasound_part = None
-        return ultrasound_part, non_ultrasound_part
+        return ultrasound_part, static_mask
 
     # Get tightest crop of ultrasound image
     y_min, y_max, x_min, x_max = create_tight_crop(active_mask)
     ultrasound_part = ultrasound_part[y_min:y_max, x_min:x_max]
 
-    # Get tightest crop of background information
-    if non_ultrasound_part.astype(bool).sum() > 0:
-        y_min, y_max, x_min, x_max = create_tight_crop(non_ultrasound_part)
-        non_ultrasound_part = non_ultrasound_part[y_min:y_max, x_min:x_max]
-    else:
-        non_ultrasound_part = None
-    return ultrasound_part, non_ultrasound_part
+    return ultrasound_part, static_mask
 
 
 def fill_mask(image, mask, intensity_threshold=1):
@@ -2642,6 +2831,8 @@ def fill_mask(image, mask, intensity_threshold=1):
                     filled_mask[nx, ny] = 255
                     queue.append((nx, ny))
 
+    # Ensure mask is 0 or 255
+    filled_mask = np.where(filled_mask > 0, 255, 0).astype(np.uint8)
     return filled_mask
 
 

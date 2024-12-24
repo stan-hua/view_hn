@@ -32,7 +32,6 @@ LOGGER = logging.getLogger(__name__)
 ################################################################################
 #                             Metadata Extraction                              #
 ################################################################################
-# TODO: Remove all calls that use removed keywords "extract"
 def load_metadata(dsets, prepend_img_dir=False, **config):
     """
     Loads metadata for specified datasets/hospital/s
@@ -967,6 +966,7 @@ def assign_split_table_by_dset(df_metadata, **split_kwargs):
 
 def assign_split_table(df_metadata,
                        other_split="test",
+                       id_col="id",
                        overwrite=False,
                        **split_kwargs):
     """
@@ -983,6 +983,8 @@ def assign_split_table(df_metadata,
         Each row represents an US image at least a patient ID and label
     other_split : str, optional
         Name of other split. For example, ("val", "test"), by default "test"
+    id_col : str, optional
+        Column name for patient/video ID to split on
     overwrite : bool, optional
         If val/test splits already exists, then don't overwrite
     **split_kwargs : Any
@@ -1013,7 +1015,7 @@ def assign_split_table(df_metadata,
 
     # If specified, only modify val/test if there are none that exist
     # Split labeled data into train and test
-    patient_ids = df_labeled["id"].tolist()
+    patient_ids = df_labeled[id_col].tolist()
     train_idx, test_idx = split_by_ids(patient_ids, **split_kwargs)
     df_labeled.loc[train_idx, "split"] = "train"
     df_labeled.loc[test_idx, "split"] = other_split
