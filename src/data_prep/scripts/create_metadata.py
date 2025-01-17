@@ -16,7 +16,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 
 
@@ -1217,7 +1217,7 @@ def main_correct_labels(ref_path, label_col="plane"):
 def main_update_img_dirs():
     """
     If home directory or image data directories have changed, update metadata
-    to point to new paths based on `src.data.constants` file.
+    to point to new paths based on `config.constants` file.
     """
     print("[main_update_img_dirs] Assumes your $HOME has been changed and you're migrating data!")
     print("[main_update_img_dirs] Changing $HOME path hard-coded in metadata files!")

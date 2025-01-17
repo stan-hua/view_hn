@@ -16,13 +16,10 @@ from pathlib import Path
 # Non-standard libraries
 import torch
 import yaml
-from efficientnet_pytorch import EfficientNet
-# from tensorflow.keras.applications.efficientnet import EfficientNetB0
 
 # Custom libraries
 from src import models
-from src.data import constants
-from src.utils import efficientnet_pytorch_utils as effnet_utils
+from config import constants
 
 
 ################################################################################
@@ -72,7 +69,7 @@ def load_model(hparams):
     # Get model class
     model_cls, model_cls_kwargs = get_model_cls(hparams)
     # Instantiate model
-    model = model_cls(**hparams, **model_cls_kwargs)
+    model = model_cls(hparams, **model_cls_kwargs)
 
     # If specified, attempt to load ImageNet pretrained weights
     if hparams.get("from_imagenet") and hasattr(model, "load_imagenet_weights"):
@@ -107,7 +104,7 @@ def load_model(hparams):
             model = overwrite_model(
                 model,
                 src_state_dict=pretrained_state_dict)
-        # CASE 3: SSL pre-trained model and want to fine-tune with EfficientNet
+        # CASE 3: SSL pre-trained model and want to fine-tune
         elif pretrained_model_hparams.get("self_supervised") and not hparams.get("self_supervised"):
             # Remove "conv_backbone."/"temporal_backbone." from weight names
             pretrained_state_dict = pretrained_model.state_dict()
@@ -161,14 +158,12 @@ def load_pretrained_from_exp_name(exp_name, ckpt_option="best",
     """
     # 0. Redirect if `exp_name` is "imagenet"
     if exp_name == "imagenet":
-        # Instantiate EfficientNet model
-        model = models.EfficientNetPL(
-            effnet_name=overwrite_hparams.get("effnet_name", "efficientnet-b0"),
-            img_size=overwrite_hparams.get("img_size", constants.IMG_SIZE),
-        )
-
-        # Load ImageNet weights
-        model.load_imagenet_weights()
+        # Instantiate model
+        model = models.ModelWrapper(hparams={
+            "model_name": overwrite_hparams.get("model_name", "efficientnet_b0"),
+            "img_size": overwrite_hparams.get("img_size", constants.IMG_SIZE),
+            "pretrained": True,
+        })
         return model
 
     # 0. Get experiment directory, where model was trained
@@ -250,7 +245,7 @@ def get_model_cls(hparams):
         return ssl_model_cls, model_cls_kwargs
 
     # CASE 2: Fully Supervised Image model
-    model_cls = models.EfficientNetPL
+    model_cls = models.ModelWrapper
     return model_cls, model_cls_kwargs
 
 
@@ -492,19 +487,16 @@ def extract_backbones_from_ssl_single(hparams, model_cls):
     # If loading another SSL eval model, instantiate required conv. backbones
     extra_model_kwargs = {}
     if hparams.get("from_ssl_eval"):
-        raise NotImplementedError("Changed to use load pre-trained weights directly...")
-        extra_model_kwargs["conv_backbone"] = create_conv_backbone(hparams)
+        raise NotImplementedError("If loading from SSL model, please load pre-trained weights directly...")
 
     # Load pretrained model
     try:
-        pretrained_model = model_cls.load_from_checkpoint(
-            ssl_ckpt_path, **extra_model_kwargs)
+        pretrained_model = model_cls.load_from_checkpoint(ssl_ckpt_path)
     except Exception as error_msg:
         LOGGER.warning(error_msg)
         rename_torch_module(ssl_ckpt_path)
         LOGGER.info("Renamed model module names!")
-        pretrained_model = model_cls.load_from_checkpoint(
-            checkpoint_path=ssl_ckpt_path, **extra_model_kwargs)
+        pretrained_model = model_cls.load_from_checkpoint(ssl_ckpt_path)
 
     return extract_backbone_dict_from_ssl_model(pretrained_model)
 
@@ -544,41 +536,39 @@ def extract_backbone_dict_from_ssl_model(model):
     return backbone_dict
 
 
-def extract_backbone_dict_from_efficientnet_model(model):
+def extract_backbone_dict(model):
     """
-    Given an EfficientNet model instance, extract conv. (and temporal) backbones
+    Given a model instance, extract conv. (and temporal) backbones
     into a dictionary.
 
     Parameters
     ----------
     model : torch.nn.Module
-        Must be an EfficientNet model
+        Model
 
     Returns
     -------
     dict
         Contains "conv_backbone" and optionally "temporal_backbone"
     """
-    assert isinstance(model, EfficientNet)
-
-    backbone_dict = {}
-
     # CASE 1: Remove Linear layer (from forward pass), if exists
-    if hasattr(model, "fc"):
+    if hasattr(model, "classifier"):
+        model.classifier = torch.nn.Identity()
+    elif hasattr(model, "fc"):
         model.fc = torch.nn.Identity()
 
     # CASE 2: Remove LSTM layer (from forward pass), if exists
     if hasattr(model, "temporal_backbone"):
         model.temporal_backbone = torch.nn.Identity()
     if hasattr(model, "temporal_backbone_forward"):
-        identity_module = torch.nn.Identity()
-        model.temporal_backbone_forward = lambda x: identity_module(x)
+        model.temporal_backbone_forward = torch.nn.Identity()
 
     # Verify that conv. layers exist
     if not len(find_layers_in_model(model, torch.nn.Conv2d)):
         raise RuntimeError("No conv. layers found!")
 
     # Get convolutional backbone
+    backbone_dict = {}
     backbone_dict["conv_backbone"] = model
 
     return backbone_dict
@@ -586,7 +576,7 @@ def extract_backbone_dict_from_efficientnet_model(model):
 
 def create_conv_backbone(hparams=None):
     """
-    Return base EfficientNet convolutional backbone, based on parameters.
+    Return convolutional backbone, based on parameters.
 
     Parameters
     ----------
@@ -596,17 +586,18 @@ def create_conv_backbone(hparams=None):
     Returns
     -------
     torch.nn.Module
-        EfficientNet convolutional backbone
+        Convolutional backbone
     """
     # Default value for `hparams`
     hparams = hparams or {}
+    default_params = {
+        "model_name": "efficientnet_b0",
+        "img_size": (256, 256),
+    }
+    hparams.update({k:v for k,v in default_params.items() if k not in hparams})
 
     # Create conv. backbone
-    conv_backbone = EfficientNet.from_name(
-        hparams.get("effnet_name", "efficientnet-b0"),
-        image_size=hparams.get("img_size", (256, 256)),
-        include_top=False)
-
+    conv_backbone = models.base.load_network(hparams, remove_head=True)
     return conv_backbone
 
 
@@ -769,17 +760,16 @@ def get_last_conv_layer(model):
     torch.nn.Conv2d
         Last convolutional layer
     """
-    # CASE 1: Model is an EfficientNetB0
-    if isinstance(model, EfficientNet):
-        return model._conv_head
-    # CASE 1: Model is a wrapper, storing a conv. backbone
-    # NOTE: Deprecated
-    # elif isinstance(model, (LinearEval, LSTMLinearEval,
-    #                       EnsembleLinear, EnsembleLSTMLinear)):
-    #     return get_last_conv_layer(model.conv_backbone)
+    # CASE 1: If it has a "features" attribute, access that
+    if hasattr(model, "features"):
+        return model.features[-1]
 
-    # Raise error, if not found
-    raise NotImplementedError
+    # CASE 2: Attempt to get last Conv2D layer
+    layers = find_layers_in_model(model, torch.nn.Conv2d)
+    if layers:
+        return layers[-1]
+
+    raise NotImplementedError(f"[get_last_conv_layer] Not supported for current model! {type(model)}")
 
 
 def get_exp_dir(exp_name, on_error="raise"):

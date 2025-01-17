@@ -59,7 +59,7 @@ class CPC(EfficientNet, L.LightningModule):
         raise NotImplementedError("Fix TODOs before using!")
 
         # Instantiate EfficientNet
-        self.model_name = "efficientnet-b0"
+        self.model_name = "efficientnet_b0"
         self.feature_dim = 1280      # expected feature size from EfficientNetB0
         blocks_args, global_params = get_model_params(
             self.model_name, {"image_size": img_size,

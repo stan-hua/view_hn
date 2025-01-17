@@ -14,7 +14,7 @@ import os
 from torch.utils.data import DataLoader
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 from src.data_prep.dataset import (
     DEFAULT_DATALOADER_PARAMS,
@@ -132,7 +132,7 @@ def setup_data_module(hparams=None, use_defaults=False,
         data_module_cls = UltrasoundDataModule
 
     # 2.2 Pass in specified dataloader parameters
-    dm = data_module_cls(df=df_metadata, **all_hparams)
+    dm = data_module_cls(all_hparams, df=df_metadata)
     dm.setup()
 
     # Modify hyperparameters in-place to store training/val/test set IDs
@@ -258,7 +258,7 @@ def create_eval_hparams(dset=None, split="test"):
         "augment_training": False,
         "self_supervised": False,
         "imbalanced_sampler": False,
-        "other_labeled_sampler": False,
+        "use_ood_unlabeled": False,
         # TODO: Consider reverting
         "include_labeled_other": True,
     }

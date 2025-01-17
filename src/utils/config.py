@@ -12,7 +12,7 @@ from configobj import ConfigObj
 from configobj.validate import Validator
 
 # Custom libraries
-from src.data import constants
+from config import constants
 
 
 ################################################################################

@@ -20,7 +20,7 @@ from sklearn.utils import shuffle
 from skimage.exposure import equalize_hist
 
 # Custom libraries
-from src.data import constants
+from config import constants
 
 
 ################################################################################

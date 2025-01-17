@@ -32,7 +32,7 @@ from torchvision.io import read_image, ImageReadMode
 from tqdm import tqdm
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 from src.data_viz import plot_umap
 from src.data_viz import utils as viz_utils
@@ -1101,9 +1101,9 @@ def plot_prob_for_label_vs_catch_all_class(df_pred, save_dir=None, fname_suffix=
     save_dir = save_dir if save_dir else os.path.join(constants.DIR_FIGURES, "etc")
 
     paths = (
-        constants.DIR_INFERENCE + "exp_param_sweep-supervised_baseline-with_zoomout__best/sickkids-val_set_results.csv",
-        constants.DIR_INFERENCE + "exp_penalize_other-supervised_baseline-with_other-penalize_other__best/sickkids-val_set_results.csv",
-        constants.DIR_INFERENCE + "exp_penalize_other-supervised_baseline-with_other-penalize_other-ent_loss__best/sickkids-val_set_results.csv"
+        constants.DIR_INFERENCE + "/exp_param_sweep-supervised_baseline-with_zoomout__best/sickkids-val_set_results.csv",
+        constants.DIR_INFERENCE + "/exp_penalize_other-supervised_baseline-with_other-penalize_other__best/sickkids-val_set_results.csv",
+        constants.DIR_INFERENCE + "/exp_penalize_other-supervised_baseline-with_other-penalize_other-ent_loss__best/sickkids-val_set_results.csv"
     )
     fname_suffixes = ("baseline", "penalize_other", "penalize_other-with_entropy_loss",)
     for idx in range(len(paths)):

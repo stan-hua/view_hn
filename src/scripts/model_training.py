@@ -24,7 +24,7 @@ from lightning.pytorch.callbacks import (
 from lightning.pytorch.loggers import CometLogger
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.scripts import load_data, load_model
 from src.utils import config as config_utils
 from src.utils.logging import FriendlyCSVLogger

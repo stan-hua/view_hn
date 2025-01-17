@@ -21,7 +21,7 @@ from torch_influence import (
 from tqdm import tqdm
 
 # Custom libaries
-from src.data import constants
+from config import constants
 
 
 ################################################################################

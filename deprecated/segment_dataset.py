@@ -20,7 +20,7 @@ from torchvision.io import read_image, ImageReadMode
 # from maskedtensor import masked_tensor
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 
 

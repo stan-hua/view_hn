@@ -20,7 +20,7 @@ import torch
 from albumentations.pytorch.transforms import ToTensorV2
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep.moco_dataset import MoCoDataModule
 from src.data_prep.utils import load_metadata
 from src.data_viz import utils as viz_utils
@@ -395,11 +395,11 @@ def patient_imgs_to_gif(df_metadata, patient_idx=0, img_dir=None,
 
     if save_path is None:
         # Make img_dir if not exists
-        img_dir = constants.DIR_FIGURES + "/predictions/"
+        img_dir = os.path.join(constants.DIR_FIGURES, "predictions")
         if not os.path.exists(img_dir):
             os.mkdir(img_dir)
 
-        save_path = img_dir + f"/us_patient_{patient_id}_visit_{visit}.gif"
+        save_path = os.path.join(img_dir, f"/us_patient_{patient_id}_visit_{visit}.gif")
 
     imageio.mimsave(save_path, images, fps=2)
 
@@ -743,7 +743,7 @@ if __name__ == '__main__':
     ############################################################################
     #                    Plot US Images with Prediction                        #
     ############################################################################
-    df_test_metadata = pd.read_csv(constants.DIR_RESULTS + "/test_set_results(five_view).csv")
+    df_test_metadata = pd.read_csv(os.path.join(constants.DIR_RESULTS, "test_set_results(five_view).csv"))
     for _ in range(10):
         idx = np.random.randint(0, 84)
         patient_imgs_to_gif(df_test_metadata, patient_idx=idx)

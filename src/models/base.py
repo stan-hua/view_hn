@@ -1,95 +1,144 @@
 """
-efficientnet_pl.py
+base.py
 
-Description: PyTorch Lightning wrapper over efficientnet-pytorch library.
+Description: PyTorch Lightning wrapper over timm and torchvision libraries
 """
+
+# Standard libraries
+import logging
 
 # Non-standard libraries
 import lightning as L
+import timm
 import torch
 import torchmetrics
-from efficientnet_pytorch import EfficientNet, get_model_params
+import torchvision
+from hocuspocus.data.augmentations import mix_background
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from torchvision.models.feature_extraction import create_feature_extractor
 from torchvision.transforms import v2
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.loss.gradcam_loss import ViewGradCAMLoss
-from src.utils import efficientnet_pytorch_utils as effnet_utils
 from src.utils.grokfast import gradfilter_ema
 
 
-class EfficientNetPL(EfficientNet, L.LightningModule):
+################################################################################
+#                                  Constants                                   #
+################################################################################
+LOGGER = logging.getLogger(__name__)
+
+# Default parameters
+DEFAULT_PARAMS = {
+    "model_provider": "timm",
+    "model_name": "efficientnet_b0",
+    "num_classes": 5,
+    "img_size": (256, 256),
+    "optimizer": "adamw",
+    "lr": 0.0005,
+    "momentum": 0.9,
+    "weight_decay": 0.0005,
+    "use_gradcam_loss": False,
+    "use_mixup_aug": False,
+    "freeze_weights": False,
+}
+
+
+# Mapping of model name to feature size
+NAME_TO_FEATURE_SIZE = {
+    "efficientnet_b0": 1280,
+}
+
+
+################################################################################
+#                                   Classes                                    #
+################################################################################
+class ModelWrapper(L.LightningModule):
     """
-    PyTorch Lightning wrapper module over EfficientNet.
+    ModelWrapper class.
+
+    Note
+    ----
+    Used to load any torchvision/timm model
     """
-    def __init__(self, num_classes=5, img_size=(256, 256),
-                 optimizer="adamw", lr=0.0005, momentum=0.9, weight_decay=0.0005,
-                 use_gradcam_loss=False,
-                 use_mixup_aug=False,
-                 freeze_weights=False, effnet_name="efficientnet-b0",
-                 **kwargs):
+
+    def __init__(self, hparams=None, **overwrite_params):
         """
-        Initialize EfficientNetPL object.
+        Initialize ModelWrapper object.
 
         Parameters
         ----------
-        num_classes : int, optional
-            Number of classes to predict, by default 5
-        img_size : tuple, optional
-            Expected image's (height, width), by default (256, 256)
-        optimizer : str, optional
-            Choice of optimizer, by default "adamw"
-        lr : float, optional
-            Optimizer learning rate, by default 0.0001
-        momentum : float, optional
-            If SGD optimizer, value to use for momentum during SGD, by
-            default 0.9
-        weight_decay : float, optional
-            Weight decay value to slow gradient updates when performance
-            worsens, by default 0.0005
-        use_gradcam_loss : bool, optional
-            If True, add auxiliary segmentation-attention GradCAM loss, by
-            default False.
-        use_mixup_aug : bool, optional
-            If True, use Mixup augmentation during training, by default False
-        freeze_weights : bool, optional
-            If True, freeze convolutional weights, by default False.
-        effnet_name : str, optional
-            Name of EfficientNet backbone to use
+        hparams : dict, optional
+            Model hyperparameters. To view exhaustive list, see `config/configspecs/model_training.ini`.
+            Parameters includes:
+            num_classes : int, optional
+                Number of classes to predict, by default 5
+            img_size : tuple, optional
+                Expected image's (height, width), by default (256, 256)
+            optimizer : str, optional
+                Choice of optimizer, by default "adamw"
+            lr : float, optional
+                Optimizer learning rate, by default 0.0001
+            momentum : float, optional
+                If SGD optimizer, value to use for momentum during SGD, by
+                default 0.9
+            weight_decay : float, optional
+                Weight decay value to slow gradient updates when performance
+                worsens, by default 0.0005
+            use_gradcam_loss : bool, optional
+                If True, add auxiliary segmentation-attention GradCAM loss, by
+                default False.
+            use_mixup_aug : bool, optional
+                If True, use Mixup augmentation during training, by default False
+            freeze_weights : bool, optional
+                If True, freeze convolutional weights, by default False.
+            model_name : str, optional
+                Name of backbone to use
+            mode : int, optional
+                Image mode to load in (1=grayscale, 3=rgb)
+        **overwrite_params : Any
+            Keyword arguments to overwrite hyperparameters
         """
-        # Instantiate EfficientNet
-        self.model_name = effnet_name
-        blocks_args, global_params = get_model_params(
-            self.model_name, {"num_classes": num_classes,
-                              "image_size": img_size})
-        super().__init__(blocks_args=blocks_args, global_params=global_params)
-        self._change_in_channels(kwargs.get("mode", 3))
+        super().__init__()
+
+        # Add default parameters
+        hparams = hparams or {}
+        hparams.update({k:v for k,v in DEFAULT_PARAMS.items() if k not in hparams})
+        hparams.update(overwrite_params)
+
+        # Instantiate model
+        self.network = load_network(hparams)
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters()
+        self.save_hyperparameters(hparams)
 
         # If specified, store training-specific augmentations
         # NOTE: These augmentations require batches of input
         self.train_aug = None
-        if use_mixup_aug:
-            self.train_aug = v2.MixUp(num_classes=num_classes)
+        if self.hparams.use_mixup_aug:
+            self.train_aug = v2.MixUp(num_classes=self.hparams.num_classes)
 
         # Define loss
         self.loss = torch.nn.CrossEntropyLoss()
         # If specified, include auxiliary GradCAM loss
         self.gradcam_loss = None
-        if use_gradcam_loss:
+        if self.hparams.use_gradcam_loss:
             self.gradcam_loss = ViewGradCAMLoss(self, self.hparams)
 
         # Evaluation metrics
         dsets = ['train', 'val', 'test']
-        for dset in dsets:
-            exec(f"self.{dset}_acc = torchmetrics.Accuracy("
-                 f"num_classes={self.hparams.num_classes}, task='multiclass')")
+        self.dset_metrics = torch.nn.ModuleDict({
+            f"{dset}_acc": torchmetrics.Accuracy(num_classes=self.hparams.num_classes, task='multiclass')
+            for dset in dsets
+        })
 
         # Store outputs
         self.dset_to_outputs = {"train": [], "val": [], "test": []}
+
+        # Store class means & inverse covariance matrices
+        self.class_means = None
+        self.class_inv_covs = None
 
         ########################################################################
         #                          Post-Setup                                  #
@@ -144,6 +193,8 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
+        else:
+            raise RuntimeError(f"Unknown optimizer: {self.hparams.optimizer}")
 
         # Prepare return
         ret = {
@@ -156,17 +207,6 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             ret["lr_scheduler"] = lr_scheduler
 
         return ret
-
-
-    def load_imagenet_weights(self):
-        """
-        Load imagenet weights for convolutional backbone.
-        """
-        # NOTE: Modified utility function to ignore missing keys
-        effnet_utils.load_pretrained_weights(
-            self, self.model_name,
-            load_fc=False,
-            advprop=False)
 
 
     def create_saft_param_mask(self, train_dataloader):
@@ -188,7 +228,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             data, y_true = data.to(self.device), y_true.to(self.device)
 
             # Perform forward and backward pass
-            out = self.forward(data)
+            out = self.network(data)
             loss = self.loss(out, y_true)
             self.zero_grad()
             loss.backward()
@@ -210,7 +250,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         After `loss.backward()` and before `optimizer.step()`, perform any
         specified operations (e.g., gradient filtering).
         """
-        # If specified, use Grokfast-EMA algorithm to filter for slow gradients
+        # If Grokfast specified, use Grokfast-EMA algorithm to filter for slow gradients
         if self.hparams.get("use_grokfast"):
             gradfilter_ema(self)
 
@@ -234,6 +274,10 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
             self.eval()
             self.create_saft_param_mask(self.trainer.train_dataloader)
             self.train()
+
+        # Pre-compute training set feature means/cov, if doing Mahalanobis OOD
+        if self.hparams.get("ood_method") == "maha_distance":
+            self.precompute_train_statistics()
 
         # HACK: Fix issue with Stochastic Weight Optimization on the last epoch
         if self.hparams.get("swa") and self.current_epoch == self.trainer.max_epochs - 1:
@@ -265,71 +309,50 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         torch.FloatTensor
             Loss for training batch
         """
-        data, metadata = train_batch
-        B = len(data)
-
-        # Get label (and modify for loss if using MixUp)
+        data, metadata = standardize_batch(train_batch["id"])
         y_true = metadata["label"]
 
-        # If specified, apply MixUp augmentation on images
+        # If specified, apply MixUp augmentation on images & labels
         y_true_aug = y_true
         if self.hparams.get("use_mixup_aug"):
             data, y_true_aug = self.train_aug(data, y_true)
 
         # Get prediction
-        out = self.forward(data)
+        out = self.network(data)
         y_pred = torch.argmax(out, dim=1)
 
+        # Accumulate losses
         losses = []
+        # 1. Cross-Entropy Loss
+        losses.append(self.loss(out, y_true_aug))
 
-        # CASE 1: Cross-entropy loss on labeled + Penalize on unlabeled
-        if self.hparams.get("penalize_other_loss"):
-            # Assume last class (not predicted) is unlabeled idx
-            unlabeled_idx = self.hparams["num_classes"]
-            # Assert that second half is only "Other" labeled images
-            mid_idx = B//2
-            assert (y_true[mid_idx:] == unlabeled_idx).all(), \
-                "More than 1 label detected in 'Others' samples! Issue with sampler..."
-
-            # 1. Cross-entropy loss on labeled data (first half)
-            ce_loss = self.loss(out[:mid_idx], y_true_aug[:mid_idx])
-            # 2. Negative entropy loss; to lower confidence on "Other" data predictions
-            weight = self.hparams.get("other_penalty_weight", .5)
-            other_neg_entropy_loss = (weight * compute_entropy_loss(out[mid_idx:]))
-            losses.extend([ce_loss, other_neg_entropy_loss])
-
-            # Filter predictions and labels for correct accuracy computation
-            out = out[:mid_idx]
-            y_pred = y_pred[:mid_idx]
-            y_true = y_true[:mid_idx]
-        # CASE 2: Cross-entropy + GradCAM loss
-        elif self.hparams.get("use_gradcam_loss"):
-            # 1. Cross-entropy loss
-            ce_loss = self.loss(out, y_true_aug)
-            # 2. GradCAM loss
+        # 2. GradCAM loss
+        if self.hparams.get("use_gradcam_loss"):
             weight = self.hparams.get("gradcam_loss_weight", 1.)
             gradcam_loss = weight * self.gradcam_loss(*train_batch)
-            losses.extend([ce_loss, gradcam_loss])
-        # CASE 3: [Standard] Cross-entropy loss
-        else:
-            losses.append(self.loss(out, y_true_aug))
+            losses.append(gradcam_loss)
 
-        # 4. If specified, add entropy loss to increase prediction confidence
-        if self.hparams.get("use_entropy_loss"):
-            entropy_loss = -compute_entropy_loss(out)
-            losses.append(entropy_loss)
+        # Outlier Exposure
+        if self.hparams.get("outlier_exposure"):
+            # Compute OOD loss on in-distribution dataset
+            curr_ood_loss = -self.ood_step(train_batch["id"])
+            self.log("train-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+            losses.append(curr_ood_loss)
 
-        # Compute loss
+            # Compute OOD loss on each OOD dataset
+            dataset_names = train_batch.keys()
+            for name in dataset_names:
+                if name.startswith("ood_"):
+                    curr_ood_loss = self.ood_step(train_batch[name])
+                    self.log(f"train-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+                    losses.append(curr_ood_loss)
+
+        # Aggregate loss
         loss = sum(losses)
 
         # Log training metrics
-        self.train_acc.update(y_pred, y_true)
-
-        # Prepare result
-        ret = {
-            "loss": loss.detach().cpu(),
-        }
-        self.dset_to_outputs["train"].append(ret)
+        self.dset_metrics["train_acc"](y_pred, y_true)
+        self.log("train_acc", self.dset_metrics["train_acc"], on_step=True, on_epoch=True)
 
         return loss
 
@@ -350,30 +373,7 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         torch.FloatTensor
             Loss for validation batch
         """
-        data, metadata = val_batch
-
-        # Get prediction
-        out = self.forward(data)
-        y_pred = torch.argmax(out, dim=1)
-
-        # Get label
-        y_true = metadata["label"]
-
-        # Get loss
-        loss = self.loss(out, y_true)
-
-        # Log validation metrics
-        self.val_acc.update(y_pred, y_true)
-
-        # Prepare result
-        ret = {
-            "loss": loss.detach().cpu(),
-            "y_pred": y_pred.detach().cpu(),
-            "y_true": y_true.detach().cpu(),
-        }
-        self.dset_to_outputs["val"].append(ret)
-
-        return ret
+        return self.eval_step("val", val_batch)
 
 
     def test_step(self, test_batch, batch_idx):
@@ -392,117 +392,213 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         torch.FloatTensor
             Loss for test batch
         """
-        data, metadata = test_batch
+        return self.eval_step("test", test_batch)
+
+
+    def eval_step(self, split, eval_batch):
+        """
+        Batch eval step
+
+        Parameters
+        ----------
+        eval_batch : tuple
+            Contains (img tensor, metadata dict)
+
+        Returns
+        -------
+        torch.FloatTensor
+            Loss for eval batch
+        """
+        assert split in ("val", "test")
+        data, metadata = standardize_batch(eval_batch["id"])
 
         # Get prediction
-        out = self.forward(data)
+        out = self.network(data)
         y_pred = torch.argmax(out, dim=1)
 
         # Get label
         y_true = metadata["label"]
 
-        # Get loss
-        loss = self.loss(out, y_true)
+        # Compute cross-entropy loss
+        losses = []
+        losses.append(self.loss(out, y_true))
+
+        # Compute OOD loss on in-distribution dataset
+        curr_ood_loss = -self.ood_step(eval_batch["id"])
+        self.log(f"{split}-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+        losses.append(curr_ood_loss)
+
+        # Compute OOD loss on each OOD dataset
+        dataset_names = eval_batch.keys()
+        for name in dataset_names:
+            if name.startswith("ood_"):
+                curr_ood_loss = self.ood_step(eval_batch[name])
+                self.log(f"{split}-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+                losses.append(curr_ood_loss)
+        loss = sum(losses)
 
         # Log test metrics
-        self.test_acc.update(y_pred, y_true)
+        self.dset_metrics[f"{split}_acc"](y_pred, y_true)
+        self.log(f"{split}_acc", self.dset_metrics[f"{split}_acc"], on_step=True, on_epoch=True)
 
         # Prepare result
         ret = {
-            "loss": loss.detach().cpu(),
             "y_pred": y_pred.detach().cpu(),
             "y_true": y_true.detach().cpu(),
         }
-        self.dset_to_outputs["test"].append(ret)
+        self.dset_to_outputs[split].append(ret)
 
-        return ret
+        return loss
+
+
+    def ood_step(self, ood_batch):
+        """
+        Perform OOD step. Compute OOD loss to differentiate
+
+        Note
+        ----
+        For a training batch, negate the loss output by this function.
+
+        Parameters
+        ----------
+        ood_batch : tuple of (torch.Tensor, dict)
+            Contains (img tensor, metadata dict) from OOD data batch
+        """
+        data, metadata = standardize_batch(ood_batch)
+        ood_method = self.hparams.get("ood_method", "entropy")
+        oe_weight = self.hparams.get("oe_weight", .1)
+
+        # Consider background overlay augmentation
+        if self.hparams.get("ood_overlay_background"):
+            shuffle = self.hparams.get("ood_mix_background", False)
+            assert "background_img" in metadata, (
+                "[OOD Step] `ood_overlay_background` specified but background image "
+                "not provided in metadata!")
+            background = metadata["background_img"]
+            data = mix_background(data, background, shuffle=shuffle)
+
+        # Compute OOD loss
+        # NOTE: Optimize to increase entropy/energy in each prediction
+        # CASE 1: Maximum Softmax Probability (MSP)
+        if ood_method == "msp":
+            logits = self.network(data)
+            loss = -compute_entropy(logits)
+        # CASE 2: Energy
+        elif ood_method == "energy":
+            logits = self.network(data)
+            loss = -compute_energy(logits)
+        # CASE 3: Mahalanobis Distance
+        elif ood_method == "maha_distance":
+            features = self.network_features(features)
+            loss = -compute_mahalanobis_distance(features, self.class_means, self.class_inv_covs)
+        else:
+            raise NotImplementedError(f"[OOD Step] Unrecognized OOD method: `{ood_method}`")
+
+        return oe_weight * loss
 
 
     ############################################################################
     #                            Epoch Metrics                                 #
     ############################################################################
-    def on_train_epoch_end(self):
-        """
-        Compute and log evaluation metrics for training epoch.
-        """
-        outputs = self.dset_to_outputs["train"]
-        loss = torch.stack([d['loss'] for d in outputs]).mean()
-        acc = self.train_acc.compute()
-
-        self.log('train_loss', loss, prog_bar=True)
-        self.log('train_acc', acc, prog_bar=True)
-
-        self.train_acc.reset()
-
-        # Clean stored output
-        self.dset_to_outputs["train"].clear()
-
-
     def on_validation_epoch_end(self):
         """
         Compute and log evaluation metrics for validation epoch.
         """
-        outputs = self.dset_to_outputs["val"]
-        loss = torch.tensor([o["loss"] for o in outputs]).mean()
-        acc = self.val_acc.compute()
-
-        self.log('val_loss', loss, prog_bar=True)
-        self.log('val_acc', acc, prog_bar=True)
-
-        self.val_acc.reset()
-
-        # Create confusion matrix
-        if self.hparams.get("use_comet_logger"):
-            self.logger.experiment.log_confusion_matrix(
-                y_true=torch.cat([o["y_true"] for o in outputs]),
-                y_predicted=torch.cat([o["y_pred"] for o in outputs]),
-                labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
-                title="Validation Confusion Matrix",
-                file_name="val_confusion-matrix.json",
-                overwrite=False,
-            )
-
-        # Clean stored output
-        self.dset_to_outputs["val"].clear()
+        self.on_eval_epoch_end("val")
 
 
     def on_test_epoch_end(self):
         """
         Compute and log evaluation metrics for test epoch.
         """
-        outputs = self.dset_to_outputs["test"]
-        dset = f'test'
+        self.on_eval_epoch_end("test")
 
-        loss = torch.tensor([o["loss"] for o in outputs]).mean()
-        acc = eval(f'self.{dset}_acc.compute()')
 
-        self.log(f'{dset}_loss', loss)
-        self.log(f'{dset}_acc', acc)
+    def on_eval_epoch_end(self, split):
+        """
+        Compute and log evaluation metrics for the specified epoch split.
+        
+        Parameters
+        ----------
+        split : str
+            The dataset split to evaluate. Must be one of ('val', 'test').
 
-        exec(f'self.{dset}_acc.reset()')
+        Notes
+        -----
+        - This function calculates and logs a confusion matrix using the Comet logger
+        if enabled in the hyperparameters.
+        - It clears the stored outputs for the specified split after logging.
+        """
+        assert split in ("val", "test")
 
         # Create confusion matrix
+        outputs = self.dset_to_outputs[split]
         if self.hparams.get("use_comet_logger"):
             self.logger.experiment.log_confusion_matrix(
-                y_true=torch.cat([o["y_true"].cpu() for o in outputs]),
-                y_predicted=torch.cat([o["y_pred"].cpu() for o in outputs]),
+                y_true=torch.cat([o["y_true"] for o in outputs]),
+                y_predicted=torch.cat([o["y_pred"] for o in outputs]),
                 labels=constants.LABEL_PART_TO_CLASSES[self.hparams.label_part]["classes"],
-                title="Test Confusion Matrix",
-                file_name="test_confusion-matrix.json",
+                title=f"{split.capitalize()} Confusion Matrix",
+                file_name=f"{split}_confusion-matrix.json",
                 overwrite=False,
             )
 
         # Clean stored output
-        self.dset_to_outputs["test"].clear()
+        self.dset_to_outputs[split].clear()
 
 
     ############################################################################
     #                          Extract Embeddings                              #
     ############################################################################
     @torch.no_grad()
-    def extract_embeds(self, inputs):
+    def precompute_train_statistics(self):
         """
-        Extracts embeddings from input images.
+        Computes the mean and covariance matrix for each class in the training set.
+
+        Uses the trainer's train dataloader to extract features for every image in the
+        training set. Then, computes the mean and covariance matrix for each class
+        using the corresponding feature embeddings.
+
+        Stores the computed class means and covariance matrices in the object.
+        """
+        train_dataloader = self.trainer.train_dataloader
+
+        # Initialize lists to store feature embeddings for each class
+        class_embeddings = {idx: list() for idx in range(self.hparams["num_classes"])}
+
+        # Extract features for every image
+        for train_batch in train_dataloader:
+            X, metadata = train_batch["id"]
+            X = X.to(self.device)
+            labels = metadata["label"].to(self.device)
+
+            # Extract features
+            features = self.network_features(X)
+            for idx in range(len(features)):
+                label = labels[idx].item()
+                class_embeddings[label].append(features[idx])
+
+        # Compute mean and covariance matrix for each class
+        class_means = [None] * self.hparams["num_classes"]
+        class_inv_cov = [None] * self.hparams["num_classes"]
+        for class_label, embeddings in class_embeddings.items():
+            embeddings = torch.tensor(embeddings)
+            # Compute mean
+            mean = torch.mean(embeddings, dim=0)
+            class_means[class_label] = mean
+            # Compute inverse covariance matrix
+            cov_matrix = torch.cov(embeddings.T)
+            inv_cov_matrix = torch.inverse(cov_matrix)
+            class_inv_cov[class_label] = inv_cov_matrix
+
+        # Store class means/covariance matrices
+        self.class_means = torch.stack(class_means)
+        self.class_inv_covs = torch.stack(class_inv_cov)
+
+
+    def forward_features(self, inputs):
+        """
+        Extracts features from input images
 
         Parameters
         ----------
@@ -512,32 +608,211 @@ class EfficientNetPL(EfficientNet, L.LightningModule):
         Returns
         -------
         numpy.array
-            Deep embeddings before final linear layer
+            Deep embeddings
         """
-        # 1. CNN Encoder
-        z = self.extract_features(inputs)
-
-        # 2. Average Pooling
-        z = self._avg_pooling(z)
-
-        # Flatten
+        z = extract_features(self.hparams, self.network, inputs)
         z = z.view(inputs.size()[0], -1)
+        return z
 
-        return z.detach().cpu().numpy()
+
+    @torch.no_grad()
+    def extract_embeds(self, inputs):
+        """
+        Wrapper over `forward_features` but returns CPU numpy array
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Ultrasound images. Expected size is (B, C, H, W)
+
+        Returns
+        -------
+        numpy.array
+            Deep embeddings
+        """
+        return self.network_features(inputs).detach().cpu().numpy()
 
 
-def compute_entropy_loss(out):
+################################################################################
+#                               Model Functions                                #
+################################################################################
+def load_network(hparams, remove_head=False):
+    """
+    Load model in PyTorch
+
+    Parameters
+    ----------
+    hparams : dict
+        Experiment hyperparameters. Can contain any of the following:
+        model_provider : str
+            One of "torchvision" or "timm"
+        model_name : str
+            Name of model
+        num_classes : int
+            Number of classes
+        pretrained : bool
+            Whether to use ImageNet pretrained weights
+        image_size : int
+            Image size
+        mode : int
+            Number of input channels
+    remove_head : bool, optional
+        Whether to remove the classification head, by default False
+
+    Returns
+    ------
+    torch.nn.Module
+        Loaded model
+    """
+    # Load model backbone using torchvision or timm
+    model_provider = hparams.get("model_provider", "timm")
+    # CASE 1: Torchvision
+    if model_provider == "torchvision":
+        # Raise error for not supported arguments
+        model_cls = getattr(torchvision.models, hparams["model_name"])
+        model = model_cls(
+            num_classes=hparams["num_classes"],
+            weights="IMAGENET1K_V1" if hparams.get("pretrained") else None,
+        )
+        # Change number of input channels
+        if hparams.get("mode", 3) != 3:
+            # Compute the average of the weights across the input channels
+            original_weights = model.conv1.weight.data
+            new_weights = original_weights.mean(dim=1, keepdim=True)
+
+            # Modify the first convolutional layer to accept 1 input channel instead of 3
+            model.conv1 = torch.nn.Conv2d(
+                1, model.conv1.out_channels,
+                kernel_size=model.conv1.kernel_size,
+                stride=model.conv1.stride,
+                padding=model.conv1.padding,
+                bias=model.conv1.bias,
+            )
+            # Assign the new weights to the modified convolutional layer
+            model.conv1.weight.data = new_weights
+
+        # Remove head
+        if remove_head:
+            if hasattr(model, "classifier"):
+                model.classifier = torch.nn.Identity()
+            else:
+                raise NotImplementedError(f"Head removal not implemented for `{model_provider}/{hparams['model_name']}`")
+    # CASE 2: timm
+    elif model_provider == "timm":
+        model = timm.create_model(
+            model_name=hparams["model_name"],
+            num_classes=hparams["num_classes"],
+            img_size=hparams["image_size"],
+            in_chans=hparams.get("mode", 3),
+            pretrained=hparams.get("pretrained", False),
+        )
+        model = model.reset_classifier(0, "")
+    else:
+        raise NotImplementedError(f"Invalid model_provider specified! `{model_provider}`")
+
+    # Early return, if not removing head
+    if not remove_head:
+        return model
+
+    # CASE 1: timm
+    if model_provider == "timm":
+        model = model.reset_classifier(0, "")
+    # Otherwise, not implemented
+    else:
+        raise NotImplementedError(f"Head removal not implemented for `{model_provider}/{hparams['model_name']}`")
+
+    return model
+
+
+def extract_features(hparams, model, inputs):
+    """
+    Extract features from model.
+
+    Parameters
+    ----------
+    hparams : dict
+        Hyperparameters
+    model : torch.nn.Module
+        Neural network (not wrapper)
+    inputs : torch.Tensor
+        Model input
+
+    Returns
+    -------
+    torch.Tensor
+        Extracted features
+    """
+    model_name = hparams["model_name"]
+    model_provider = hparams["model_provider"]
+    extractor = None
+    # CASE 1: Torchvision model
+    if model_provider == "torchvision":
+        if model_name == "resnet50":
+            return_nodes = {"layer4": "layer4"}
+            extractor = create_feature_extractor(model, return_nodes)
+    # CASE 2: Timm model
+    elif model_provider == "timm":
+        extractor = model.forward_features
+
+    # Raise error, if not implemented
+    if extractor is None:
+        raise NotImplementedError(
+            "Feature extraction not implemented for "
+            f"`{model_provider}/{model_name}`"
+        )
+
+    return extractor(inputs)
+
+
+def standardize_batch(batch):
+    """
+    Standardize batch to contain X and metadata.
+
+    Parameters
+    ----------
+    batch : tuple or dict
+        Batch of data to standardize
+
+    Returns
+    -------
+    X : torch.Tensor
+        Model input
+    metadata : dict
+        Any additional metadata
+
+    Raises
+    ------
+    RuntimeError
+        If standardization fails
+    """
+    try:
+        if isinstance(batch, (tuple, list)):
+            X, metadata = batch
+            return X, metadata
+        elif isinstance(batch, dict):
+            key = "image" if "image" in batch else "img"
+            X = batch[key]
+            metadata = batch
+            return X, metadata
+    except:
+        raise RuntimeError(f"[Standardize Batch] Failed to standardize batch with type `{type(batch)}`")
+
+
+################################################################################
+#                                OOD Functions                                 #
+################################################################################
+def compute_entropy(logits):
     """
     Compute entropy regularization loss
 
     Note
     ----
-    Simply negative entropy for each prediction. Minimizing this means
-    increasing entropy (uncertainty) in each prediction.
+    Simply entropy for each prediction. Minimizing this means
+    decreasing entropy (uncertainty) for each prediction.
 
     Parameters
     ----------
-    out : torch.Tensor
+    logits : torch.Tensor
         Each row contains model logits
 
     Returns
@@ -546,9 +821,51 @@ def compute_entropy_loss(out):
         Entropy regularization loss
     """
     # Convert to probabilities
-    y_probs = torch.nn.functional.softmax(out, dim=1)
+    y_probs = torch.nn.functional.softmax(logits, dim=1)
 
-    # Maximize entropy of each prediction (less confident predictions)
-    H_pred = torch.mean(torch.sum(y_probs * torch.log(y_probs + 1e-9), dim=1))
+    # Compute entropy
+    H_pred = -torch.mean(torch.sum(y_probs * torch.log(y_probs + 1e-9), dim=1))
 
     return H_pred
+
+
+def compute_energy(logits):
+    """
+    Compute OOD energy scores
+
+    Parameters
+    ----------
+    logits : torch.Tensor
+        Each row contains model logits
+
+    Returns
+    -------
+    torch.FloatTensor
+        OOD energy scores
+    """
+    energy_score = -torch.logsumexp(logits, dim=1)
+    return energy_score
+
+
+def compute_mahalanobis_distance(x, class_means, class_inv_cov):
+    """
+    Compute the Mahalanobis distance for a given sample.
+
+    Parameters
+    ----------
+    x : torch.Tensor
+        A tensor representing the sample for which the distance is computed.
+    class_means : torch.Tensor
+        A tensor representing the means of the classes.
+    class_inv_cov : torch.Tensor
+        A tensor representing the inverse covariance matrix for each class.
+
+    Returns
+    -------
+    torch.Tensor
+        The Mahalanobis distance of the sample from the class means.
+    """
+    # Compute the Mahalanobis distance
+    diff = x - class_means
+    distance = torch.sqrt(torch.mm(torch.mm(diff.unsqueeze(0), class_inv_cov), diff.unsqueeze(1)))
+    return distance

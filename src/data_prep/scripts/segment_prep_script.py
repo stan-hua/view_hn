@@ -11,12 +11,10 @@ from collections import defaultdict
 
 # Non-standard libraries
 import cv2
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 
 
@@ -158,7 +156,7 @@ def get_fg_and_bg_of_segmentation(src_img, segment_img,
 #                                    Script                                    #
 ################################################################################
 if __name__ == '__main__':
-    paths = glob.glob(constants.DIR_SEGMENT + "/*")
+    paths = glob.glob(os.path.join(constants.DIR_SEGMENT, "*"))
     src_to_segments = get_source_to_segmented_filenames(paths)
 
     # For kidney/bladder segmentation

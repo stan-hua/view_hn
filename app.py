@@ -13,7 +13,7 @@ import torch
 from torchvision.transforms.v2 import Resize, ToTensor
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.scripts.load_model import load_pretrained_from_exp_name, get_hyperparameters
 
 

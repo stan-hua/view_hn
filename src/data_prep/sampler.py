@@ -5,6 +5,7 @@ Description: Contains implementations of sampling methods
 """
 
 # Standard libraries
+import logging
 from typing import Callable
 
 # Non-standard libraries
@@ -12,6 +13,12 @@ import pandas as pd
 import torch
 import torch.utils.data
 import torchvision
+
+
+################################################################################
+#                                  Constants                                   #
+################################################################################
+LOGGER = logging.getLogger(__name__)
 
 
 ################################################################################
@@ -81,9 +88,9 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
         return self.num_samples
 
 
-class OtherDatasetSampler(torch.utils.data.sampler.Sampler):
+class HalfUnlabeledDatasetSampler(torch.utils.data.sampler.Sampler):
     """
-    OtherDatasetSampler class.
+    HalfUnlabeledDatasetSampler class.
 
     Note
     ----
@@ -103,7 +110,7 @@ class OtherDatasetSampler(torch.utils.data.sampler.Sampler):
         other_label=None,
     ):
         """
-        Initialize OthersDatasetBatchSampler object.
+        Initialize HalfUnlabeledDatasetSampler object.
 
         Parameters
         ----------
@@ -124,8 +131,10 @@ class OtherDatasetSampler(torch.utils.data.sampler.Sampler):
         df["label"] = dataset.get_labels(encoded=True)
 
         # If Other index is not provided, assume it's the last
-        if other_label is None:
+        unique_labels = df["label"].unique()
+        if other_label is None and None not in unique_labels.tolist():
             other_label = sorted(df["label"].unique().tolist())[-1]
+            LOGGER.info(f"[HalfUnlabeledDatasetSampler] Since None not a valid label, assuming 'Other' label is {other_label}!")
 
         # If specified, shuffle
         if shuffle:
@@ -161,6 +170,82 @@ class OtherDatasetSampler(torch.utils.data.sampler.Sampler):
             other_label_indices = self.other_indices[start_idx:end_idx]
             batch_indices = list(curr_label_indices) + list(other_label_indices)
             yield batch_indices
+
+
+    def __len__(self):
+        return self.num_samples
+
+
+class InfiniteUnlabeledDatasetSampler(torch.utils.data.sampler.Sampler):
+    """
+    InfiniteUnlabeledDatasetSampler class.
+
+    Note
+    ----
+    For a dataset with a catch-all "Other"/unlabeled class, sample infinitely
+    from the unlabeled "Other" class.
+    """
+
+    def __init__(
+        self,
+        dataset,
+        batch_size,
+        shuffle=False,
+        other_label=None,
+    ):
+        """
+        Initialize InfiniteUnlabeledDatasetSampler object.
+
+        Parameters
+        ----------
+        dataset : torch.utils.data.Dataset
+            Dataset class
+        batch_size : int
+            Batch size
+        shuffle : bool
+            If True, shuffle labeled and Other samples before batching
+        other_label : int, optional
+            Label of "Other" class. If not provided, assumed to be last index
+        """
+        self.batch_size = batch_size
+        self.num_samples = len(dataset)
+
+        # Get (encoded) labels
+        df = pd.DataFrame()
+        df["label"] = dataset.get_labels(encoded=True)
+
+        # If Other index is not provided, assume it's the last
+        unique_labels = df["label"].unique()
+        if other_label is None and None not in unique_labels.tolist():
+            other_label = sorted(df["label"].unique().tolist())[-1]
+            LOGGER.info(f"[InfiniteUnlabeledDatasetSampler] Since None not a valid label, assuming 'Other' label is {other_label}!")
+
+        # If specified, shuffle
+        if shuffle:
+            df = df.sample(frac=1)
+
+        # Split indices into other and non-other images
+        other_mask = (df["label"] == other_label)
+        self.other_indices = df[other_mask].index.to_numpy()
+
+        # Set number of samples based on labeled data
+        self.num_samples = len(self.other_indices) // self.batch_size
+
+
+    def __iter__(self):
+        # Iterate over batches
+        # NOTE: Drops last by default
+        batch_idx = 0
+        while True:
+            start_idx = batch_idx * self.batch_size
+            end_idx = start_idx + self.batch_size
+            curr_indices = self.other_indices[start_idx:end_idx]
+            yield curr_indices
+
+            # Update batch index
+            batch_idx += 1
+            if batch_idx >= self.num_samples:
+                batch_idx = 0
 
 
     def __len__(self):

@@ -73,7 +73,7 @@ class EfficientNetLSTMMulti(EfficientNet, L.LightningModule):
             label_to_num_classes = DEFAULT_LABEL_TO_NUM_CLASSES
 
         # Instantiate EfficientNet
-        self.model_name = "efficientnet-b0"
+        self.model_name = "efficientnet_b0"
         feature_dim = 1280      # expected feature size from EfficientNetB0
         blocks_args, global_params = get_model_params(
             self.model_name, {"image_size": img_size,

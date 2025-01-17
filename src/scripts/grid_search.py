@@ -19,7 +19,7 @@ import pandas as pd
 import yaml
 
 # Custom libraries
-from src.data import constants
+from config import constants
 
 
 # Configure logging

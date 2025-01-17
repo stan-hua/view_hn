@@ -1,8 +1,7 @@
 """
 byol.py
 
-Description: Implementation of BYOL with an EfficientNet convolutional backbone,
-             using Lightly.AI and PyTorch Lightning.
+Description: Implementation of BYOL with PyTorch Lightning.
 """
 
 # Standard libraries
@@ -11,14 +10,28 @@ import copy
 # Non-standard libraries
 import lightning as L
 import torch
-from efficientnet_pytorch import EfficientNet
 from lightly.loss import NegativeCosineSimilarity
 from lightly.models.modules.heads import BYOLProjectionHead, BYOLPredictionHead
 from lightly.models.utils import deactivate_requires_grad, update_momentum
 from lightly.utils.scheduler import cosine_schedule
 
 # Custom libraries
-from src.utils import efficientnet_pytorch_utils as effnet_utils
+from src.models.base import NAME_TO_FEATURE_SIZE, load_network, extract_features
+
+
+################################################################################
+#                                  Constants                                   #
+################################################################################
+# Default parameters
+DEFAULT_PARAMS = {
+    "model_provider": "timm",
+    "model_name": "efficientnet_b0",
+    "img_size": (256, 256),
+    "optimizer": "adamw",
+    "lr": 0.0005,
+    "momentum": 0.9,
+    "weight_decay": 0.0005,
+}
 
 
 ################################################################################
@@ -26,45 +39,37 @@ from src.utils import efficientnet_pytorch_utils as effnet_utils
 ################################################################################
 class BYOL(L.LightningModule):
     """
-    BYOL for self-supervised learning.
+    BYOL class.
+
+    Note
+    ----
+    Used to perform BYOL pre-training
     """
-    def __init__(self, img_size=(256, 256),
-                 optimizer="adamw", lr=0.05,
-                 momentum=0.9, weight_decay=0.0005,
-                 effnet_name="efficientnet-b0",
-                 *args, **kwargs):
+
+    def __init__(self, hparams=None, **overwrite_params):
         """
         Initialize BYOL object.
 
         Parameters
         ----------
-        img_size : tuple, optional
-            Expected image's (height, width), by default (256, 256)
-        optimizer : str, optional
-            Choice of optimizer, by default "adamw"
-        lr : float, optional
-            Optimizer learning rate, by default 0.0001
-        momentum : float, optional
-            If SGD optimizer, value to use for momentum during SGD, by
-            default 0.9
-        weight_decay : float, optional
-            Weight decay value to slow gradient updates when performance
-            worsens, by default 0.0005
-        effnet_name : str, optional
-            Name of EfficientNet backbone to use
+        hparams : dict, optional
+            Model hyperparameters defined in `config/configspecs/model_training.ini`.
         """
         super().__init__()
 
-        # Instantiate EfficientNet
-        self.model_name = effnet_name
-        self.conv_backbone = EfficientNet.from_name(
-            self.model_name, image_size=img_size, include_top=False)
-        self.feature_dim = 1280      # expected feature size from EfficientNetB0
+        # Add default parameters
+        hparams = hparams or {}
+        hparams.update({k:v for k,v in DEFAULT_PARAMS.items() if k not in hparams})
+        hparams.update(overwrite_params)
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters()
+        self.save_hyperparameters(hparams)
 
-        # Create BYOL model with EfficientNet backbone
+        # Instantiate backbone
+        self.conv_backbone = load_network(hparams, remove_head=True)
+
+        # Create BYOL model with backbone
+        feature_dim = NAME_TO_FEATURE_SIZE[hparams["model_name"]]
         self.projection_head = BYOLProjectionHead(
             input_dim=self.feature_dim, hidden_dim=2*self.feature_dim,
             output_dim=256)
@@ -85,17 +90,6 @@ class BYOL(L.LightningModule):
         self.dset_to_outputs = {"train": [], "val": [], "test": []}
 
 
-    def load_imagenet_weights(self):
-        """
-        Load imagenet weights for convolutional backbone.
-        """
-        # NOTE: Modified utility function to ignore missing keys
-        effnet_utils.load_pretrained_weights(
-            self.conv_backbone, self.model_name,
-            load_fc=False,
-            advprop=False)
-
-
     def configure_optimizers(self):
         """
         Initialize and return optimizer (AdamW or SGD).
@@ -105,6 +99,7 @@ class BYOL(L.LightningModule):
         torch.optim.Optimizer
             Initialized optimizer.
         """
+        optimizer = None
         if self.hparams.optimizer == "adamw":
             optimizer = torch.optim.AdamW(self.parameters(),
                                           lr=self.hparams.lr,
@@ -114,6 +109,7 @@ class BYOL(L.LightningModule):
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
+        assert optimizer is not None, f"Optimizer specified is not supported! {self.hparams.optimizer}"
         return optimizer
 
 
@@ -230,10 +226,9 @@ class BYOL(L.LightningModule):
     ############################################################################
     #                          Extract Embeddings                              #
     ############################################################################
-    @torch.no_grad()
-    def extract_embeds(self, inputs):
+    def forward_features(self, inputs):
         """
-        Extracts embeddings from input images.
+        Extracts features from input images
 
         Parameters
         ----------
@@ -243,11 +238,26 @@ class BYOL(L.LightningModule):
         Returns
         -------
         numpy.array
-            Deep embeddings before final linear layer
+            Deep embeddings
         """
-        z = self.conv_backbone(inputs)
-
-        # Flatten
+        z = extract_features(self.hparams, self.network, inputs)
         z = z.view(inputs.size()[0], -1)
+        return z
 
-        return z.detach().cpu().numpy()
+
+    @torch.no_grad()
+    def extract_embeds(self, inputs):
+        """
+        Wrapper over `forward_features` but returns CPU numpy array
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Ultrasound images. Expected size is (B, C, H, W)
+
+        Returns
+        -------
+        numpy.array
+            Deep embeddings
+        """
+        return self.forward_features(inputs).detach().cpu().numpy()

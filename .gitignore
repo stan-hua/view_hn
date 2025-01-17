@@ -13,3 +13,8 @@ config/ssl_model_eval/*
 test_vlm.py
 .envrc
 .vscode/launch.json
+
+*.png
+*.csv
+data
+save_data

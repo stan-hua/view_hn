@@ -13,7 +13,7 @@ from lightly.models.utils import deactivate_requires_grad
 from torch.nn import functional as F
 
 # Custom libraries
-from src.data import constants
+from config import constants
 
 
 # TODO: Consider adding Grokfast

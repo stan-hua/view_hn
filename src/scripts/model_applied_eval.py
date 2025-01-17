@@ -23,7 +23,7 @@ import torch
 from sklearn import metrics as skmetrics
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_viz import utils as viz_utils
 from src.scripts import load_model, model_eval
 

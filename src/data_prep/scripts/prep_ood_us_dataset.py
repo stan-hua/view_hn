@@ -1889,7 +1889,7 @@ def assign_ood_splits(df_metadata, test_split=0.5, val_split=0.25):
     -------
     pd.DataFrame
         The updated metadata dataframe with an assigned 'split' column
-        indicating the split type ('train', 'calib', or 'test') for each entry.
+        indicating the split type ('train', 'val', or 'test') for each entry.
 
     Notes
     -----
@@ -1908,7 +1908,7 @@ def assign_ood_splits(df_metadata, test_split=0.5, val_split=0.25):
 
     # Split data
     # Set aside data for evaluation
-    df_metadata = data_utils.assign_split_table(
+    df_metadata = assign_split_table(
         df_metadata, other_split="ood_test", train_split=(1-test_split),
         id_col="video_id", overwrite=True,
     )
@@ -1916,10 +1916,10 @@ def assign_ood_splits(df_metadata, test_split=0.5, val_split=0.25):
     df_test, df_train_val = df_metadata[test_mask], df_metadata[~test_mask]
 
     # Compute training split from remaining percent
-    train_split = (1-val_split) / (1-test_split)
+    train_split = (1-test_split-val_split) / (1-test_split)
 
     # Set aside data for validation and for training
-    df_train_val = data_utils.assign_split_table(
+    df_train_val = assign_split_table(
         df_train_val, other_split="ood_val", train_split=train_split,
         id_col="video_id", overwrite=True,
     )
@@ -1937,7 +1937,6 @@ def assign_ood_splits(df_metadata, test_split=0.5, val_split=0.25):
         df_metadata = df_metadata.drop(columns=["label"])
 
     return df_metadata
-
 
 
 ################################################################################

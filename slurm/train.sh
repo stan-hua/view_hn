@@ -84,6 +84,8 @@ micromamba activate view
 # srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-only_beamform-low_rank_linear.ini"
 # srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-only_beamform-saft-low_rank_linear.ini"
 
+srun python -m src.scripts.model_training -c "baseline/exp-supervised_baseline.ini"
+
 ################################################################################
 #                            Domain Generalization                             #
 ################################################################################
@@ -144,4 +146,4 @@ micromamba activate view
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/only_beamform/tcl-per_class_gmm-only_beamform.ini"
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/only_beamform/tcl-per_class_gmm-only_beamform-val_fix-large_crop.ini"
 # srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/only_beamform/tcl-per_class_gmm-only_beamform-large_crop-long_warmup.ini"
-srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/only_beamform/tcl-per_class_gmm-only_beamform-long_warmup.ini"
+# srun python -m src.scripts.model_training -c "contrastive_pretraining/tcl/only_beamform/tcl-per_class_gmm-only_beamform-long_warmup.ini"

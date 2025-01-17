@@ -17,7 +17,7 @@ import torch
 from tqdm import tqdm
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 from src.data_prep.dataset import UltrasoundDataModule
 from src.scripts import load_data, load_model

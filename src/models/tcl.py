@@ -17,7 +17,6 @@ import lightning as L
 import torch
 import torch.nn.functional as F
 import torchmetrics
-from efficientnet_pytorch import EfficientNet
 from lightly.models.utils import (batch_shuffle, batch_unshuffle,
                                   deactivate_requires_grad, update_momentum)
 from sklearn.mixture import GaussianMixture
@@ -25,15 +24,27 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from tqdm import tqdm
 
 # Custom libraries
-from src.utils import efficientnet_pytorch_utils as effnet_utils
-from src.data import constants
+from config import constants
+from src.models.base import NAME_TO_FEATURE_SIZE, load_network, extract_features
 
 
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
 LOGGER = logging.getLogger(__name__)
-LOGGER.setLevel(level=logging.DEBUG)
+
+# Default parameters
+DEFAULT_PARAMS = {
+    "model_provider": "timm",
+    "model_name": "efficientnet_b0",
+    "img_size": (256, 256),
+    "optimizer": "adamw",
+    "lr": 0.0005,
+    "momentum": 0.9,
+    "weight_decay": 0.0005,
+    "memory_bank_size": 4096,
+    "temperature": 0.1,
+}
 
 
 ################################################################################
@@ -41,79 +52,56 @@ LOGGER.setLevel(level=logging.DEBUG)
 ################################################################################
 class TCL(L.LightningModule):
     """
-    Twin Contrastive Learning for Noisy Labels.
+    TCL class.
+
+    Note
+    ----
+    Used to perform TCL pre-training
     """
 
-    def __init__(self, **hparams):
+    def __init__(self, hparams=None, **overwrite_params):
         """
         Initialize TCL object.
 
         Parameters
         ----------
-        **hparams : Any
-            Keyword arguments including:
-            img_size : tuple, optional
-                Expected image's (height, width), by default (256, 256)
-            optimizer : str, optional
-                Choice of optimizer, by default "adamw"
-            lr : float, optional
-                Optimizer learning rate, by default 0.0001
-            momentum : float, optional
-                If SGD optimizer, value to use for momentum during SGD, by
-                default 0.9
-            weight_decay : float, optional
-                Weight decay value to slow gradient updates when performance
-                worsens, by default 0.0005
-            memory_bank_size : int, optional
-                Number of items to keep in memory bank for calculating loss (from
-                MoCo), by default 4096
-            temperature : int, optional
-                Temperature parameter for losses, by default 0.1.
-            exclude_momentum_encoder : bool, optional
-                If True, uses primary (teacher) encoders for encoding keys. Defaults
-                to False.
-            same_label : bool, optional
-                If True, uses labels to mark same-label samples as positives instead
-                of supposed negatives. Defaults to False.
-            custom_ssl_loss : str, optional
-                One of (None, "same_label"). Specifies custom SSL loss to
-                use. Defaults to None.
-            multi_objective : bool, optional
-                If True, optimizes for both supervised loss and SSL loss. Defaults
-                to False.
-            effnet_name : str, optional
-                Name of EfficientNet backbone to use
+        hparams : Any
+            Model hyperparameters defined in `config/configspecs/model_training.ini`.
             warmup_epochs : int
                 Number of warmup epochs
             noise_gmm_type : str
                 Choice of noise GMM ("single" for all classes, "per_class" to
                 have 1 noise GMM per class)
+        **overwrite_params : Any
+            Additional keyword arguments to overwrite hparams
         """
         super().__init__()
 
-        # Instantiate EfficientNet
-        self.model_name = hparams.get("effnet_name", "efficientnet-b0")
-        self.conv_backbone = EfficientNet.from_name(
-            self.model_name,
-            image_size=hparams.get("img_size", constants.IMG_SIZE),
-            include_top=False)
-        self.feature_dim = 1280      # expected feature size from EfficientNetB0
-        self.head_hidden_dim = 128
+        # Add default parameters
+        hparams = hparams or {}
+        hparams.update({k:v for k,v in DEFAULT_PARAMS.items() if k not in hparams})
+        hparams.update(overwrite_params)
 
         # Save hyperparameters (now in self.hparams)
-        self.save_hyperparameters()
+        self.save_hyperparameters(hparams)
+
+        # Instantiate backbone
+        self.conv_backbone = load_network(hparams, remove_head=True)
+
+        # Specify feature size
+        feature_dim = NAME_TO_FEATURE_SIZE[hparams["model_name"]]
+        self.head_hidden_dim = 128
 
         # A. Projection Head
         self.projection_head = torch.nn.Sequential(
-            torch.nn.Linear(self.feature_dim, self.feature_dim),
-            torch.nn.BatchNorm1d(self.feature_dim),
+            torch.nn.Linear(feature_dim, feature_dim),
+            torch.nn.BatchNorm1d(feature_dim),
             torch.nn.ReLU(),
-            torch.nn.Linear(self.feature_dim, self.head_hidden_dim),
+            torch.nn.Linear(feature_dim, self.head_hidden_dim),
         )
-
         # B. Prediction Head
         self.prediction_head = torch.nn.Sequential(
-            torch.nn.Linear(self.feature_dim, self.head_hidden_dim),
+            torch.nn.Linear(feature_dim, self.head_hidden_dim),
             torch.nn.BatchNorm1d(self.head_hidden_dim),
             torch.nn.ReLU(),
             torch.nn.Linear(self.head_hidden_dim, self.hparams["num_classes"]),
@@ -153,17 +141,6 @@ class TCL(L.LightningModule):
 
         # Store outputs
         self.dset_to_outputs = {"train": [], "val": [], "test": []}
-
-
-    def load_imagenet_weights(self):
-        """
-        Load imagenet weights for convolutional backbone.
-        """
-        # NOTE: Modified utility function to ignore missing keys
-        effnet_utils.load_pretrained_weights(
-            self.conv_backbone, self.model_name,
-            load_fc=False,
-            advprop=False)
 
 
     def configure_optimizers(self):
@@ -622,7 +599,7 @@ class TCL(L.LightningModule):
         # CASE 2: Per-label GMM; accounts for varying confidence across classes
         elif noise_gmm_type == "per_class":
             for label_idx in range(self.hparams["num_classes"]):
-                mask = (labels.cpu() == label_idx)
+                mask = labels.cpu() == label_idx
                 # Skip, if no label exists for class
                 if not mask.sum():
                     continue

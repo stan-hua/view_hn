@@ -41,12 +41,12 @@ pip install -r requirements.txt
 mklink /d ".\src\data" "PATH\TO\DATA\DIRECTORY"
 
 # 2. In Linux
-ln -s /PATH/TO/DATA/DIRECTORY ./src/data
+ln -s /PATH/TO/DATA/DIRECTORY data
 ```
 
-#### 3. Update `src/data/constants.py` with new image directory paths (if any)
+#### 3. Update `config/constants.py` with new image directory paths (if any)
 ```
-# -- update src/data/constants.py
+# -- update config/constants.py
 
 # Update metadata paths
 python -m src.data_prep.scripts.create_metadata update_img_dirs

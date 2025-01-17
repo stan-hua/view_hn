@@ -13,18 +13,15 @@ from torch.utils.data import DataLoader
 
 # Custom libraries
 from src.data_prep import ssl_collate_fn, utils
-from src.data_prep.dataset import (UltrasoundDataModule,
-                                   UltrasoundDatasetDataFrame)
+from src.data_prep.dataset import UltrasoundDataModule, UltrasoundDatasetDataFrame
 
 
 ################################################################################
 #                                  Constants                                   #
 ################################################################################
-# Default parameters for data loader
-DEFAULT_DATALOADER_PARAMS = {
-    "batch_size": 128,
-    "shuffle": True,
-    "num_workers": 7,
+# Default parameters for data module
+TCL_DEFAULT_DM_HPARAMS = {
+    "augment_training": True
 }
 
 
@@ -33,13 +30,14 @@ DEFAULT_DATALOADER_PARAMS = {
 ################################################################################
 class TCLDataModule(UltrasoundDataModule):
     """
-    Top-level object used to access all data preparation and loading
-    functionalities in the self-supervised setting.
+    TCLDataModule class.
+
+    Note
+    ----
+    Used to create training/validation/test dataloaders for TCL
     """
 
-    def __init__(self, df=None, img_dir=None, mode=3,
-                 augment_training=True,
-                 **kwargs):
+    def __init__(self, hparams, df=None, **overwrite_params):
         """
         Initialize TCLDataModule object.
 
@@ -51,129 +49,94 @@ class TCLDataModule(UltrasoundDataModule):
 
         Parameters
         ----------
+        hparams : dict
+            Data hyperparameters for UltrasoundDataModule
         df : pd.DataFrame, optional
             Contains paths to image files and labels for each image, by default
             None
-        img_dir : str, optional
-            Path to directory containing ultrasound images, by default None
-        mode : int, optional
-            Number of channels (mode) to read images into (1=grayscale, 3=RGB),
-            by default 3.
-        augment_training : bool
-            If True, add random augmentations during training, by default True.
-        **kwargs : dict
-            Optional keyword arguments:
-                img_size : int or tuple of ints, optional
-                    If int provided, resizes found images to
-                    (img_size x img_size), by default None.
-                train_test_split : float
-                    Percentage of data to leave for training. The rest will be
-                    used for testing
-                train_val_split : float
-                    Percentage of training set (test set removed) to leave for
-                    validation
-                cross_val_folds : int, 
-                    Number of folds to use for cross-validation
+        **overwrite_params : Any
+            Keyword arguments to overwrite default hyperparameters
         """
+        # Add default hyperparameters
+        hparams = hparams.copy() or {}
+        hparams.update({k:v for k,v in TCL_DEFAULT_DM_HPARAMS.items() if k not in hparams})
+
+        super().__init__(hparams, df, augment_training=False, **overwrite_params)
+
         # Raise error, if imbalanced sampler specified
-        if kwargs.get("imbalanced_sampler"):
-            raise RuntimeError("Imbalanced sampler is not supported for BYOL!")
+        if self.my_hparams.get("imbalanced_sampler"):
+            raise RuntimeError("Imbalanced sampler is not supported for TCL!")
+        # Raise error, if using full sequences
+        if self.my_hparams.get("full_seq"):
+            raise RuntimeError("Full sequence is not supported for TCL!")
 
-        # NOTE: Sampler conflicts with shuffle=True
-        if kwargs.get("full_seq"):
-            raise RuntimeError("US sequences is not supported by TCL")
+        # If specified, turn off augmentations during SSL
+        if not self.my_hparams.get("augment_training"):
+            self.augmentations = {"identity": torch.nn.Identity()}
 
-        # Pass UltrasoundDataModule arguments
-        super().__init__(
-            df,
-            img_dir=img_dir,
-            mode=mode,
-            augment_training=False,
-            default_dl_params=DEFAULT_DATALOADER_PARAMS,
-            **kwargs)
-
-        # Overwrite augmentations
-        self.augmentations = {}
-
+        # Determine collate function
         # CASE 1: If augmenting, instantiate weak and strong transforms
-        if augment_training:
+        if self.my_hparams.get("augment_training"):
             weak_transform = T.Compose(list(utils.prep_weak_augmentations(
-                img_size=self.img_size).values()))
+                img_size=self.my_hparams["img_size"]).values()))
             strong_transform = T.Compose(list(utils.prep_strong_augmentations(
-                img_size=self.img_size,
-                crop_scale=kwargs.get("crop_scale", 0.5)).values()))
+                img_size=self.my_hparams["img_size"],
+                crop_scale=self.my_hparams.get("crop_scale", 0.5)).values()))
         # CASE 2: If not augmenting, create placeholders
         else:
             weak_transform = torch.nn.Identity()
             strong_transform = torch.nn.Identity()
 
         # Create collate function
-        self.collate_fn = ssl_collate_fn.TCLCollateFunction(
-            weak_transform, strong_transform,
-        )
+        self.collate_fn = ssl_collate_fn.TCLCollateFunction(weak_transform, strong_transform)
 
 
-    def train_dataloader(self):
+    def create_id_dataloaders(self, split):
         """
-        Returns DataLoader for training set.
+        Overwrite in-distribution data loader to load data for self-supervised
+        learning.
+
+        Parameters
+        ----------
+        split : str
+            Data split
 
         Returns
         -------
-        torch.utils.data.DataLoader
-            Data loader for training data
+        dict
+            Contains dataloader for in-distribution data
         """
-        # Instantiate UltrasoundDatasetDataFrame
-        train_dataset = UltrasoundDatasetDataFrame(
-            self.df[self.df["split"] == "train"],
+        assert split in ["train", "val", "test"]
+
+        # Prepare dataloader parameters
+        base_dl_params = self.create_dl_params(split)
+
+        # Get labeled data
+        df_metadata = self.df[self.df["split"] == split]
+        label_col = self.my_hparams.get("label_col", "label")
+        na_mask = df_metadata[label_col].isna()
+        df_labeled = df_metadata[~na_mask].reset_index(drop=True)
+
+        # Create dataset for labeled data
+        labeled_dataset = UltrasoundDatasetDataFrame(
+            df_labeled,
+            hparams=self.my_hparams,
             transforms=self.transforms,
-            **self.us_dataset_kwargs,
         )
 
         # Transform to LightlyDataset
         # NOTE: `transforms` only contains basic image pre-processing steps
-        train_dataset = LightlyDataset.from_torch_dataset(
-            train_dataset,
+        labeled_dataset = LightlyDataset.from_torch_dataset(
+            labeled_dataset,
             transform=self.transforms)
 
-        # Create DataLoader with parameters specified
-        return DataLoader(train_dataset,
-                          drop_last=True,
-                          collate_fn=self.collate_fn,
-                          **self.train_dataloader_params)
-
-
-    def val_dataloader(self):
-        """
-        Returns DataLoader for validation set.
-
-        Returns
-        -------
-        torch.utils.data.DataLoader
-            Data loader for validation data
-        """
-        # Instantiate UltrasoundDatasetDataFrame
-        val_dataset = UltrasoundDatasetDataFrame(
-            self.df[self.df["split"] == "val"],
-            **self.us_dataset_kwargs,
-        )
+        # Store train dataloader
+        name_to_loader = {}
 
         # Create DataLoader with parameters specified
-        return DataLoader(val_dataset, **self.val_dataloader_params)
-
-
-    def test_dataloader(self):
-        """
-        Returns DataLoader for test set.
-
-        Returns
-        -------
-        torch.utils.data.DataLoader
-            Data loader for test data
-        """
-        # Instantiate UltrasoundDatasetDataFrame
-        test_dataset = UltrasoundDatasetDataFrame(
-            self.df[self.df["split"] == "test"],
-            **self.us_dataset_kwargs,
+        name_to_loader["id"] = DataLoader(
+            labeled_dataset,
+            drop_last=True, collate_fn=self.collate_fn,
+            **base_dl_params
         )
-
-        return DataLoader(test_dataset, **self.val_dataloader_params)
+        return dataloader

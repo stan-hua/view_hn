@@ -1,4 +1,4 @@
 from .byol import BYOL
-from .efficientnet_pl import EfficientNetPL
+from .base import ModelWrapper
 from .moco import MoCo
 from .tcl import TCL

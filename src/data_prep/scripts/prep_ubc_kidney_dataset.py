@@ -16,7 +16,7 @@ import pandas as pd
 from tqdm import tqdm
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 
 

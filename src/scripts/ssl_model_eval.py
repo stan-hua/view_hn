@@ -18,7 +18,7 @@ import shutil
 from jinja2 import Environment
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.scripts import load_data, load_model, model_eval, model_training
 from src.utils import config as config_utils
 

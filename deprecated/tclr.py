@@ -64,7 +64,7 @@ class TCLR(L.LightningModule):
         raise NotImplementedError("Fix TODOs before using!")
         super().__init__()
 
-        self.model_name = "efficientnet-b0"
+        self.model_name = "efficientnet_b0"
         self.feature_dim = 1280      # expected feature size from EfficientNetB0
 
         # Save hyperparameters (now in self.hparams)

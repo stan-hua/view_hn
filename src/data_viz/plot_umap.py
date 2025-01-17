@@ -22,7 +22,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 
 # Custom libraries
-from src.data import constants
+from config import constants
 from src.data_prep import utils
 from src.data_viz import utils as viz_utils
 from src.scripts.embed import get_embeds

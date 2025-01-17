@@ -15,12 +15,13 @@ Source Repo: https://github.com/MeriDK/segmentation-guided-attention/tree/master
 
 # Non-standard libraries
 import torch
-from efficientnet_pytorch import EfficientNet
 from torchvision.transforms.v2.functional import resize
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.activations_and_gradients import ActivationsAndGradients
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
+# Custom libraries
+from src.scripts import load_model
 
 # TODO: Consider modifying ActivationsAndGradients to use last conv. layer
 #       output instead of after AveragePool
@@ -329,18 +330,15 @@ def create_cam(model, target_layers=None):
     pytorch_grad_cam.GradCAM
         GradCAM instance
     """
-    # CASE 1: EfficientNet model
-    if isinstance(model, EfficientNet):
-        if target_layers is None:
-            target_layers = [model._avg_pooling]
-        cam = DifferentiableGradCAM(model, target_layers=target_layers)
-    # CASE 2: Unknown model, but target layer is provided
-    elif target_layers is not None:
-        cam = DifferentiableGradCAM(model, target_layers=target_layers)
-    else:
-        raise NotImplementedError(f"Model `{type(model)}` does not have GradCAM logic implemented!")
-
-    return cam
+    # CASE 1: Target layer is provided
+    if target_layers is not None:
+        return DifferentiableGradCAM(model, target_layers=target_layers)
+    # CASE 2: Attempt to extract from the model
+    try:
+        target_layer = load_model.get_last_conv_layer(model)
+        return DifferentiableGradCAM(model, target_layers=[target_layer])
+    except Exception as error_msg:
+        raise NotImplementedError(f"Model `{type(model)}` does not have GradCAM logic implemented! \n\tError: {error_msg}")
 
 
 def scale_cam_image(cam, target_size=None):
