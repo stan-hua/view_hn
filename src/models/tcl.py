@@ -153,6 +153,7 @@ class TCL(L.LightningModule):
             Contains optimizer and LR scheduler
         """
         # Create optimizer
+        optimizer = None
         if self.hparams.optimizer == "adamw":
             optimizer = torch.optim.AdamW(self.parameters(),
                                           lr=self.hparams.lr,
@@ -162,6 +163,7 @@ class TCL(L.LightningModule):
                                         lr=self.hparams.lr,
                                         momentum=self.hparams.momentum,
                                         weight_decay=self.hparams.weight_decay)
+        assert optimizer is not None, f"Optimizer specified is not supported! {self.hparams.optimizer}"
 
         # Prepare return
         ret = {

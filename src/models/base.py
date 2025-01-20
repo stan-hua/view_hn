@@ -310,6 +310,7 @@ class ModelWrapper(L.LightningModule):
             Loss for training batch
         """
         data, metadata = standardize_batch(train_batch["id"])
+        B = len(data)
         y_true = metadata["label"]
 
         # If specified, apply MixUp augmentation on images & labels
@@ -336,7 +337,7 @@ class ModelWrapper(L.LightningModule):
         if self.hparams.get("outlier_exposure"):
             # Compute OOD loss on in-distribution dataset
             curr_ood_loss = -self.ood_step(train_batch["id"])
-            self.log("train-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+            self.log("train-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
             losses.append(curr_ood_loss)
 
             # Compute OOD loss on each OOD dataset
@@ -344,7 +345,7 @@ class ModelWrapper(L.LightningModule):
             for name in dataset_names:
                 if name.startswith("ood_"):
                     curr_ood_loss = self.ood_step(train_batch[name])
-                    self.log(f"train-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+                    self.log(f"train-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
                     losses.append(curr_ood_loss)
 
         # Aggregate loss
@@ -352,7 +353,7 @@ class ModelWrapper(L.LightningModule):
 
         # Log training metrics
         self.dset_metrics["train_acc"](y_pred, y_true)
-        self.log("train_acc", self.dset_metrics["train_acc"], on_step=True, on_epoch=True)
+        self.log("train_acc", self.dset_metrics["train_acc"], on_step=True, on_epoch=True, batch_size=B)
 
         return loss
 
@@ -411,6 +412,7 @@ class ModelWrapper(L.LightningModule):
         """
         assert split in ("val", "test")
         data, metadata = standardize_batch(eval_batch["id"])
+        B = len(data)
 
         # Get prediction
         out = self.network(data)
@@ -425,7 +427,7 @@ class ModelWrapper(L.LightningModule):
 
         # Compute OOD loss on in-distribution dataset
         curr_ood_loss = -self.ood_step(eval_batch["id"])
-        self.log(f"{split}-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+        self.log(f"{split}-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
         losses.append(curr_ood_loss)
 
         # Compute OOD loss on each OOD dataset
@@ -433,13 +435,14 @@ class ModelWrapper(L.LightningModule):
         for name in dataset_names:
             if name.startswith("ood_"):
                 curr_ood_loss = self.ood_step(eval_batch[name])
-                self.log(f"{split}-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True)
+                self.log(f"{split}-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
                 losses.append(curr_ood_loss)
         loss = sum(losses)
 
         # Log test metrics
+        self.log(f"{split}_loss", loss, on_step=True, on_epoch=True, batch_size=B)
         self.dset_metrics[f"{split}_acc"](y_pred, y_true)
-        self.log(f"{split}_acc", self.dset_metrics[f"{split}_acc"], on_step=True, on_epoch=True)
+        self.log(f"{split}_acc", self.dset_metrics[f"{split}_acc"], on_step=True, on_epoch=True, batch_size=B)
 
         # Prepare result
         ret = {
@@ -465,7 +468,7 @@ class ModelWrapper(L.LightningModule):
             Contains (img tensor, metadata dict) from OOD data batch
         """
         data, metadata = standardize_batch(ood_batch)
-        ood_method = self.hparams.get("ood_method", "entropy")
+        ood_method = self.hparams.get("ood_method", "msp")
         oe_weight = self.hparams.get("oe_weight", .1)
 
         # Consider background overlay augmentation

@@ -11,7 +11,6 @@ import os
 import random
 import shutil
 import sys
-from datetime import datetime
 
 # Non-standard libraries
 import comet_ml             # NOTE: Recommended by Comet ML

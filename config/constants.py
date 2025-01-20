@@ -68,7 +68,7 @@ DIR_SEGMENT_SRC = join(DIR_SEGMENT_PROC, "src")
 DIR_SEGMENT_MASK = join(DIR_SEGMENT_PROC, "mask")
 
 # Directories for saving data
-DIR_SAVE = join(DIR_PROJECT, "save_data")
+DIR_SAVE = join(DIR_DATA, "save_data")
 DIR_WEIGHTS = join(DIR_SAVE, "weights")
 DIR_EMBEDS = join(DIR_SAVE, "embeddings")
 DIR_FIGURES = join(DIR_SAVE, "figures")

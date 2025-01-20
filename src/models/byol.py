@@ -240,9 +240,7 @@ class BYOL(L.LightningModule):
         numpy.array
             Deep embeddings
         """
-        z = extract_features(self.hparams, self.network, inputs)
-        z = z.view(inputs.size()[0], -1)
-        return z
+        return self.conv_backbone(inputs).flatten(start_dim=1)
 
 
     @torch.no_grad()
