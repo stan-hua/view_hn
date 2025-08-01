@@ -16,8 +16,8 @@ import pandas as pd
 import torch
 import torchvision.transforms.v2 as T
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
-from hocuspocus.data.dataset import HocusPocusRealDataset, HocusPocusNoiseDataset
-from hocuspocus.data.sampler import InfiniteDatasetSampler
+# from hocuspocus.data.dataset import HocusPocusRealDataset, HocusPocusNoiseDataset, load_real_metadata, load_noise_metadata
+# from hocuspocus.data.sampler import InfiniteBatchSampler
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 
@@ -162,9 +162,6 @@ class UltrasoundDataModule(L.LightningDataModule):
                     Path to JSON file containing image files to intentionally
                     exclude from training/val/test set (post-split), by default
                     None.
-                include_unlabeled : bool
-                    If True, include unlabeled as part of training set, by
-                    default False.
                 batch_size : int
                     Batch size
                 shuffle : bool
@@ -232,9 +229,10 @@ class UltrasoundDataModule(L.LightningDataModule):
         # If specified, include/drop images labeled "Others"
         # NOTE: Need to update hparams["num_classes"] elsewhere
         if not self.my_hparams.get("use_ood_unlabeled"):
-            mask = (self.df["label"] == "Other")
-            self.df.loc[mask, "split"] = None
-            LOGGER.info(f"[Pre-Split] Removing {mask.sum()} images labeled 'Other'")
+            label_col = self.my_hparams.get("label_col", "label")
+            na_mask = (self.df[label_col] == "Other") | (self.df[label_col].isna())
+            LOGGER.info(f"[Pre-Split] Removing {na_mask.sum()} images labeled 'Other'")
+            self.df.loc[na_mask, "split"] = None
 
         # (1) Split into training and test sets
         if self.my_hparams.get("train_test_split", 1) < 1:
@@ -267,12 +265,6 @@ class UltrasoundDataModule(L.LightningDataModule):
             # Recombine
             self.df = pd.concat([df_train_val, df_rest], ignore_index=True)
 
-        # If specified, add unlabeled data to training split
-        unlabeled_split = None
-        if self.my_hparams.get("include_unlabeled"):
-            LOGGER.info("[Post-Split] Including unlabeled in training set...")
-            unlabeled_split = "train"
-        self.df = utils.assign_unlabeled_split(self.df, unlabeled_split)
 
         # If specified, filter training data for those with segmentation masks
         if self.my_hparams.get("ensure_seg_mask"):
@@ -393,7 +385,7 @@ class UltrasoundDataModule(L.LightningDataModule):
         name_to_loader.update(self.create_ood_dataloaders(split))
 
         # Package all dataloaders into a CombinedLoader
-        combined_loader = CombinedLoader(name_to_loader, "max_size_cycle")
+        combined_loader = CombinedLoader(name_to_loader, "min_size")
 
         # Sample only as much as the first dataloader
         first_num_samples = len(name_to_loader["id"])
@@ -424,7 +416,7 @@ class UltrasoundDataModule(L.LightningDataModule):
         # Get labeled data
         df_metadata = self.df[self.df["split"] == split]
         label_col = self.my_hparams.get("label_col", "label")
-        na_mask = df_metadata[label_col].isna()
+        na_mask = (df_metadata[label_col] == "Other") | (df_metadata[label_col].isna())
         df_labeled = df_metadata[~na_mask].reset_index(drop=True)
 
         # Create dataset for labeled data
@@ -474,25 +466,27 @@ class UltrasoundDataModule(L.LightningDataModule):
         ood_dl_params.pop("batch_size")
         ood_dl_params.pop("shuffle")
 
-        # Get unlabeled data
-        df_metadata = self.df[self.df["split"] == split]
-        label_col = self.my_hparams.get("label_col", "label")
-        na_mask = df_metadata[label_col].isna()
-        df_unlabeled = df_metadata[na_mask].reset_index(drop=True)
-
-        # Create dataset for unlabeled data
-        unlabeled_dataset = None
+        name_to_loader = {}
+        # CASE 1: OOD unlabeled sampler
         if self.my_hparams.get("use_ood_unlabeled"):
+            LOGGER.info(f"Using unlabeled samples as OOD for {split}!")
+
+            # Get unlabeled data
+            df_metadata = self.df[self.df["split"] == split]
+            label_col = self.my_hparams.get("label_col", "label")
+            na_mask = (df_metadata[label_col] == "Other") | (df_metadata[label_col].isna())
+            df_unlabeled = df_metadata[na_mask].reset_index(drop=True)
+            df_unlabeled[label_col] = None
+
+            # Create dataset
+            assert not df_unlabeled.empty, f"No unlabeled samples for split `{split}`!"
             unlabeled_dataset = UltrasoundDatasetDataFrame(
                 df_unlabeled,
                 hparams=self.my_hparams,
-                transforms=self.transforms,
+                transforms=self.transforms if self.my_hparams.get("ood_augment") else None,
             )
 
-        name_to_loader = {}
-        # CASE 2: OOD unlabeled sampler
-        if self.my_hparams.get("use_ood_unlabeled"):
-            LOGGER.info(f"Using unlabeled samples as OOD for {split}!")
+            # Create sampler
             batch_sampler = InfiniteUnlabeledDatasetSampler(
                 unlabeled_dataset,
                 batch_size=base_dl_params["batch_size"],
@@ -502,31 +496,46 @@ class UltrasoundDataModule(L.LightningDataModule):
             curr_dl_params["batch_sampler"] = batch_sampler
             name_to_loader["ood_unlabeled"] = DataLoader(unlabeled_dataset, **curr_dl_params)
 
-        # CASE 3: HocusPocus OOD Real Dataset
+        # Prepare transforms for OOD HocusPocus data
+        ood_transform = None
+        if self.my_hparams.get("ood_augment") and self.transforms is not None:
+            ood_transform = utils.flatten_augmentations(self.transforms)
+
+        # Shared kwargs for HocusPocus datasets
+        hocus_pocus_shared_kwargs = {
+            "split": ood_split,
+            "img_mode": self.my_hparams.get("mode", 3),
+            "img_size": self.my_hparams.get("img_size", constants.IMG_SIZE),
+            "transform": ood_transform,
+            "scale": True,
+        }
+
+        # CASE 2: HocusPocus OOD Real Dataset
         if self.my_hparams.get("use_ood_hocuspocus_real"):
             LOGGER.info(f"Using HocusPocus OOD Real dataset for {split}!")
-            # TODO: Remove adult renal data
+            # Remove adult renal data
             real_ood_dataset = HocusPocusRealDataset(
-                split=ood_split, separate_background=True,
+                separate_background=True,
                 exclude_views=["renal"],
+                **hocus_pocus_shared_kwargs,
             )
-            batch_sampler = InfiniteDatasetSampler(
+            batch_sampler = InfiniteBatchSampler(
                 real_ood_dataset,
                 batch_size=base_dl_params["batch_size"],
-                shuffle=base_dl_params["shuffle"],
             )
             curr_dl_params = ood_dl_params.copy()
             curr_dl_params["batch_sampler"] = batch_sampler
             name_to_loader["ood_hp_real"] = DataLoader(real_ood_dataset, **curr_dl_params)
 
-        # CASE 4: HocusPocus OOD Noise datasets
+        # CASE 3: HocusPocus OOD Noise datasets
         if self.my_hparams.get("use_ood_hocuspocus_noise"):
             LOGGER.info(f"Using HocusPocus OOD Noise dataset for {split}!")
-            noise_ood_dataset = HocusPocusNoiseDataset(split=ood_split)
-            batch_sampler = InfiniteDatasetSampler(
+            noise_ood_dataset = HocusPocusNoiseDataset(
+                **hocus_pocus_shared_kwargs,
+            )
+            batch_sampler = InfiniteBatchSampler(
                 noise_ood_dataset,
                 batch_size=base_dl_params["batch_size"],
-                shuffle=base_dl_params["shuffle"],
             )
             curr_dl_params = ood_dl_params.copy()
             curr_dl_params["batch_sampler"] = batch_sampler
@@ -644,9 +653,17 @@ class UltrasoundDataModule(L.LightningDataModule):
         """
         df = self.df.copy()
 
-        # Filter on dataset and data split
-        if dset is not None:
+        # SPECIAL CASE 1: HocusPocus dataset
+        if dset and dset.startswith("ood_hp_"):
+            ood_kwargs = {}
+            if dset == "ood_hp_real":
+                ood_kwargs["exclude_view"] = "renal"
+            df = load_metadata_hocus_pocus(dset)
+        # CASE 2: Specific dset in `df`
+        elif dset is not None:
             df = df[df["dset"] == dset]
+
+        # Filter on split
         if split is not None:
             df = df[df["split"] == split]
 
@@ -1127,3 +1144,16 @@ class UltrasoundDatasetDataFrame(torch.utils.data.Dataset):
             return len(self.id_visit)
 
         return len(self.df)
+
+
+def load_metadata_hocus_pocus(dset, **kwargs):
+    dset_to_func = {
+        "ood_hp_real": load_real_metadata,
+        "ood_hp_noise": load_noise_metadata,
+    }
+    assert dset in dset_to_func, f"[Load Metadata (HocusPocus)] Invalid dset: {dset}!"
+    load_func = dset_to_func[dset]
+
+    # Load metadata
+    df_metadata = load_func(**kwargs)
+    return df_metadata

@@ -743,7 +743,7 @@ if __name__ == '__main__':
     ############################################################################
     #                    Plot US Images with Prediction                        #
     ############################################################################
-    df_test_metadata = pd.read_csv(os.path.join(constants.DIR_RESULTS, "test_set_results(five_view).csv"))
+    df_test_metadata = pd.read_csv(os.path.join(constants.DIR_TRAIN_RUNS, "test_set_results(five_view).csv"))
     for _ in range(10):
         idx = np.random.randint(0, 84)
         patient_imgs_to_gif(df_test_metadata, patient_idx=idx)

@@ -95,10 +95,14 @@ def load_metadata(dsets, prepend_img_dir=False, **config):
         df_metadata_curr = pd.read_csv(dset_to_metadata[dset])
 
         # Set extracted side/plane as label, if specified
-        if config.get("label_part") in ("plane", "side"):
+        if config.get("label_part") in ("plane", "side", "organ"):
             # Store original label in another column
             df_metadata_curr["orig_label"] = df_metadata_curr["label"]
-            df_metadata_curr["label"] = df_metadata_curr[config["label_part"]]
+            label_part = config["label_part"]
+            if label_part in ("side", "plane"):
+                df_metadata_curr["label"] = df_metadata_curr[label_part]
+            elif label_part == "organ":
+                df_metadata_curr["label"] = df_metadata_curr["label"].map(get_organ_from_label)
 
         # Add image directory as a separate column 
         img_dir = constants.DSET_TO_IMG_SUBDIR_FULL[dset]
@@ -795,6 +799,27 @@ def restrict_seq_len(df_metadata, n=18):
     return df_metadata
 
 
+def get_organ_from_label(label_str):
+    """
+    Given complete view label (e.g., Sagittal_Left, Bladder, Other), return organ.
+
+    Parameters
+    ----------
+    label_str : str
+        Full view label
+
+    Returns
+    -------
+    str
+        Name of organ (Kidney/Bladder)
+    """
+    if label_str == "Bladder":
+        return "Bladder"
+    if "Sagittal" in label_str or "Transverse" in label_str:
+        return "Kidney"
+    return None
+
+
 ################################################################################
 #                                Data Splitting                                #
 ################################################################################
@@ -1286,6 +1311,34 @@ def prep_weak_augmentations(img_size=(256, 256)):
         T.Resize(img_size),
     ])
     return transforms
+
+
+def flatten_augmentations(type_to_transforms):
+    """
+    Flatten a dictionary of transforms into a single composed transform.
+
+    Note
+    ----
+    Not exactly compatible if using a mask
+
+    Parameters
+    ----------
+    type_to_transforms : dict
+        Maps from transform type (e.g. "texture", "geometric", etc.) to a
+        composed transform (i.e. a torchvision.transforms.Compose object)
+
+    Returns
+    -------
+    torchvision.transforms.Compose
+        A composed transform made up of the individual transforms in
+        type_to_transforms
+    """
+    transforms = []
+    for curr_type in ["texture", "geometric", "post-processing"]:
+        if type_to_transforms.get(curr_type) is not None:
+            transforms.append(type_to_transforms[curr_type])
+
+    return T.Compose(transforms)
 
 
 ################################################################################

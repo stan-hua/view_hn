@@ -337,7 +337,7 @@ class ModelWrapper(L.LightningModule):
         if self.hparams.get("outlier_exposure"):
             # Compute OOD loss on in-distribution dataset
             curr_ood_loss = -self.ood_step(train_batch["id"])
-            self.log("train-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
+            self.log("train-id-ood_score", curr_ood_loss, on_step=False, on_epoch=True, batch_size=B)
             losses.append(curr_ood_loss)
 
             # Compute OOD loss on each OOD dataset
@@ -345,7 +345,7 @@ class ModelWrapper(L.LightningModule):
             for name in dataset_names:
                 if name.startswith("ood_"):
                     curr_ood_loss = self.ood_step(train_batch[name])
-                    self.log(f"train-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
+                    self.log(f"train-{name}-ood_score", curr_ood_loss, on_step=False, on_epoch=True, batch_size=B)
                     losses.append(curr_ood_loss)
 
         # Aggregate loss
@@ -353,7 +353,7 @@ class ModelWrapper(L.LightningModule):
 
         # Log training metrics
         self.dset_metrics["train_acc"](y_pred, y_true)
-        self.log("train_acc", self.dset_metrics["train_acc"], on_step=True, on_epoch=True, batch_size=B)
+        self.log("train_acc", self.dset_metrics["train_acc"], on_step=False, on_epoch=True, batch_size=B)
 
         return loss
 
@@ -427,7 +427,7 @@ class ModelWrapper(L.LightningModule):
 
         # Compute OOD loss on in-distribution dataset
         curr_ood_loss = -self.ood_step(eval_batch["id"])
-        self.log(f"{split}-id-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
+        self.log(f"{split}-id-ood_score", curr_ood_loss, on_step=False, on_epoch=True, batch_size=B)
         losses.append(curr_ood_loss)
 
         # Compute OOD loss on each OOD dataset
@@ -435,14 +435,14 @@ class ModelWrapper(L.LightningModule):
         for name in dataset_names:
             if name.startswith("ood_"):
                 curr_ood_loss = self.ood_step(eval_batch[name])
-                self.log(f"{split}-{name}-ood_score", curr_ood_loss, on_step=True, on_epoch=True, batch_size=B)
+                self.log(f"{split}-{name}-ood_score", curr_ood_loss, on_step=False, on_epoch=True, batch_size=B)
                 losses.append(curr_ood_loss)
         loss = sum(losses)
 
         # Log test metrics
-        self.log(f"{split}_loss", loss, on_step=True, on_epoch=True, batch_size=B)
+        self.log(f"{split}_loss", loss, on_step=False, on_epoch=True, batch_size=B)
         self.dset_metrics[f"{split}_acc"](y_pred, y_true)
-        self.log(f"{split}_acc", self.dset_metrics[f"{split}_acc"], on_step=True, on_epoch=True, batch_size=B)
+        self.log(f"{split}_acc", self.dset_metrics[f"{split}_acc"], on_step=False, on_epoch=True, batch_size=B)
 
         # Prepare result
         ret = {
@@ -467,42 +467,25 @@ class ModelWrapper(L.LightningModule):
         ood_batch : tuple of (torch.Tensor, dict)
             Contains (img tensor, metadata dict) from OOD data batch
         """
-        data, metadata = standardize_batch(ood_batch)
+        X, metadata = standardize_batch(ood_batch)
         ood_method = self.hparams.get("ood_method", "msp")
         oe_weight = self.hparams.get("oe_weight", .1)
 
         # Consider background overlay augmentation
-        if self.hparams.get("ood_overlay_background"):
+        if self.hparams.get("ood_overlay_background") and "background_img" in metadata:
             shuffle = self.hparams.get("ood_mix_background", False)
-            assert "background_img" in metadata, (
-                "[OOD Step] `ood_overlay_background` specified but background image "
-                "not provided in metadata!")
             background = metadata["background_img"]
-            data = mix_background(data, background, shuffle=shuffle)
+            X = mix_background(X, background, shuffle=shuffle)
 
         # Compute OOD loss
         # NOTE: Optimize to increase entropy/energy in each prediction
-        # CASE 1: Maximum Softmax Probability (MSP)
-        if ood_method == "msp":
-            logits = self.network(data)
-            loss = -compute_entropy(logits)
-        # CASE 2: Energy
-        elif ood_method == "energy":
-            logits = self.network(data)
-            loss = -compute_energy(logits)
-        # CASE 3: Mahalanobis Distance
-        elif ood_method == "maha_distance":
-            features = self.network_features(features)
-            loss = -compute_mahalanobis_distance(features, self.class_means, self.class_inv_covs)
-        else:
-            raise NotImplementedError(f"[OOD Step] Unrecognized OOD method: `{ood_method}`")
-
+        loss = -self.ood_score(data)
         return oe_weight * loss
 
 
     ############################################################################
     #                            Epoch Metrics                                 #
-    ############################################################################
+    ##############################X##########################################
     def on_validation_epoch_end(self):
         """
         Compute and log evaluation metrics for validation epoch.
@@ -636,6 +619,41 @@ class ModelWrapper(L.LightningModule):
         return self.network_features(inputs).detach().cpu().numpy()
 
 
+    def ood_score(self, imgs, ood_method=None):
+        """
+        Compute OOD score to optimize, based on method
+
+        Parameters
+        ----------
+        imgs : torch.Tensor
+            Images
+        ood_method : str, optional
+            OOD Method
+
+        Returns
+        -------
+        torch.Tensor
+            OOD score (to optimize)
+        """
+        ood_method = ood_method or self.hparams.get("ood_method", "msp")
+        assert ood_method in ["msp", "energy", "maha_distance"], "Invalid `ood_method` provided!"
+
+        # Compute OOD score (higher = OOD)
+        # CASE 1: Maximum Softmax Probability (MSP)
+        if ood_method == "msp":
+            logits = self.network(imgs)
+            score = compute_entropy(logits)
+        # CASE 2: Energy
+        elif ood_method == "energy":
+            logits = self.network(imgs)
+            score = compute_energy(logits).mean()
+        # CASE 3: Mahalanobis Distance
+        elif ood_method == "maha_distance":
+            features = self.network_features(imgs)
+            score = compute_mahalanobis_distance(features, self.class_means, self.class_inv_covs)
+        return score
+
+
 ################################################################################
 #                               Model Functions                                #
 ################################################################################
@@ -655,7 +673,7 @@ def load_network(hparams, remove_head=False):
             Number of classes
         pretrained : bool
             Whether to use ImageNet pretrained weights
-        image_size : int
+        img_size : int
             Image size
         mode : int
             Number of input channels
@@ -694,7 +712,7 @@ def load_network(hparams, remove_head=False):
             # Assign the new weights to the modified convolutional layer
             model.conv1.weight.data = new_weights
 
-        # Remove head
+        # Remove head, if specified
         if remove_head:
             if hasattr(model, "classifier"):
                 model.classifier = torch.nn.Identity()
@@ -705,24 +723,15 @@ def load_network(hparams, remove_head=False):
         model = timm.create_model(
             model_name=hparams["model_name"],
             num_classes=hparams["num_classes"],
-            img_size=hparams["image_size"],
             in_chans=hparams.get("mode", 3),
             pretrained=hparams.get("pretrained", False),
         )
-        model = model.reset_classifier(0, "")
+
+        # Remove head, if specified
+        if remove_head:
+            model = model.reset_classifier(0, "")
     else:
         raise NotImplementedError(f"Invalid model_provider specified! `{model_provider}`")
-
-    # Early return, if not removing head
-    if not remove_head:
-        return model
-
-    # CASE 1: timm
-    if model_provider == "timm":
-        model = model.reset_classifier(0, "")
-    # Otherwise, not implemented
-    else:
-        raise NotImplementedError(f"Head removal not implemented for `{model_provider}/{hparams['model_name']}`")
 
     return model
 
@@ -794,7 +803,7 @@ def standardize_batch(batch):
             return X, metadata
         elif isinstance(batch, dict):
             key = "image" if "image" in batch else "img"
-            X = batch[key]
+            X = batch.pop(key)
             metadata = batch
             return X, metadata
     except:

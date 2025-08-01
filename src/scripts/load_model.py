@@ -794,7 +794,7 @@ def get_exp_dir(exp_name, on_error="raise"):
         "`on_error` must be one of ('raise', 'ignore')"
 
     # Create full path
-    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+    model_dir = os.path.join(constants.DIR_TRAIN_RUNS, exp_name)
 
     # Raise error, if model directory does not exist
     if not os.path.exists(model_dir):

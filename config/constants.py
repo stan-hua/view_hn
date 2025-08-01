@@ -28,10 +28,11 @@ DIR_HOME = os.environ["HOME"]
 # DIR_DATA = DIR_HOME + "SickKids/Lauren Erdman - HN_Stanley/ViewLabeling/"     # SickKids OneDrive path
 DIR_PROJECT = dirname(dirname(__file__))
 DIR_DATA = os.environ.get("DIR_DATA", join(DIR_PROJECT, "data"))
+DIR_DATASETS = join(DIR_DATA, "datasets")
 assert os.path.exists(DIR_DATA), "Data directory does not exist!"
 
 # Metadata directories
-DIR_METADATA = join(DIR_DATA, "Datasheets")
+DIR_METADATA = join(DIR_DATASETS, "Datasheets")
 DIR_METADATA_RAW = join(DIR_METADATA, "raw")
 DIR_METADATA_CLEAN = join(DIR_METADATA, "clean")
 
@@ -57,7 +58,7 @@ DSET_TO_IMG_SUBDIR = {
 
 # Complete image sub-directory paths
 DSET_TO_IMG_SUBDIR_FULL = {
-    dset: join(DIR_DATA, subdir)
+    dset: join(DIR_DATASETS, subdir)
     for dset, subdir in DSET_TO_IMG_SUBDIR.items()
 }
 
@@ -72,7 +73,7 @@ DIR_SAVE = join(DIR_DATA, "save_data")
 DIR_WEIGHTS = join(DIR_SAVE, "weights")
 DIR_EMBEDS = join(DIR_SAVE, "embeddings")
 DIR_FIGURES = join(DIR_SAVE, "figures")
-DIR_RESULTS = join(DIR_SAVE, "results")
+DIR_TRAIN_RUNS = join(DIR_SAVE, "train_runs")
 DIR_INFERENCE = join(DIR_SAVE, "inference")
 DIR_HN_INFERENCE = join(DIR_SAVE, "hn_inference")
 
@@ -187,15 +188,18 @@ CLASSES["relative"] = ("Sagittal_First", "Transverse_First", "Bladder",
 # 2. CLASS_TO_IDX
 # 2.1 Split by side (left, right, middle)
 CLASS_TO_SIDE_IDX = {"Left": 0, "Right": 1, "Bladder": 2, "Other": 3,}
-SIDE_IDX_TO_CLASS = {idx: label for label, idx in CLASS_TO_SIDE_IDX.items()}
+SIDE_IDX_TO_CLASS = {v:k for k,v in CLASS_TO_SIDE_IDX.items()}
 
 # 2.2 Split by plane (sagittal, transverse, bladder)
 CLASS_TO_PLANE_IDX = {"Sagittal": 0, "Transverse": 1, "Bladder": 2, "Other": 3}
-PLANE_IDX_TO_CLASS = {idx: label for label, idx in CLASS_TO_PLANE_IDX.items()}
+PLANE_IDX_TO_CLASS = {v:k for k,v in CLASS_TO_PLANE_IDX.items()}
 
+# 2.3 Split by organ (kidney / bladder)
+CLASS_TO_ORGAN_IDX = {"Kidney": 0, "Bladder": 1, "Other": 2}
+ORGAN_IDX_TO_CLASS = {v:k for k,v in CLASS_TO_ORGAN_IDX.items()}
 
 # Mapping of label part to variables defined above
-LABEL_PARTS = ["side", "plane"]
+LABEL_PARTS = ["side", "plane", "organ"]
 LABEL_PART_TO_CLASSES = {
     "side": {
         "classes": ("Left", "Right", "Bladder", "Other"),
@@ -206,6 +210,11 @@ LABEL_PART_TO_CLASSES = {
         "classes": ("Sagittal", "Transverse", "Bladder", "Other"),
         "class_to_idx": CLASS_TO_PLANE_IDX,
         "idx_to_class": PLANE_IDX_TO_CLASS,
+    },
+    "organ": {
+        "classes": ("Kidney", "Bladder", "Other"),
+        "class_to_idx": CLASS_TO_ORGAN_IDX,
+        "idx_to_class": ORGAN_IDX_TO_CLASS,
     },
     None: {
         "classes": CLASSES[""],

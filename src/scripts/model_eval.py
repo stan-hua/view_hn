@@ -221,12 +221,15 @@ def predict_on_images(model, filenames, labels=None,
     model = model.to(DEVICE)
 
     # Predict on each images one-by-one
-    preds = []
-    probs = []
-    class_probs = []        # Store per class probabilities as JSON string
-    outs = []
-    losses = []
-
+    accum_data = {
+        "pred": [],
+        "prob": [],
+        "out": [],
+        "loss": [],
+        "class_probs": [],
+        "ood_energy": [],
+        "ood_maha": [],
+    }
     for idx, filename in tqdm(enumerate(filenames)):
         img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
@@ -257,6 +260,12 @@ def predict_on_images(model, filenames, labels=None,
         if mask_bladder:
             out = out[:, :2]
 
+        # Compute scores needed for OOD detection
+        # 1. Energy score
+        accum_data["ood_energy"].append(model.ood_score(img, ood_method="energy").cpu().item())
+        # 2. Mahalanobis distance
+        accum_data["ood_maha"].append(model.ood_score(img, ood_method="maha_distance").cpu().item())
+
         # If test-time augmentation, averaging output across augmented samples
         out = out.mean(axis=0, keepdim=True)
 
@@ -271,7 +280,7 @@ def predict_on_images(model, filenames, labels=None,
             else:
                 label = torch.LongTensor([label_idx]).to(out.device)
                 loss = round(float(torch.nn.functional.cross_entropy(out, label).detach().cpu().item()), 4)
-        losses.append(loss)
+        accum_data["loss"].append(loss)
 
         # Get index of predicted label
         pred = torch.argmax(out, dim=1)
@@ -281,17 +290,17 @@ def predict_on_images(model, filenames, labels=None,
         prob = torch.nn.functional.softmax(out, dim=1)
         prob_numpy = prob.detach().cpu().numpy().flatten().round(4)
         # Store per-class probabilities
-        class_probs.append(json.dumps(prob_numpy.tolist()))
+        accum_data["class_probs"].append(json.dumps(prob_numpy.tolist()))
         # Get probability of largest class
-        probs.append(prob_numpy.max())
+        accum_data["prob"].append(prob_numpy.max())
 
         # Get maximum activation
         out = float(out.max().detach().cpu())
-        outs.append(out)
+        accum_data["out"].append(out)
 
         # Convert from encoded label to label name
         pred_label = idx_to_class[pred]
-        preds.append(pred_label)
+        accum_data["pred"].append(pred_label)
 
     # Pack into dataframe
     df_preds = pd.DataFrame({
@@ -1295,7 +1304,11 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
     metrics["Accuracy (By Seq)"] = \
         calculate_metric_by_groups(df_pred, ["id", "visit"])
 
-    # 5. Accuracy for adjacent same-label images vs. stand-alone images
+    # 5. Accuracy, grouped by sequence first, then grouped by patient
+    metrics["Accuracy (By Seq / By Patient)"] = \
+        calculate_metric_by_groups(df_pred, ["id", "visit"], ["id"])
+
+    # 6. Accuracy for adjacent same-label images vs. stand-alone images
     mask_same_label_adjacent = identify_repeating_same_label_in_video(df_pred)
     metrics["Accuracy (Adjacent to Same-Label)"] = scale_and_round(calculate_accuracy(
         df_pred[mask_same_label_adjacent]))
@@ -1303,7 +1316,7 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
         df_pred[~mask_same_label_adjacent if len(mask_same_label_adjacent)
                 else []]))
 
-    # 6. F1 Score by class
+    # 7. F1 Score by class
     # NOTE: Overall F1 Score isn't calculated because it's equal to
     #       Overall Accuracy in multi-label problems.
     # TODO: Implement wrapper function to allow bootstrapping f1_score
@@ -1334,7 +1347,7 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
     return pd.Series(metrics)
 
 
-def calculate_metric_by_groups(df_pred, group_cols,
+def calculate_metric_by_groups(df_pred, group_cols, second_group_cols=None,
                                metric_func=skmetrics.accuracy_score):
     """
     Group predictions by patient/sequence ID, calculate metric on each group
@@ -1346,6 +1359,8 @@ def calculate_metric_by_groups(df_pred, group_cols,
         Model predictions and labels
     group_cols : list
         List of columns in `df_pred` to group by
+    second_group_cols : list
+        Subset of columns in `group_cols` to average metrics over
     metric_func : function, optional
         Reference to function that can be used to calculate a metric given the
         (label, predictions), by default sklearn.metrics.accuracy_score
@@ -1362,8 +1377,18 @@ def calculate_metric_by_groups(df_pred, group_cols,
     # Calculate metric on each group
     grp_metrics = df_pred.groupby(by=group_cols).apply(
         lambda df_grp: metric_func(df_grp["label"], df_grp["pred"]),
-        include_groups=True,
+        include_groups=False,
     )
+
+
+    # If specified, average over other columns
+    if second_group_cols:
+        assert set(second_group_cols).issubset(set(group_cols)), \
+            (f"[Calculate Group Metrics] `second_group_cols` ({second_group_cols})"
+             f"must be a subset of `group_cols` ({group_cols})")
+        grp_metrics.name = "metric"
+        grp_metrics = grp_metrics.reset_index()
+        grp_metrics = grp_metrics.groupby(second_group_cols)["metric"].mean()
 
     # Calculate average across groups
     mean = round(grp_metrics.mean(), 4)
@@ -2710,7 +2735,7 @@ def infer_dset(exp_name, dset, split,
         # Get training data
         dm = load_data.setup_data_module(
             hparams, self_supervised=False, augment_training=False)
-        df_train_metadata = dm.filter_metadata(dset="sickkids", split="train")
+        df_train_metadata = dm.filter_metadata(dset="sickkids_beamform", split="train")
 
         # Filter for existing images
         exists_mask = df_train_metadata["filename"].map(os.path.exists)
@@ -2734,13 +2759,23 @@ def infer_dset(exp_name, dset, split,
 
     # 3. Load data
     # NOTE: Ensure data is loaded in the non-SSL mode
-    dm = load_data.setup_data_module(
-        hparams, self_supervised=False, augment_training=False)
+    dm = load_data.setup_data_module(hparams, self_supervised=False, augment_training=False)
 
     # 3.1 Get metadata (for specified split)
     df_metadata = dm.filter_metadata(dset=dset, split=split)
-    # 3.2 Sort, so no mismatch occurs due to groupby sorting
-    df_metadata = df_metadata.sort_values(by=["id", "visit"], ignore_index=True)
+
+    # Sort by video frame number, if dataset of ultrasound videos
+    if "seq_number" in df_metadata.columns:
+        df_metadata = df_metadata.sort_values(by=["id", "visit", "seq_number"], ignore_index=True)
+
+    # If label doesn't exist, create empty label column
+    label_col = hparams.get("label_col", "label")
+    if label_col not in df_metadata.columns:
+        LOGGER.warning(
+            f"[Infer] Dataset (dset=`{dset}`, split=`{split}`) is missing label "
+            f"column ({label_col})! Inserting placeholder values"
+        )
+        df_metadata[label_col] = None
 
     # 4. Predict on dset split
     # If multi-output model
@@ -2926,6 +2961,7 @@ def analyze_dset_preds(exp_name, dsets, splits,
         for idx, curr_dset in enumerate(dsets):
             curr_split = splits[idx]
             try:
+                # TODO: Handle OOD case
                 calculate_exp_metrics(
                     exp_name=exp_name,
                     dset=curr_dset,

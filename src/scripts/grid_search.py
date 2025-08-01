@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.DEBUG)
 LOGGER = logging.getLogger(__name__)
 
 # Results directory containing model directories
-RESULTS_DIR = constants.DIR_RESULTS
+RESULTS_DIR = constants.DIR_TRAIN_RUNS
 
 # Name of model (appended to folder name)
 MODEL_NAME = "relative_side"

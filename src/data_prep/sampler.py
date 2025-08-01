@@ -216,7 +216,7 @@ class InfiniteUnlabeledDatasetSampler(torch.utils.data.sampler.Sampler):
 
         # If Other index is not provided, assume it's the last
         unique_labels = df["label"].unique()
-        if other_label is None and None not in unique_labels.tolist():
+        if other_label is None and ~df["label"].isna().any():
             other_label = sorted(df["label"].unique().tolist())[-1]
             LOGGER.info(f"[InfiniteUnlabeledDatasetSampler] Since None not a valid label, assuming 'Other' label is {other_label}!")
 
