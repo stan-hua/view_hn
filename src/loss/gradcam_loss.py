@@ -20,8 +20,6 @@ from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.activations_and_gradients import ActivationsAndGradients
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
-# Custom libraries
-from src.scripts import load_model
 
 # TODO: Consider modifying ActivationsAndGradients to use last conv. layer
 #       output instead of after AveragePool
@@ -335,7 +333,7 @@ def create_cam(model, target_layers=None):
         return DifferentiableGradCAM(model, target_layers=target_layers)
     # CASE 2: Attempt to extract from the model
     try:
-        target_layer = load_model.get_last_conv_layer(model)
+        target_layer = get_last_conv_layer(model)
         return DifferentiableGradCAM(model, target_layers=[target_layer])
     except Exception as error_msg:
         raise NotImplementedError(f"Model `{type(model)}` does not have GradCAM logic implemented! \n\tError: {error_msg}")
@@ -364,3 +362,54 @@ def scale_cam_image(cam, target_size=None):
         # NOTE: Perform bilinear interpolation to resize CAM
         cam = resize(cam, target_size, antialias=True)
     return cam
+
+
+def get_last_conv_layer(model):
+    """
+    Get last convolutional layer in model.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Convolutional model
+
+    Returns
+    -------
+    torch.nn.Conv2d
+        Last convolutional layer
+    """
+    # CASE 1: If it has a "features" attribute, access that
+    if hasattr(model, "features"):
+        return model.features[-1]
+
+    # CASE 2: Attempt to get last Conv2D layer
+    layers = find_layers_in_model(model, torch.nn.Conv2d)
+    if layers:
+        return layers[-1]
+
+    raise NotImplementedError(f"[get_last_conv_layer] Not supported for current model! {type(model)}")
+
+
+def find_layers_in_model(model, layer_type):
+    """
+    Find specified layers in model.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        Model
+    layer_type : class
+        Class of layer desired
+
+    Returns
+    -------
+    lists
+        List of model indices containing layer
+    """
+    fc_idx = []
+    for idx, layer in enumerate(model.children()):
+        if isinstance(layer, layer_type):
+            fc_idx.append(idx)
+
+    return fc_idx
+

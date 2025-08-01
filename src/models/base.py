@@ -13,7 +13,7 @@ import timm
 import torch
 import torchmetrics
 import torchvision
-from hocuspocus.data.augmentations import mix_background
+# from hocuspocus.data.augmentations import mix_background
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torchvision.models.feature_extraction import create_feature_extractor
 from torchvision.transforms import v2
@@ -472,14 +472,14 @@ class ModelWrapper(L.LightningModule):
         oe_weight = self.hparams.get("oe_weight", .1)
 
         # Consider background overlay augmentation
-        if self.hparams.get("ood_overlay_background") and "background_img" in metadata:
-            shuffle = self.hparams.get("ood_mix_background", False)
-            background = metadata["background_img"]
-            X = mix_background(X, background, shuffle=shuffle)
+        # if self.hparams.get("ood_overlay_background") and "background_img" in metadata:
+        #     shuffle = self.hparams.get("ood_mix_background", False)
+        #     background = metadata["background_img"]
+        #     X = mix_background(X, background, shuffle=shuffle)
 
         # Compute OOD loss
         # NOTE: Optimize to increase entropy/energy in each prediction
-        loss = -self.ood_score(data)
+        loss = -self.ood_score(X)
         return oe_weight * loss
 
 

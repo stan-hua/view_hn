@@ -86,7 +86,7 @@ def set_seed(seed=SEED, include_algos=False):
 ################################################################################
 #                           Training/Inference Flow                            #
 ################################################################################
-def run(hparams, dm, results_dir=constants.DIR_RESULTS, fold=0):
+def run(hparams, dm, results_dir=constants.DIR_TRAIN_RUNS, fold=0):
     """
     Perform (1) model training, and/or (2) load model and perform testing.
 
@@ -269,12 +269,12 @@ def main(conf):
 
     # 2.1 Run experiment
     if hparams["cross_val_folds"] == 1:
-        run(hparams, dm, constants.DIR_RESULTS)
+        run(hparams, dm, constants.DIR_TRAIN_RUNS)
     # 2.2 Run experiment w/ kfold cross-validation)
     else:
         for fold_idx in range(hparams["cross_val_folds"]):
             dm.set_kfold_index(fold_idx)
-            run(hparams, dm, constants.DIR_RESULTS, fold=fold_idx)
+            run(hparams, dm, constants.DIR_TRAIN_RUNS, fold=fold_idx)
 
 
 if __name__ == "__main__":

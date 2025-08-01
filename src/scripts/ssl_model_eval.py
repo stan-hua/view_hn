@@ -110,7 +110,7 @@ def train_eval_model(hparams):
     """
     # Log, if exists
     exp_eval_name = hparams["exp_name"]
-    if os.path.exists(os.path.join(constants.DIR_RESULTS, exp_eval_name)):
+    if os.path.exists(os.path.join(constants.DIR_TRAIN_RUNS, exp_eval_name)):
         LOGGER.info(f"`{exp_eval_name}` already exists! Attempting to resume...")
 
     # Attempt training
@@ -141,7 +141,7 @@ def train_eval_models(exp_name, **overwrite_hparams):
         `model_training.main()`
     """
     # 0. Get experiment directory, where model was trained
-    model_dir = os.path.join(constants.DIR_RESULTS, exp_name)
+    model_dir = os.path.join(constants.DIR_TRAIN_RUNS, exp_name)
     if not os.path.exists(model_dir):
         raise RuntimeError("`exp_name` (%s) provided does not lead to a valid "
                            "model training directory", exp_name)
@@ -436,7 +436,7 @@ def main(args, hparams):
     for exp_name in exp_names:
         # Check that exp_name leads to a valid directory
         if not os.path.exists(os.path.join(
-                constants.DIR_RESULTS, exp_name)):
+                constants.DIR_TRAIN_RUNS, exp_name)):
             raise RuntimeError("`exp_name` (%s) provided does not lead to a "
                                "SSL-trained model directory!", exp_name)
 
