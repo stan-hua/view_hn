@@ -18,6 +18,7 @@ import torchvision.transforms.v2 as T
 from lightning.pytorch.utilities.combined_loader import CombinedLoader
 # from hocuspocus.data.dataset import HocusPocusRealDataset, HocusPocusNoiseDataset, load_real_metadata, load_noise_metadata
 # from hocuspocus.data.sampler import InfiniteBatchSampler
+from timm.data import resolve_data_config
 from torch.utils.data import DataLoader
 from torchvision.io import read_image, ImageReadMode
 
@@ -822,10 +823,25 @@ class UltrasoundDatasetDataFrame(torch.utils.data.Dataset):
         # If specified, standardize images by pre-computed channel means/stds
         if self.my_hparams.get("standardize_images"):
             transform_type = "post-processing"
+
+            # Pre-computed SickKids training set mean/std
+            mean = [SK_TRAIN_MEAN] * 3
+            std = [SK_TRAIN_STD] * 3
+
+            # If using a timm model, retrieve mean/std for pretrained dataset
+            use_pretrained_standardization = self.my_hparams.get("use_pretrained_standardization")
+            pretrained = self.my_hparams.get("pretrained")
+            model_provider = self.my_hparams.get("model_provider")
+            model_name = self.my_hparams.get("model_name")
+            if use_pretrained_standardization and pretrained and model_provider == "timm":
+                pretrained_config = resolve_data_config({}, model=model_name)
+                mean = pretrained_config["mean"]
+                std = pretrained_config["std"]
+                LOGGER.info("[Transforms] Using timm pretrained model mean/std for Normalize...")
+
             transforms[transform_type] = [transforms[transform_type]] if transform_type in transforms else []
-            transforms.append(T.ToDtype(torch.float32, scale=True))
-            transforms.append(T.Normalize(mean=[SK_TRAIN_MEAN] * 3,
-                                          std=[SK_TRAIN_STD] * 3))
+            transforms[transform_type].append(T.ToDtype(torch.float32, scale=True))
+            transforms[transform_type].append(T.Normalize(mean=mean, std=std))
             transforms[transform_type] = T.Compose(transforms[transform_type])
         self.transforms = transforms
 
@@ -983,11 +999,7 @@ class UltrasoundDatasetDataFrame(torch.utils.data.Dataset):
         # Load image
         X = read_image(img_path, IMAGE_MODES[self.my_hparams.get("mode", 3)])
 
-        # Transforms 1. Apply texture transforms
-        if self.transforms.get("texture") is not None:
-            X = self.transforms["texture"](X)
-
-        # Transforms 2. Apply geometric transforms
+        # Transforms 1. Apply geometric transforms
         if self.transforms.get("geometric") is not None:
             # CASE 1: Segmentation mask was stored, and will be transformed with image
             if hasattr(self, "_seg_masks") and index in self._seg_masks:
@@ -1008,6 +1020,10 @@ class UltrasoundDatasetDataFrame(torch.utils.data.Dataset):
             # CASE 2: Just the image
             else:
                 X = self.transforms["geometric"](X)
+
+        # Transforms 2. Apply texture transforms
+        if self.transforms.get("texture") is not None:
+            X = self.transforms["texture"](X)
 
         # Transforms 3. Apply post-processing transforms, if specified
         if self.transforms.get("post-processing") is not None:

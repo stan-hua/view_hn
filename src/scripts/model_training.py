@@ -27,6 +27,7 @@ from config import constants
 from src.scripts import load_data, load_model
 from src.utils import config as config_utils
 from src.utils.logging import FriendlyCSVLogger
+from src.utils.callbacks import EMACallback
 
 
 ################################################################################
@@ -177,6 +178,10 @@ def run(hparams, dm, results_dir=constants.DIR_TRAIN_RUNS, fold=0):
     if hparams.get("early_stopping"):
         LOGGER.info("Performing early stopping on validation loss...")
         callbacks.append(EarlyStopping(monitor="val_loss", mode="min"))
+    # 4. Exponential Moving Average
+    if hparams.get("ema"):
+        LOGGER.info("Performing Exponential Moving Average during training...")
+        callbacks.append(EMACallback(decay=hparams.get("ema_decay", 0.9999)))
 
     # Initialize Trainer
     trainer = Trainer(default_root_dir=experiment_dir,

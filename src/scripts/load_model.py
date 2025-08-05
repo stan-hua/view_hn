@@ -238,11 +238,12 @@ def get_model_cls(hparams):
         raise NotImplementedError("Ensembling is currently deprecated...")
 
     # CASE 1: SSL Image model
-    is_ssl_eval = (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"])
-    if hparams.get("self_supervised") and not is_ssl_eval:
-        ssl_model = hparams.get("ssl_model", "moco")
-        ssl_model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
-        return ssl_model_cls, model_cls_kwargs
+    if hparams.get("self_supervised"):
+        is_ssl_eval = (hparams["ssl_eval_linear"] or hparams["ssl_eval_linear_lstm"])
+        if not is_ssl_eval:
+            ssl_model = hparams.get("ssl_model", "moco")
+            ssl_model_cls = SSL_NAME_TO_MODEL_CLS[ssl_model]
+            return ssl_model_cls, model_cls_kwargs
 
     # CASE 2: Fully Supervised Image model
     model_cls = models.ModelWrapper

@@ -73,17 +73,17 @@ def load_config(calling_file, config_fname=None, copy=True):
 
     # Remove sections if not enabled
     # Format: Sections -> ... -> last section -> flag to enable this section
-    flags = [
-        ("model", "ood", "outlier_exposure")
+    nested_flags = [
+        ("model", "ood", "outlier_exposure"),
         ("model", "finetuning", "saft"),
         ("model", "gradcam_loss", "use_gradcam_loss"),
         ("ssl", "self_supervised")
     ]
-    for nested_flag in flags:
-        prev_dict = None
-        curr_dict = None
+    for nested_flag in nested_flags:
+        prev_dict = conf
+        curr_dict = conf[nested_flag[0]]
         curr_item = None
-        level_idx = 0
+        level_idx = 1
         while level_idx <= len(nested_flag) - 1:
             curr_item = curr_dict[nested_flag[level_idx]]
             if not isinstance(curr_item, dict):

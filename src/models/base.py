@@ -559,7 +559,7 @@ class ModelWrapper(L.LightningModule):
             labels = metadata["label"].to(self.device)
 
             # Extract features
-            features = self.network_features(X)
+            features = self.forward_features(X)
             for idx in range(len(features)):
                 label = labels[idx].item()
                 class_embeddings[label].append(features[idx])
@@ -580,6 +580,18 @@ class ModelWrapper(L.LightningModule):
         # Store class means/covariance matrices
         self.class_means = torch.stack(class_means)
         self.class_inv_covs = torch.stack(class_inv_cov)
+
+
+    def forward(self, x):
+        """
+        Implement forward pass function.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input image
+        """
+        return self.network(x)
 
 
     def forward_features(self, inputs):
@@ -616,7 +628,7 @@ class ModelWrapper(L.LightningModule):
         numpy.array
             Deep embeddings
         """
-        return self.network_features(inputs).detach().cpu().numpy()
+        return self.forward_features(inputs).detach().cpu().numpy()
 
 
     def ood_score(self, imgs, ood_method=None):
@@ -649,9 +661,10 @@ class ModelWrapper(L.LightningModule):
             score = compute_energy(logits).mean()
         # CASE 3: Mahalanobis Distance
         elif ood_method == "maha_distance":
-            features = self.network_features(imgs)
+            features = self.forward_features(imgs)
             score = compute_mahalanobis_distance(features, self.class_means, self.class_inv_covs)
         return score
+
 
 
 ################################################################################

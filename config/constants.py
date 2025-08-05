@@ -177,7 +177,7 @@ DSETS_MISSING_BLADDER = (
 )
 
 # Expected image size by model
-IMG_SIZE = (256, 256)
+IMG_SIZE = 256
 
 # Classes
 CLASSES = defaultdict(lambda : ("Sagittal_Left", "Transverse_Left", "Bladder",

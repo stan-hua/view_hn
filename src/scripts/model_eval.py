@@ -262,9 +262,11 @@ def predict_on_images(model, filenames, labels=None,
 
         # Compute scores needed for OOD detection
         # 1. Energy score
-        accum_data["ood_energy"].append(model.ood_score(img, ood_method="energy").cpu().item())
+        if hparams.get("ood_method", "energy"):
+            accum_data["ood_energy"].append(model.ood_score(img, ood_method="energy").cpu().item())
         # 2. Mahalanobis distance
-        accum_data["ood_maha"].append(model.ood_score(img, ood_method="maha_distance").cpu().item())
+        elif hparams.get("ood_method", "maha_distance"):
+            accum_data["ood_maha"].append(model.ood_score(img, ood_method="maha_distance").cpu().item())
 
         # If test-time augmentation, averaging output across augmented samples
         out = out.mean(axis=0, keepdim=True)
