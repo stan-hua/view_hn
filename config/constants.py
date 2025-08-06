@@ -199,7 +199,7 @@ CLASS_TO_ORGAN_IDX = {"Kidney": 0, "Bladder": 1, "Other": 2}
 ORGAN_IDX_TO_CLASS = {v:k for k,v in CLASS_TO_ORGAN_IDX.items()}
 
 # Mapping of label part to variables defined above
-LABEL_PARTS = ["side", "plane", "organ"]
+LABEL_PARTS = ["side", "plane"]
 LABEL_PART_TO_CLASSES = {
     "side": {
         "classes": ("Left", "Right", "Bladder", "Other"),

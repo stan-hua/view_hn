@@ -227,9 +227,12 @@ def predict_on_images(model, filenames, labels=None,
         "out": [],
         "loss": [],
         "class_probs": [],
-        "ood_energy": [],
-        "ood_maha": [],
     }
+    if hparams.get("ood_method", "energy"):
+        accum_data["ood_energy"] = []
+    elif hparams.get("ood_method", "maha_distance"):
+        accum_data["ood_maha"] = []
+
     for idx, filename in tqdm(enumerate(filenames)):
         img_path = filename if img_dir is None else f"{img_dir}/{filename}"
 
@@ -305,13 +308,7 @@ def predict_on_images(model, filenames, labels=None,
         accum_data["pred"].append(pred_label)
 
     # Pack into dataframe
-    df_preds = pd.DataFrame({
-        "pred": preds,
-        "prob": probs,
-        "out": outs,
-        "loss": losses,
-        "class_probs": class_probs
-    })
+    df_preds = pd.DataFrame(accum_data)
 
     return df_preds
 

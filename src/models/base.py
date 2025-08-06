@@ -290,6 +290,15 @@ class ModelWrapper(L.LightningModule):
             self.automatic_optimization = True
 
 
+    def on_load_checkpoint(self, checkpoint: dict) -> None:
+        """
+        If Exponential Moving Average (EMA) weights exist, load those instead.
+        """
+        if "ema_state_dict" in checkpoint:
+            LOGGER.info("Loading EMA weights from checkpoint.")
+            checkpoint["state_dict"] = checkpoint["ema_state_dict"]
+
+
     ############################################################################
     #                          Per-Batch Metrics                               #
     ############################################################################
@@ -664,7 +673,6 @@ class ModelWrapper(L.LightningModule):
             features = self.forward_features(imgs)
             score = compute_mahalanobis_distance(features, self.class_means, self.class_inv_covs)
         return score
-
 
 
 ################################################################################
