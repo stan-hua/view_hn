@@ -8,7 +8,7 @@
 #SBATCH --time=12:00:00
 
 # If you want to do it in the terminal,
-# salloc --job-name=stans_terminal --nodes=1 --gres=gpu:1 --cpus-per-task=6 --mem=32GB
+# salloc --job-name=stans_terminal --nodes=1 --cpus-per-task=6 --mem=32GB --time=1:00:00 --gres=gpu:1 
 # srun (command)
 
 ################################################################################
@@ -41,6 +41,16 @@ micromamba activate view
 ################################################################################
 # srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-augment.ini"
 # srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-only_beamform.ini"
+
+# srun python -m src.scripts.model_training -c "baseline/exp-renalview.ini"
+# srun python -m src.scripts.model_training -c "baseline/exp-renalview-ema.ini"
+srun python -m src.scripts.model_training -c "baseline/exp-renalview-ema-long.ini"
+
+# srun python -m src.scripts.model_training -c "other_architectures/exp-supervised_beamform-convnextv2-pretrained.ini"
+# srun python -m src.scripts.model_training -c "other_architectures/exp-supervised_beamform-vitmedium-pretrained.ini"
+# srun python -m src.scripts.model_training -c "other_architectures/exp-supervised_beamform-convnextv2.ini"
+# srun python -m src.scripts.model_training -c "other_architectures/exp-supervised_beamform-convnextv2-lr_1e3.ini"
+
 
 # srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-augment_smaller_crops-include_all.ini"
 # srun python -m src.scripts.model_training -c "exp_param_sweep/exp_param_sweep-supervised_baseline-with_zoomout.ini"
@@ -84,7 +94,22 @@ micromamba activate view
 # srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-only_beamform-low_rank_linear.ini"
 # srun python -m src.scripts.model_training -c "from_imagenet/exp_from_imagenet-only_beamform-saft-low_rank_linear.ini"
 
-srun python -m src.scripts.model_training -c "baseline/exp-supervised_baseline.ini"
+# srun python -m src.scripts.model_training -c "baseline/exp-supervised_baseline.ini"
+
+
+################################################################################
+#                                OOD Detection                                 #
+################################################################################
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_baseline-no_oe.ini"
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_baseline-oe_msp.ini"
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_baseline-oe_msp-oe_weight=0.01.ini"
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_baseline-oe_msp-ood_aug.ini"
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_baseline-oe_msp-only_hp.ini"
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_baseline-oe_energy-ood_aug.ini"
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_baseline-oe_msp-only_unlabeled.ini"
+
+# Vanilla Model w/o MixUp and Imbalanced Sampling
+# srun python -m src.scripts.model_training -c "ood_detection/exp-supervised_vanilla-oe_msp-ood_aug.ini"
 
 ################################################################################
 #                            Domain Generalization                             #

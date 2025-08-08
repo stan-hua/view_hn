@@ -18,7 +18,9 @@ micromamba activate view
 # EXP_NAME=exp_penalize_other-supervised_baseline-with_other-penalize_other-ent_loss
 
 # EXP_NAME=exp_param_sweep-supervised_baseline-only_orig
-EXP_NAME=exp_param_sweep-supervised_baseline-only_beamform
+# EXP_NAME=exp_param_sweep-supervised_baseline-only_beamform
+# EXP_NAME=exp-renalview
+EXP_NAME=exp-renalview-ema-long
 
 # EXP_NAME=exp_from_imagenet-only_beamform
 # EXP_NAME=exp_ssl_pretrain-tcl-per_class_gmm-only_beamform
@@ -38,23 +40,32 @@ CKPT_OPTION="best"
 # --dset = "sickkids" "stanford" "sickkids_beamform" "stanford_beamform" "sickkids_image" "sickkids_silent_trial" "stanford_image" "uiowa" "chop"
 
 # Evaluate model
-srun python -m src.scripts.model_eval \
-    --exp_name $EXP_NAME \
-    --dsets "sickkids_beamform" "sickkids_image"\
-    --label_blacklist "Other" \
-    --splits "val" "val" \
-    --ckpt_option $CKPT_OPTION \
-    --da_transform_name "clahe" \
-    --log_to_comet
+# srun python -m src.scripts.model_eval \
+#     --exp_name $EXP_NAME \
+#     --dsets "sickkids_beamform" "sickkids_image"\
+#     --label_blacklist "Other" \
+#     --splits "val" \
+#     --ckpt_option $CKPT_OPTION \
+#     --log_to_comet
+#     # --da_transform_name "clahe" \
+
+# srun python -m src.scripts.model_eval \
+#     --exp_name $EXP_NAME \
+#     --dsets "sickkids_beamform" "stanford_beamform" \
+#     --label_blacklist "Other" \
+#     --splits "test" \
+#     --ckpt_option $CKPT_OPTION \
+#     --log_to_comet
+#     # --da_transform_name "clahe" \
 
 srun python -m src.scripts.model_eval \
     --exp_name $EXP_NAME \
-    --dsets "sickkids_beamform" "stanford_beamform" \
+    --dsets "sickkids_silent_trial" "stanford_image" "uiowa" "chop" \
     --label_blacklist "Other" \
     --splits "test" \
     --ckpt_option $CKPT_OPTION \
-    --da_transform_name "clahe" \
     --log_to_comet
+    # --da_transform_name "clahe" \
 
 ################################################################################
 #                                   GradCAM                                    #
