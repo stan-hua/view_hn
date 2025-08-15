@@ -7,7 +7,6 @@ src/models/siamnet.py
 *.out
 renal-view
 .vscode
-config/model_training/*
 config/ssl_model_eval/*
 .cometml-runs
 test_vlm.py
