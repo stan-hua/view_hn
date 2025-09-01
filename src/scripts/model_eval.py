@@ -1265,13 +1265,20 @@ def calculate_metrics(df_pred, ci=False, **ci_kwargs):
         class_probs = class_probs / class_probs.sum(axis=1).reshape(-1, 1)
         num_classes = class_probs.shape[1]
 
-        # Only compute, if there is at least 1 image for each label
-        if len(unique_labels) == num_classes:
-            # Get label mapping
-            _, class_to_idx = get_label_mapping(unique_labels)
-            # Get one-hot encoded labels
-            encoded_labels = df_pred["label"].map(lambda x: class_to_idx[x]).to_numpy()
-            encoded_labels = np.eye(num_classes)[encoded_labels]
+        # Get label mapping
+        _, class_to_idx = get_label_mapping(unique_labels)
+
+        # Encode label first
+        encoded_labels = df_pred["label"].map(lambda x: class_to_idx.get(x)).to_numpy()
+        
+        # Remove all incompatible labels
+        missing_mask = pd.isnull(encoded_labels)
+        LOGGER.info(f"{missing_mask.sum()} with invalid labels! Dropping...")
+        encoded_labels = encoded_labels[~missing_mask]
+        class_probs = class_probs[~missing_mask]
+
+        # Convert to one-hot labels
+        encoded_labels = np.eye(num_classes)[encoded_labels]
 
     # Accumulate exact metric, and confidence interval bounds (if specified)
     metrics = OrderedDict()
@@ -1613,6 +1620,7 @@ def eval_create_plots(df_pred, hparams, inference_dir, dset, split,
     if not hparams.get("label_part"):
         check_misclassifications(df_pred,
                                  relative_side=hparams.get("relative_side"))
+        return
 
     # 3. Show randomly chosen side predictions for full sequences
     show_example_side_predictions(df_pred,
